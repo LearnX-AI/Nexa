@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Nexa - AI Curriculum Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @tailwind base;
+        @tailwind components;
+        @tailwind utilities;
+        .glowing-gold-logo {
+            filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.6));
+            animation: gold-glow 3s ease-in-out infinite;
+            transition: transform 0.3s ease;
+        }
+        @keyframes gold-glow {
+            0%, 100% { filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.6)); }
+            50% { filter: drop-shadow(0 0 14px #fde047) drop-shadow(0 0 24px #facc15) drop-shadow(0 0 38px rgba(250, 204, 21, 0.85)); }
+        }
+        .glowing-gold-logo:hover { transform: scale(1.08); }
+        .markdown-body {
+            font-size: 15.8px;
+            line-height: 1.75;
+            color: #1f2937;
+        }
+        .markdown-body h1 { font-size: 1.85rem; font-weight: 700; color: #0f172a; margin: 1.8rem 0 1rem; border-bottom: 3px solid #e2e8f0; padding-bottom: 0.6rem; }
+        .markdown-body h2 { font-size: 1.45rem; font-weight: 600; color: #334155; margin: 1.8rem 0 0.9rem; }
+        .markdown-body h3 { font-size: 1.25rem; font-weight: 600; color: #475569; margin: 1.5rem 0 0.7rem; }
+        .markdown-body ul, .markdown-body ol { margin: 1rem 0; padding-left: 1.8rem; }
+        .markdown-body li { margin: 0.45rem 0; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; background: white; }
+        .markdown-body th, .markdown-body td { border: 1px solid #cbd5e1; padding: 12px 14px; text-align: left; }
+        .markdown-body th { background-color: #f1f5f9; font-weight: 600; color: #1e40af; }
+        .bot-message {
+            background-color: #f0f9ff;
+            border-radius: 22px 22px 22px 8px;
+            padding: 20px 24px;
+            max-width: 95%;
+            position: relative;
+        }
+        .user-message {
+            background-color: #1e2937;
+            color: white;
+            border-radius: 22px 22px 8px 22px;
+            padding: 16px 22px;
+            max-width: 85%;
+            position: relative;
+        }
+        /* ===== ChatGPT-STYLE MESSAGE ACTIONS ===== */
+        .message-actions {
+            display: flex;
+            gap: 2px;
+            margin-top: 6px;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .message-actions.show {
+            opacity: 1;
+        }
+        /* Bot message buttons – dark icon on light bg */
+        .bot-message .msg-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bot-message .msg-action-btn:hover {
+            color: #1e2937;
+            background: rgba(0,0,0,0.07);
+        }
+        /* User message buttons – light icon on dark bg */
+        .user-message .msg-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            color: rgba(255,255,255,0.50);
+            font-size: 13px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-message .msg-action-btn:hover {
+            color: #ffffff;
+            background: rgba(255,255,255,0.18);
+        }
+        .msg-action-btn.copied {
+            color: #4ade80 !important;
+        }
+        /* User message actions right-aligned */
+        .user-message .message-actions {
+            justify-content: flex-end;
+        }
+
+        /* ===== INPUT COPY BUTTON ===== */
+        .input-copy-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+        #input-copy-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 13px;
+            padding: 5px 6px;
+            border-radius: 8px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s, color 0.15s, background 0.15s;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+        }
+        .input-copy-wrapper:hover #input-copy-btn,
+        #user-input:focus ~ #input-copy-btn {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #input-copy-btn:hover {
+            color: #374151;
+            background: #f3f4f6;
+        }
+        #input-copy-btn.copied {
+            color: #16a34a !important;
+        }
+        /* Adjust input right-padding when copy btn visible */
+        .input-copy-wrapper #user-input {
+            padding-right: 2.4rem;
+        }
+        .generated-file {
+            margin-top: 12px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+            background: white;
+            padding: 8px;
+        }
+        .generated-file img, .generated-file iframe {
+            width: 100%;
+            border-radius: 12px;
+        }
+
+        /* ===== FEEDBACK MODAL ===== */
+        #feedback-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #feedback-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #feedback-modal {
+            background: #ffffff;
+            border-radius: 28px;
+            width: 420px;
+            max-width: 95vw;
+            padding: 36px 32px 30px;
+            box-shadow: 0 24px 60px -8px rgba(0,0,0,0.22);
+            transform: translateY(24px) scale(0.97);
+            transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+            border: 1px solid #f1f5f9;
+        }
+        #feedback-overlay.show #feedback-modal {
+            transform: translateY(0) scale(1);
+        }
+        .star-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 18px 0 6px;
+        }
+        .star-btn {
+            font-size: 2.1rem;
+            cursor: pointer;
+            color: #e2e8f0;
+            transition: color 0.18s, transform 0.18s;
+            background: none;
+            border: none;
+            padding: 2px;
+            line-height: 1;
+        }
+        .star-btn:hover,
+        .star-btn.active {
+            color: #facc15;
+            transform: scale(1.18);
+        }
+        .star-btn.active {
+            filter: drop-shadow(0 0 5px rgba(250,204,21,0.7));
+        }
+        .feedback-label {
+            text-align: center;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 20px;
+            min-height: 18px;
+            transition: color 0.2s;
+        }
+        #feedback-textarea {
+            width: 100%;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 14px;
+            color: #1e293b;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+            background: #f8fafc;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        #feedback-textarea:focus {
+            border-color: #94a3b8;
+            background: #fff;
+        }
+        #feedback-submit-btn {
+            width: 100%;
+            margin-top: 16px;
+            background: #1e2937;
+            color: #fff;
+            border: none;
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            letter-spacing: 0.01em;
+        }
+        #feedback-submit-btn:hover {
+            background: #0f172a;
+            transform: translateY(-1px);
+        }
+        #feedback-submit-btn:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #feedback-success {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 10px 0 6px;
+            animation: successPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        @keyframes successPop {
+            0% { opacity: 0; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .success-icon-ring {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+            box-shadow: 0 8px 24px rgba(234,179,8,0.35);
+            animation: goldGlowPulse 2s ease-in-out infinite;
+        }
+        @keyframes goldGlowPulse {
+            0%, 100% { box-shadow: 0 8px 24px rgba(234,179,8,0.35); }
+            50% { box-shadow: 0 8px 32px rgba(250,204,21,0.6); }
+        }
+        .feedback-tag-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 4px 0 16px;
+            justify-content: center;
+        }
+        .feedback-tag {
+            background: #f1f5f9;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.18s;
+            user-select: none;
+        }
+        .feedback-tag:hover, .feedback-tag.selected {
+            background: #1e2937;
+            color: #fff;
+            border-color: #1e2937;
+        }
+
+        /* ===== IMAGE PREVIEW LIGHTBOX ===== */
+        #img-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 10, 18, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.28s ease;
+        }
+        #img-preview-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #img-preview-box {
+            position: relative;
+            max-width: min(860px, 95vw);
+            max-height: 90dvh;
+            background: #0f172a;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 40px 80px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+            transform: scale(0.93) translateY(16px);
+            transition: transform 0.32s cubic-bezier(0.34,1.4,0.64,1);
+            display: flex;
+            flex-direction: column;
+        }
+        #img-preview-overlay.show #img-preview-box {
+            transform: scale(1) translateY(0);
+        }
+        #img-preview-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        #img-preview-topbar span {
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #64748b;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        #img-preview-close {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.18s, color 0.18s;
+            line-height: 1;
+        }
+        #img-preview-close:hover {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+        }
+        #img-preview-img-wrap {
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background: #060d1a;
+            min-height: 0;
+        }
+        #img-preview-img-wrap img {
+            max-width: 100%;
+            max-height: calc(90dvh - 110px);
+            object-fit: contain;
+            display: block;
+        }
+        #img-preview-footer {
+            padding: 12px 18px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            gap: 10px;
+        }
+        #img-preview-hint {
+            font-size: 12px;
+            color: #334155;
+        }
+        #img-preview-dl {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: #facc15;
+            color: #0f172a;
+            border: none;
+            border-radius: 10px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.18s, transform 0.15s;
+            letter-spacing: 0.01em;
+            text-decoration: none;
+        }
+        #img-preview-dl:hover {
+            background: #fde047;
+            transform: translateY(-1px);
+        }
+        .generated-image img {
+            cursor: zoom-in;
+            transition: opacity 0.2s;
+        }
+        .generated-image img:hover {
+            opacity: 0.88;
+        }
+
+        /* ===== RESPONSIVE: ALL DEVICES ===== */
+        /* CSS variables for easy cross-breakpoint consistency */
+        :root {
+            --btn-size: 5rem;
+            --btn-bottom: 2rem;
+            --btn-right: 2rem;
+            --win-width: 440px;
+            --win-right: 2rem;
+            --win-gap: 0.75rem;
+        }
+
+        #chat-button {
+            bottom: var(--btn-bottom);
+            right: var(--btn-right);
+        }
+
+        /* Chat window always viewport-safe — never clips top */
+        #chat-window {
+            width: var(--win-width);
+            /* height = viewport minus: button, its bottom, gap between them, plus small safety margin */
+            height: min(620px, calc(100dvh - var(--btn-size) - var(--btn-bottom) - var(--win-gap) - 0.5rem));
+            max-height: calc(100dvh - var(--btn-size) - var(--btn-bottom) - var(--win-gap) - 0.5rem);
+            bottom: calc(var(--btn-size) + var(--btn-bottom) + var(--win-gap));
+            right: var(--win-right);
+            border-radius: 1.5rem;
+        }
+
+        /* Feedback modal always fits viewport */
+        #feedback-modal {
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+        }
+
+        /* ── Mobile phones (≤ 480px) ── */
+        @media (max-width: 480px) {
+            :root {
+                --btn-size: 3.5rem;
+                --btn-bottom: 1rem;
+                --btn-right: 1rem;
+                --win-width: calc(100vw - 12px);
+                --win-right: 6px;
+                --win-gap: 0.5rem;
+            }
+            #chat-button .w-20 { width: 3.5rem !important; height: 3.5rem !important; }
+            #hover-container    { display: none !important; }
+            #chat-window        { left: 6px !important; border-radius: 1.25rem !important; }
+            .bot-message        { max-width: 100% !important; font-size: 14px; padding: 14px 16px; }
+            .user-message       { max-width: 93%  !important; font-size: 14px; padding: 12px 16px; }
+            #chat-messages      { padding: 0.85rem !important; }
+            #user-input         { font-size: 16px !important; padding: 11px 14px !important; }
+            #send-button, #attach-btn { width: 2.75rem !important; height: 2.75rem !important; }
+            #feedback-modal     { width: calc(100vw - 20px) !important; padding: 20px 15px 16px !important; border-radius: 16px !important; }
+            .star-btn           { font-size: 1.65rem; }
+            .feedback-tag       { font-size: 12px; padding: 6px 11px; }
+        }
+
+        /* ── Tablets (481px – 900px) ── */
+        @media (min-width: 481px) and (max-width: 900px) {
+            :root {
+                --btn-size: 4.5rem;
+                --btn-bottom: 1.5rem;
+                --btn-right: 1.5rem;
+                --win-width: min(400px, calc(100vw - 40px));
+                --win-right: 1.5rem;
+                --win-gap: 0.75rem;
+            }
+            #chat-button .w-20 { width: 4.5rem !important; height: 4.5rem !important; }
+            #feedback-modal     { width: min(390px, calc(100vw - 40px)) !important; }
+        }
+
+        /* ── Laptop / Desktop (901px – 1439px) ── default vars ── */
+
+        /* ── Smart TV / Large screen (≥ 1440px) ── */
+        @media (min-width: 1440px) {
+            :root {
+                --btn-size: 6rem;
+                --btn-bottom: 2.5rem;
+                --btn-right: 3rem;
+                --win-width: 520px;
+                --win-right: 3rem;
+                --win-gap: 1rem;
+            }
+            #chat-button .w-20  { width: 6rem !important; height: 6rem !important; }
+            .markdown-body      { font-size: 16.5px !important; }
+            #feedback-modal     { width: 480px !important; padding: 36px 32px 28px !important; }
+            .star-btn           { font-size: 2.3rem; }
+        }
+
+        /* ── 4K / Ultra-wide TV (≥ 2560px) ── */
+        @media (min-width: 2560px) {
+            :root {
+                --btn-size: 7rem;
+                --btn-bottom: 3rem;
+                --btn-right: 4rem;
+                --win-width: 640px;
+                --win-right: 4rem;
+                --win-gap: 1.25rem;
+            }
+            #chat-button .w-20  { width: 7rem !important; height: 7rem !important; }
+            .markdown-body      { font-size: 18px !important; }
+            #feedback-modal     { width: 560px !important; padding: 44px 38px 34px !important; }
+        }
+
+        /* ── Input area ── */
+        #user-input {
+            min-width: 0;
+            width: 100%;
+            text-overflow: ellipsis;
+        }
+        #user-input::placeholder {
+            color: #9ca3af;
+            font-size: 13.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #input-area {
+            flex-shrink: 0;
+        }
+
+        /* ── Touch devices: bigger tap targets ── */
+        @media (hover: none) and (pointer: coarse) {
+            .star-btn            { min-width: 44px; min-height: 44px; }
+            .feedback-tag        { padding: 9px 16px; font-size: 13.5px; }
+            #feedback-submit-btn { padding: 16px; font-size: 16px; }
+            #send-button, #attach-btn { min-width: 48px; min-height: 48px; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 font-sans">
+    <!-- Floating Chat Button -->
+    <div id="chat-button" class="fixed z-50 cursor-pointer">
+        <div class="flex items-center gap-3">
+            <div class="w-20 h-20">
+                <img id="nexa-logo" src="assets/nexa.png" class="w-full h-full object-contain glowing-gold-logo" alt="Nexa Logo"/>
+            </div>
+            <div id="hover-container" class="bg-white rounded-3xl px-6 py-4 shadow-xl flex items-center gap-3 opacity-0 scale-95 transition-all duration-300">
+                <div class="text-gray-800 text-sm font-medium">Hello! I'm Nexa. How can I help?</div>
+                <div class="w-10 h-10 bg-yellow-400 text-gray-900 rounded-2xl flex items-center justify-center text-2xl shadow">↑</div>
+            </div>
+        </div>
+    </div>
+    <!-- Chat Window -->
+    <div id="chat-window" class="hidden fixed bg-white shadow-2xl flex flex-col overflow-hidden border border-gray-100 z-50">
+        <!-- Header -->
+        <div class="bg-slate-50 border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9">
+                    <img src="assets/nexa1.png" class="w-full h-full object-contain glowing-gold-logo" alt="Nexa Logo"/>
+                </div>
+                <div>
+                    <h2 class="font-bold text-2xl tracking-tight text-gray-900">NEXA</h2>
+                    <p class="text-xs text-gray-500 -mt-1">At the heart of intelligence is love</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="close-chat" class="text-gray-500 hover:text-gray-700 text-2xl transition-colors">✕</button>
+            </div>
+        </div>
+        <!-- Messages Area -->
+        <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
+        <!-- Input Area -->
+        <div id="input-area" class="px-3 py-3 border-t bg-white">
+            <div class="flex items-center gap-2">
+                <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+                    <i class="fa-solid fa-paperclip text-lg"></i>
+                </button>
+                <div class="input-copy-wrapper">
+                    <input id="user-input" type="text"
+                           class="w-full border border-gray-300 focus:border-blue-500 rounded-2xl px-4 py-3 focus:outline-none text-sm"
+                           placeholder="Ask me anything about curriculum."/>
+                    <button id="input-copy-btn" title="Copy input">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+                <button id="send-button"
+                        class="flex-shrink-0 w-10 h-10 bg-gray-900 hover:bg-black text-white rounded-xl flex items-center justify-center transition-all">
+                    <i class="fa-solid fa-paper-plane text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+// ==================== CONFIG ====================
+const API_URL = "/chat";
+const UPLOAD_URL = "/upload";
+
+const chatButton = document.getElementById('chat-button');
+const chatWindow = document.getElementById('chat-window');
+const closeChat = document.getElementById('close-chat');
+const messagesContainer = document.getElementById('chat-messages');
+const userInput = document.getElementById('user-input');
+const sendButton = document.getElementById('send-button');
+const attachBtn = document.getElementById('attach-btn');
+
+let isOpen = false;
+let sessionId = localStorage.getItem('nexa_session_id') || null;
+let userMessageCount = 0;
+const FEEDBACK_TRIGGER_COUNT = 2; // show feedback after every 2 prompts
+
+// ==================== MARKDOWN ====================
+function renderMarkdown(text) {
+    return marked.parse(text, { breaks: true, gfm: true });
+}
+
+// ==================== ADD MESSAGE ====================
+function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null) {
+    const div = document.createElement('div');
+    div.className = `flex ${isUser ? 'justify-end' : 'justify-start'} group`;
+    if (isUser) {
+        div.innerHTML = `
+            <div class="user-message" ${pairId ? `data-pair-id="${pairId}"` : ''}>
+                <span class="user-text">${text}</span>
+                <div class="message-actions">
+                    <button class="msg-action-btn" onclick="copyMsgText(this, '${escapeForAttr(text)}')" title="Copy">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        const pairAttr = pairId ? `data-pair-id="${pairId}"` : '';
+        let html = `
+            <div class="bot-message" ${pairAttr}>
+                <div class="markdown-body">${renderMarkdown(text)}</div>
+        `;
+        if (fileUrl) {
+            if (isPdf) {
+                html += `
+                    <div class="generated-file mt-4">
+                        <iframe src="${fileUrl}" width="100%" height="400" class="border rounded"></iframe>
+                        <button onclick="downloadFile('${fileUrl}', 'lesson-plan.pdf')"
+                                class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm">
+                            📥 Download PDF
+                        </button>
+                    </div>`;
+            } else {
+                html += `
+                    <div class="generated-image mt-4">
+                        <img src="${fileUrl}" alt="Generated Image" onclick="openImagePreview('${fileUrl}')" title="Click to preview">
+                        <button onclick="downloadFile('${fileUrl}', 'image.png')"
+                                class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm">
+                            📥 Download Image
+                        </button>
+                    </div>`;
+            }
+        }
+        const copyPairBtn = pairId ? `
+                    <button class="msg-action-btn copy-pair-btn" onclick="copyPair('${pairId}')" title="Copy prompt + response">
+                        <i class="fa-solid fa-clone"></i>
+                    </button>` : '';
+        html += `
+                <div class="message-actions">
+                    <button class="msg-action-btn copy-output-btn" onclick="copyOutput(this)" title="Copy response">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>${copyPairBtn}
+                </div>
+            </div>`;
+        div.innerHTML = html;
+    }
+    messagesContainer.appendChild(div);
+    div.querySelectorAll('.user-message, .bot-message').forEach(attachMsgHover);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// ==================== HOVER FOR MESSAGE ACTIONS ====================
+// Use JS hover with small leave-delay so buttons stay reachable
+function attachMsgHover(msgEl) {
+    let leaveTimer = null;
+    const actions = msgEl.querySelector('.message-actions');
+    if (!actions) return;
+    msgEl.addEventListener('mouseenter', () => {
+        clearTimeout(leaveTimer);
+        actions.classList.add('show');
+    });
+    msgEl.addEventListener('mouseleave', () => {
+        leaveTimer = setTimeout(() => actions.classList.remove('show'), 120);
+    });
+    // Keep visible while hovering over the actions themselves
+    actions.addEventListener('mouseenter', () => clearTimeout(leaveTimer));
+    actions.addEventListener('mouseleave', () => {
+        leaveTimer = setTimeout(() => actions.classList.remove('show'), 120);
+    });
+}
+
+// ==================== COPY HELPERS ====================
+function escapeForAttr(str) {
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
+}
+
+// Copy output text - called from copy button inside bot-message
+window.copyOutput = function(btn) {
+    const markdown = btn.closest('.bot-message').querySelector('.markdown-body');
+    const text = markdown ? markdown.innerText.trim() : '';
+    navigator.clipboard.writeText(text).then(() => {
+        animateCopyBtn(btn);
+        showCopyToast('Response copied');
+    });
+};
+
+// Copy user message text
+window.copyMsgText = function(btn, text) {
+    // decode newlines and get live text from span if possible
+    const span = btn.closest('.user-message')?.querySelector('.user-text');
+    const actual = span ? span.innerText.trim() : text.replace(/\\n/g, '\n');
+    navigator.clipboard.writeText(actual).then(() => {
+        animateCopyBtn(btn);
+        showCopyToast('Message copied');
+    });
+};
+
+function animateCopyBtn(btn) {
+    const icon = btn.querySelector('i');
+    if (!icon) return;
+    icon.className = 'fa-solid fa-check';
+    btn.classList.add('copied');
+    setTimeout(() => {
+        icon.className = 'fa-regular fa-copy';
+        btn.classList.remove('copied');
+    }, 1800);
+}
+
+window.copyToClipboard = function(text) {
+    navigator.clipboard.writeText(text).then(() => showCopyToast('Copied'));
+};
+
+window.copyPair = function(pairId) {
+    const userEl  = messagesContainer.querySelector(`.user-message[data-pair-id="${pairId}"]`);
+    const botEl   = messagesContainer.querySelector(`.bot-message[data-pair-id="${pairId}"]`);
+    const span    = userEl?.querySelector('.user-text');
+    const prompt  = span ? span.innerText.trim() : (userEl ? userEl.innerText.trim() : '');
+    const response = botEl  ? (botEl.querySelector('.markdown-body')?.innerText?.trim() || '') : '';
+    const combined = `User:\n${prompt}\n\nNexa:\n${response}`;
+    navigator.clipboard.writeText(combined).then(() => showCopyToast('Prompt + response copied'));
+};
+
+function showCopyToast(msg) {
+    let toast = document.getElementById('copy-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'copy-toast';
+        toast.style.cssText = `
+            position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%) translateY(8px);
+            background:#1e2937; color:#fff; font-size:13px; font-weight:500;
+            padding:9px 18px; border-radius:999px; z-index:99999;
+            box-shadow:0 8px 24px rgba(0,0,0,0.25);
+            display:flex; align-items:center; gap:8px;
+            opacity:0; transition:opacity 0.22s ease, transform 0.22s ease;
+            white-space:nowrap; pointer-events:none;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${msg}`;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(8px)';
+    }, 2200);
+}
+
+window.downloadFile = function(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+};
+
+window.editMessage = function(el) {
+    const span = el.querySelector('.user-text');
+    const oldText = span ? span.innerText.trim() : el.innerText.trim();
+    const newText = prompt("Edit your message:", oldText);
+    if (newText && newText !== oldText) {
+        el.closest('.flex').remove();
+        addMessage(newText, true);
+        userInput.value = newText;
+        setTimeout(sendMessage, 100);
+    }
+};
+
+// ==================== FILE UPLOAD ====================
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.pdf,.txt,.docx';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    addMessage(`Uploading: ${file.name}`, true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+        const data = await res.json();
+        addMessage(data.message || "File uploaded successfully!", false);
+    } catch (err) {
+        addMessage("Failed to upload file.", false);
+    }
+});
+
+async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    const pairId = 'p' + Date.now();
+    addMessage(text, true, null, false, pairId);
+    userInput.value = "";
+
+    // Track user message count & trigger feedback window ONCE after 2 prompts
+    userMessageCount++;
+    if (userMessageCount === FEEDBACK_TRIGGER_COUNT) {
+        setTimeout(() => {
+            document.getElementById('feedback-overlay').classList.add('show');
+            document.getElementById('feedback-form-view').style.display = 'block';
+            document.getElementById('feedback-success').style.display = 'none';
+            document.getElementById('feedback-submit-btn').disabled = true;
+            document.getElementById('star-label').textContent = 'Tap a star to rate';
+            document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.feedback-tag').forEach(b => b.classList.remove('selected'));
+            document.getElementById('feedback-textarea').value = '';
+        }, 800);
+    }
+
+    // typing indicator
+    const typing = document.createElement("div");
+    typing.id = "typing-msg";
+    typing.innerHTML = `
+        <div class="bot-message">
+            ⏳ Nexa is thinking / generating image...
+        </div>
+    `;
+    messagesContainer.appendChild(typing);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const res = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: text,
+                session_id: sessionId
+            })
+        });
+
+        const data = await res.json();
+
+        document.getElementById("typing-msg")?.remove();
+
+        sessionId = data.session_id;
+        localStorage.setItem("nexa_session_id", sessionId);
+
+        // ================= IMAGE HANDLING (FIXED) =================
+	if (data.image_url && data.image_id) {
+
+    addMessage(data.response, false, null, false, pairId);
+
+    const imageUrl = data.image_url;
+    const imageId = data.image_id;
+
+    const interval = setInterval(async () => {
+
+        try {
+
+            const statusRes = await fetch(`/image-status/${imageId}`);
+
+            const statusData = await statusRes.json();
+
+            console.log("IMAGE STATUS:", statusData);
+
+            if (statusData.status === "ready") {
+
+                clearInterval(interval);
+
+                addMessage(
+                    "🖼️ Generated Image:",
+                    false,
+                    imageUrl,
+                    false,
+                    pairId
+                );
+            }
+
+            if (statusData.status === "failed") {
+
+                clearInterval(interval);
+
+                addMessage(
+                    "❌ Image generation failed.",
+                    false
+                );
+            }
+
+        } catch (err) {
+
+            console.log("Polling error:", err);
+        }
+
+    }, 2000);
+
+        } else {
+            // normal text response
+            addMessage(data.response, false, data.pdf_url, !!data.pdf_url, pairId);
+        }
+
+    } catch (err) {
+        document.getElementById("typing-msg")?.remove();
+
+        console.error(err);
+
+        addMessage(
+            "⚠️ Sorry, I'm having trouble connecting. Please try again.",
+            false
+        );
+    }
+}
+
+// Event Listeners
+sendButton.addEventListener('click', sendMessage);
+userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+chatButton.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
+closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
+
+// Input copy button
+const inputCopyBtn = document.getElementById('input-copy-btn');
+inputCopyBtn.addEventListener('click', () => {
+    const text = userInput.value;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+        const icon = inputCopyBtn.querySelector('i');
+        icon.className = 'fa-solid fa-check';
+        inputCopyBtn.classList.add('copied');
+        inputCopyBtn.style.opacity = '1';
+        showCopyToast('Input copied');
+        setTimeout(() => {
+            icon.className = 'fa-regular fa-copy';
+            inputCopyBtn.classList.remove('copied');
+            inputCopyBtn.style.opacity = '';
+        }, 1800);
+    });
+});
+
+// Hover Effect
+const hoverContainer = document.getElementById('hover-container');
+chatButton.addEventListener('mouseenter', () => {
+    hoverContainer.classList.remove('opacity-0', 'scale-95');
+    hoverContainer.classList.add('opacity-100', 'scale-100');
+});
+chatButton.addEventListener('mouseleave', () => {
+    hoverContainer.classList.add('opacity-0', 'scale-95');
+    hoverContainer.classList.remove('opacity-100', 'scale-100');
+});
+</script>
+
+<!-- ===== IMAGE PREVIEW LIGHTBOX ===== -->
+<div id="img-preview-overlay">
+    <div id="img-preview-box">
+        <div id="img-preview-topbar">
+            <span>Generated Image</span>
+            <button id="img-preview-close" title="Close (Esc)">✕</button>
+        </div>
+        <div id="img-preview-img-wrap">
+            <img id="img-preview-src" src="" alt="Preview"/>
+        </div>
+        <div id="img-preview-footer">
+            <span id="img-preview-hint">Click outside or press <kbd style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:1px 5px;font-size:11px;color:#64748b;">Esc</kbd> to close</span>
+            <a id="img-preview-dl" href="#" download="generated-image.png">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ===== FEEDBACK MODAL ===== -->
+<div id="feedback-overlay">
+    <div id="feedback-modal">
+        <!-- Form View -->
+        <div id="feedback-form-view">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+                <div>
+                    <h3 style="font-size:1.22rem;font-weight:700;color:#0f172a;margin:0;">Rate Your Experience</h3>
+                    <p style="font-size:13px;color:#64748b;margin:5px 0 0;">Your feedback helps improve Nexa</p>
+                </div>
+                <button id="close-feedback-btn" style="background:none;border:none;cursor:pointer;font-size:1.25rem;color:#94a3b8;line-height:1;padding:4px;margin-left:10px;flex-shrink:0;">✕</button>
+            </div>
+
+            <!-- Stars -->
+            <div class="star-row" id="star-row">
+                <button class="star-btn" data-val="1">★</button>
+                <button class="star-btn" data-val="2">★</button>
+                <button class="star-btn" data-val="3">★</button>
+                <button class="star-btn" data-val="4">★</button>
+                <button class="star-btn" data-val="5">★</button>
+            </div>
+            <div class="feedback-label" id="star-label">Tap a star to rate</div>
+
+            <!-- Quick tags -->
+            <div class="feedback-tag-row" id="tag-row">
+                <span class="feedback-tag" data-tag="Helpful">👍 Helpful</span>
+                <span class="feedback-tag" data-tag="Accurate">✅ Accurate</span>
+                <span class="feedback-tag" data-tag="Too slow">⏱ Too slow</span>
+                <span class="feedback-tag" data-tag="Confusing">😕 Confusing</span>
+                <span class="feedback-tag" data-tag="Needs improvement">🔧 Needs improvement</span>
+            </div>
+
+            <!-- Text area -->
+            <textarea id="feedback-textarea" rows="3" placeholder="Tell us more (optional)..."></textarea>
+
+            <!-- Submit -->
+            <button id="feedback-submit-btn" disabled>Submit Feedback</button>
+        </div>
+
+        <!-- Success View -->
+        <div id="feedback-success">
+            <div class="success-icon-ring">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1e2937" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+            <h3 style="font-size:1.2rem;font-weight:700;color:#0f172a;margin:0 0 8px;">Thank You!</h3>
+            <p style="font-size:14px;color:#64748b;margin:0 0 22px;line-height:1.6;">Your feedback was successfully submitted.<br>We appreciate you helping us improve Nexa.</p>
+            <button id="feedback-done-btn" style="background:#1e2937;color:#fff;border:none;border-radius:12px;padding:11px 32px;font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e2937'">Done</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== IMAGE PREVIEW LIGHTBOX ====================
+(function () {
+    const overlay  = document.getElementById('img-preview-overlay');
+    const imgEl    = document.getElementById('img-preview-src');
+    const closeBtn = document.getElementById('img-preview-close');
+    const dlBtn    = document.getElementById('img-preview-dl');
+
+    window.openImagePreview = function (src) {
+        imgEl.src = src;
+        dlBtn.href = src;
+        overlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    };
+
+    function closePreview() {
+        overlay.classList.remove('show');
+        document.body.style.overflow = '';
+        setTimeout(() => { imgEl.src = ''; }, 300);
+    }
+
+    closeBtn.addEventListener('click', closePreview);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePreview(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
+})();
+</script>
+
+<script>
+// ==================== FEEDBACK MODAL ====================
+(function () {
+    const overlay       = document.getElementById('feedback-overlay');
+    const formView      = document.getElementById('feedback-form-view');
+    const successView   = document.getElementById('feedback-success');
+    const submitBtn     = document.getElementById('feedback-submit-btn');
+    const starLabel     = document.getElementById('star-label');
+    const starBtns      = document.querySelectorAll('.star-btn');
+    const tagBtns       = document.querySelectorAll('.feedback-tag');
+    const textarea      = document.getElementById('feedback-textarea');
+    const closeFeedback = document.getElementById('close-feedback-btn');
+    const doneBtn       = document.getElementById('feedback-done-btn');
+
+    const starLabels = ['', 'Poor 😞', 'Fair 😐', 'Good 😊', 'Great 😄', 'Excellent 🤩'];
+    let selectedRating = 0;
+    let selectedTags   = [];
+
+    function openModal() {
+        selectedRating = 0;
+        selectedTags   = [];
+        textarea.value = '';
+        formView.style.display = 'block';
+        successView.style.display = 'none';
+        submitBtn.disabled = true;
+        starLabel.textContent = 'Tap a star to rate';
+        starBtns.forEach(b => b.classList.remove('active'));
+        tagBtns.forEach(b => b.classList.remove('selected'));
+        overlay.classList.add('show');
+    }
+
+    function closeModal() {
+        overlay.classList.remove('show');
+    }
+
+    // Star interaction
+    starBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedRating = parseInt(btn.dataset.val);
+            starBtns.forEach(b => {
+                b.classList.toggle('active', parseInt(b.dataset.val) <= selectedRating);
+            });
+            starLabel.textContent = starLabels[selectedRating];
+            submitBtn.disabled = false;
+        });
+        btn.addEventListener('mouseenter', () => {
+            const hoverVal = parseInt(btn.dataset.val);
+            starBtns.forEach(b => {
+                b.style.color = parseInt(b.dataset.val) <= hoverVal ? '#facc15' : '';
+            });
+        });
+        btn.addEventListener('mouseleave', () => {
+            starBtns.forEach(b => { b.style.color = ''; });
+        });
+    });
+
+    // Tag interaction
+    tagBtns.forEach(tag => {
+        tag.addEventListener('click', () => {
+            const val = tag.dataset.tag;
+            if (tag.classList.contains('selected')) {
+                tag.classList.remove('selected');
+                selectedTags = selectedTags.filter(t => t !== val);
+            } else {
+                tag.classList.add('selected');
+                selectedTags.push(val);
+            }
+        });
+    });
+
+    // Submit
+    submitBtn.addEventListener('click', () => {
+        if (!selectedRating) return;
+        // Frontend-only: just log and show success
+        console.log('Feedback submitted:', {
+            rating: selectedRating,
+            tags: selectedTags,
+            comment: textarea.value.trim()
+        });
+        formView.style.display = 'none';
+        successView.style.display = 'flex';
+    });
+
+    // Close handlers
+    closeFeedback.addEventListener('click', closeModal);
+    doneBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+})();
+</script>
+</body>
+</html>
