@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+import base64
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -109,6 +110,14 @@ class RatingPayload(BaseModel):
 
 class PopPayload(BaseModel):
     log_id: str
+
+
+class ImageBase64Payload(BaseModel):
+    log_id: str
+    user_name: str
+    image_base64: str
+    image_filename: Optional[str] = None
+    image_mime_type: Optional[str] = None
 
 
 # Server-side stack to mirror push/pop operations done by the UI.
@@ -278,7 +287,6 @@ if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
     ])
 
     history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
-
 # ====================== YOUR SYSTEM PROMPT (UNCHANGED) ======================
 system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
 
@@ -386,8 +394,6 @@ async def serve_frontend():
 def save_chat_log(payload: ChatLogPayload):
     chat_stack.append(payload.log_id)
 
-    user_name = TEST_USER_NAME
-
     conn = get_conn()
     cur = conn.cursor()
     try:
@@ -405,7 +411,7 @@ def save_chat_log(payload: ChatLogPayload):
             """,
             (
                 payload.log_id,
-                user_name,
+                payload.user_name,
                 payload.user_prompt,
                 payload.nexa_response,
                 ts_utc.strftime("%Y-%m-%d %H:%M:%S"),
@@ -462,6 +468,91 @@ def pop_last_log(payload: PopPayload):
         chat_stack.remove(payload.log_id)
 
     return {"status": "popped", "stack_size": len(chat_stack)}
+
+
+@app.post("/api/chat-image")
+def save_chat_image(payload: ImageBase64Payload):
+    log_id = payload.log_id.strip()
+    user_name = payload.user_name.strip()
+    image_filename = payload.image_filename.strip() if payload.image_filename else None
+    mime_type = payload.image_mime_type or "application/octet-stream"
+
+    image_base64 = payload.image_base64.strip()
+    if image_base64.startswith("data:") and "," in image_base64:
+        image_base64 = image_base64.split(",", 1)[1]
+
+    try:
+        base64.b64decode(image_base64, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64 image payload") from exc
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE nexa_chat_logs
+            SET image_base64 = %s,
+                image_mime_type = %s,
+                image_filename = %s,
+                image_saved_at = %s
+            WHERE log_id = %s AND user_name = %s
+            """,
+            (
+                image_base64,
+                mime_type,
+                image_filename,
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                log_id,
+                user_name,
+            ),
+        )
+        conn.commit()
+
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Chat log not found for this user")
+    finally:
+        cur.close()
+        conn.close()
+
+    return {"status": "image_saved", "log_id": log_id, "user_name": user_name, "size": len(image_base64)}
+
+
+@app.get("/api/chat-image/{log_id}")
+def get_chat_image(log_id: str, user_name: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT image_base64, image_mime_type, image_filename
+            FROM nexa_chat_logs
+            WHERE log_id = %s AND user_name = %s
+            """,
+            (log_id, user_name),
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not row or row[0] is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    image_base64, image_mime_type, image_filename = row
+    try:
+        image_bytes = base64.b64decode(image_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
+
+    headers = {}
+    if image_filename:
+        headers["Content-Disposition"] = f'inline; filename="{image_filename}"'
+
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+
+    return StreamingResponse(BytesIO(image_bytes), media_type=image_mime_type or "application/octet-stream", headers=headers)
 
 # ====================== CHAT ======================
 class ChatRequest(BaseModel):
