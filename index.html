@@ -726,13 +726,10 @@
 // ==================== CONFIG ====================
 const API_URL = "/chat";
 const UPLOAD_URL = "/upload";
-const LOGGER_BASE_URL =
-    window.NEXA_LOGGER_BASE_URL ||
-    localStorage.getItem('nexa_logger_base_url') ||
-    `${window.location.protocol}//${window.location.hostname}:8001`;
-const LOG_API_URL = `${LOGGER_BASE_URL}/api/chat-log`;
-const RATING_API_URL = `${LOGGER_BASE_URL}/api/chat-rating`;
-const POP_API_URL = `${LOGGER_BASE_URL}/api/chat-log/pop`;
+const LOG_API_URL = "/api/chat-log";
+const RATING_API_URL = "/api/chat-rating";
+const POP_API_URL = "/api/chat-log/pop";
+const IMAGE_API_URL = "/api/chat-image";
 
 const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
@@ -890,6 +887,51 @@ async function updateLogResponse(logId, responseText) {
     logItem.timestamp = getInternationalTimestamp();
     await saveChatLogToDatabase(logItem);
     await retryPendingLogs();
+}
+
+async function blobToBase64(blob) {
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read image blob'));
+        reader.readAsDataURL(blob);
+    });
+
+    return String(dataUrl).split(',')[1] || '';
+}
+
+async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }) {
+    try {
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) {
+            throw new Error(`Image fetch returned ${imageResponse.status}`);
+        }
+
+        const imageBlob = await imageResponse.blob();
+        const imageBase64 = await blobToBase64(imageBlob);
+        const uploadResponse = await fetch(IMAGE_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                log_id: logId,
+                user_name: userName,
+                image_base64: imageBase64,
+                image_mime_type: imageBlob.type || 'application/octet-stream',
+                image_filename: filename || 'generated-image.png'
+            })
+        });
+
+        if (!uploadResponse.ok) {
+            throw new Error(`Image API returned ${uploadResponse.status}`);
+        }
+
+        return true;
+    } catch (err) {
+        console.error('Image base64 save failed', err);
+        return false;
+    }
 }
 
 // ==================== MARKDOWN ====================
@@ -1297,6 +1339,13 @@ async function sendMessage() {
             if (statusData.status === "ready") {
 
                 clearInterval(interval);
+
+                await saveImageBase64ToDatabase({
+                    logId,
+                    userName,
+                    imageUrl,
+                    filename: imageUrl.split('/').pop() || `image_${imageId}.png`
+                });
 
                 addMessage(
                     "🖼️ Generated Image:",
