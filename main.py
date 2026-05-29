@@ -1,27 +1,31 @@
-from fastapi.responses import JSONResponse
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+import html
 import uuid
 import os
+import re
 from typing import Optional, Dict, Any
 import datetime
 from fastapi.staticfiles import StaticFiles
 import threading
 
-# ====================== MYSQL CONNECTOR (SAFE IMPORT) ======================
-mysql_connector = None
 try:
     import mysql.connector
-    mysql_connector = mysql.connector
-    print("✅ MySQL connector loaded successfully")
 except ModuleNotFoundError:
-    print("⚠️  mysql-connector-python is not installed. Database logging will be disabled.")
-except Exception as e:
-    print(f"⚠️  Error loading MySQL connector: {e}")
+    mysql.connector = None
 
-# ====================== LANGCHAIN & OTHER IMPORTS ======================
+try:
+    from duckduckgo_search import DDGS
+except ModuleNotFoundError:
+    DDGS = None
+
+try:
+    import wikipedia
+except ModuleNotFoundError:
+    wikipedia = None
+
 LANGCHAIN_AVAILABLE = True
 try:
     from langchain_community.document_loaders import PyPDFLoader
@@ -35,8 +39,6 @@ try:
     from langchain_community.chat_message_histories import ChatMessageHistory
 except ModuleNotFoundError:
     LANGCHAIN_AVAILABLE = False
-    print("⚠️  LangChain dependencies not fully installed.")
-
 
 IMAGE_RUNTIME_AVAILABLE = True
 try:
@@ -53,6 +55,7 @@ except ModuleNotFoundError:
     MarkdownPdf = None
     Section = None
 
+# ====================== CONFIG ======================
 WORKSPACE_DIR = os.path.dirname(__file__)
 
 PDF_PATHS = [
@@ -112,6 +115,130 @@ class PopPayload(BaseModel):
 chat_stack = []
 
 
+def get_conn():
+    if mysql.connector is None:
+        raise HTTPException(status_code=503, detail="MySQL connector is not installed")
+    return mysql.connector.connect(**DB_CONFIG)
+
+
+def to_utc_datetime(iso_str: str) -> datetime.datetime:
+    try:
+        parsed = datetime.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid ISO timestamp") from exc
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def escape_markdown(text: str) -> str:
+    text = html.escape(text or "")
+    return re.sub(r"([\\`*_{}\[\]()#+\-.!|>])", r"\\\1", text)
+
+
+def looks_like_web_query(message: str) -> bool:
+    lowered = (message or "").strip().lower()
+    if not lowered:
+        return False
+
+    web_keywords = (
+        "search",
+        "google",
+        "wikipedia",
+        "wiki",
+        "who is",
+        "what is",
+        "define",
+        "latest",
+        "news",
+        "find",
+        "lookup",
+    )
+
+    return any(keyword in lowered for keyword in web_keywords)
+
+
+def build_web_results_query(message: str) -> str:
+    cleaned = (message or "").strip()
+    cleaned = re.sub(r"^(search|google|find|look up|lookup|wikipedia|wiki)\s+(for\s+)?", "", cleaned, flags=re.IGNORECASE)
+    return cleaned or message
+
+
+def fetch_web_results(query: str, limit: int = 5) -> str:
+    if DDGS is None:
+        return "Web search is unavailable because duckduckgo-search is not installed in this environment."
+
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=limit, safesearch="moderate"))
+    except Exception as exc:
+        return f"I could not fetch web results right now: {escape_markdown(str(exc))}"
+
+    if not results:
+        return (
+            f"I could not fetch live web results for **{escape_markdown(query)}** right now. "
+            "You can ask again with a more specific phrase, or try a Wikipedia lookup instead."
+        )
+
+    lines = [f"# Search Results for {escape_markdown(query)}", ""]
+    for index, item in enumerate(results, start=1):
+        title = escape_markdown(item.get("title") or "Untitled result")
+        snippet = escape_markdown(item.get("body") or "No snippet available.")
+        url = item.get("href") or item.get("url") or ""
+        link = f"[{title}]({url})" if url else title
+        lines.append(f"{index}. {link}")
+        lines.append(f"   - {snippet}")
+
+    lines.append("")
+    lines.append("These are web search results. If you want, I can also open Wikipedia-style summaries for the same topic.")
+    return "\n".join(lines)
+
+
+def fetch_wikipedia_summary(query: str) -> str:
+    if wikipedia is None:
+        return "Wikipedia is unavailable because the wikipedia package is not installed in this environment."
+
+    try:
+        wikipedia.set_lang("en")
+        search_results = wikipedia.search(query, results=5)
+        if not search_results:
+            return f"I could not find a Wikipedia page for **{escape_markdown(query)}**."
+
+        page_title = search_results[0]
+        page = wikipedia.page(page_title, auto_suggest=False)
+        summary = wikipedia.summary(page.title, sentences=4, auto_suggest=False)
+        return (
+            f"# Wikipedia: {escape_markdown(page.title)}\n\n"
+            f"{escape_markdown(summary)}\n\n"
+            f"Source: {page.url}"
+        )
+    except wikipedia.DisambiguationError as exc:
+        choices = ", ".join(escape_markdown(choice) for choice in exc.options[:5])
+        return (
+            f"I found multiple Wikipedia results for **{escape_markdown(query)}**.\n\n"
+            f"Try one of these: {choices}"
+        )
+    except wikipedia.PageError:
+        return f"I could not find a Wikipedia page for **{escape_markdown(query)}**."
+    except Exception as exc:
+        return (
+            f"I could not fetch a live Wikipedia result for **{escape_markdown(query)}** right now. "
+            "Try a more specific title or ask Nexa for a short explanation instead."
+        )
+
+
+def build_general_knowledge_answer(message: str) -> str:
+    query = build_web_results_query(message)
+    lowered = (message or "").lower()
+
+    if "wikipedia" in lowered or "wiki" in lowered:
+        return fetch_wikipedia_summary(query)
+
+    if looks_like_web_query(message):
+        return fetch_web_results(query)
+
+    return ""
 
 # ====================== LOAD PDFs ======================
 docs = []
@@ -194,7 +321,6 @@ if IMAGE_RUNTIME_AVAILABLE:
     except Exception as exc:
         print("Image model unavailable:", exc)
         pipe = None
-
 
 def generate_image_task(prompt, path, image_id):
 
@@ -293,92 +419,6 @@ def save_chat_log(payload: ChatLogPayload):
 
     return {"status": "saved", "stack_size": len(chat_stack)}
 
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    try:
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-
-        file_path = os.path.join(UPLOAD_DIR, file.filename)
-        
-        # Save file
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
-
-        # === ADD TO RAG VECTORSTORE ===
-        if LANGCHAIN_AVAILABLE and vectorstore is not None:
-            try:
-                loader = PyPDFLoader(file_path)
-                new_docs = loader.load()
-                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
-                new_splits = text_splitter.split_documents(new_docs)
-                
-                vectorstore.add_documents(new_splits)
-                print(f"✅ Added {len(new_splits)} new chunks from: {file.filename}")
-                
-                global retriever
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 8})  # Increase k a bit
-            except Exception as e:
-                print(f"⚠️ Failed to add document to vectorstore: {e}")
-
-        return JSONResponse({
-            "status": "success",
-            "message": f"File '{file.filename}' uploaded and learned successfully!",
-            "path": file_path
-        })
-    except Exception as e:
-        print(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
-# ====================== DB HELPERS ======================
-def get_conn():
-    if mysql_connector is None:
-        raise HTTPException(status_code=503, detail="MySQL connector is not installed")
-    return mysql_connector.connect(**DB_CONFIG)
-
-def to_utc_datetime(iso_str: str) -> datetime.datetime:
-    try:
-        parsed = datetime.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid ISO timestamp") from exc
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=datetime.timezone.utc)
-    return parsed.astimezone(datetime.timezone.utc)
-
-def save_chat_to_db(log_id: str, user_prompt: str, nexa_response: str):
-    """Save chat to MySQL database"""
-    if mysql_connector is None:
-        print("⚠️ DB logging skipped: mysql connector not installed")
-        return
-
-    conn = None
-    cur = None
-    try:
-        conn = get_conn()
-        cur = conn.cursor()
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        cur.execute(
-            """
-            INSERT INTO nexa_chat_logs 
-            (log_id, user_name, user_prompt, nexa_response, timestamp_utc, stars)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                user_prompt = VALUES(user_prompt),
-                nexa_response = VALUES(nexa_response),
-                timestamp_utc = VALUES(timestamp_utc)
-            """,
-            (log_id, TEST_USER_NAME, user_prompt, nexa_response, ts, 0)
-        )
-        conn.commit()
-        print(f"✅ Saved to DB: {log_id}")
-    except Exception as e:
-        print(f"⚠️ DB Save Error: {e}")
-    finally:
-        if cur:
-            cur.close()
-        if conn:
-            conn.close()
 
 @app.post("/api/chat-rating")
 def save_rating(payload: RatingPayload):
@@ -437,64 +477,73 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
+
     session_id = request.session_id or str(uuid.uuid4())
-    log_id = str(uuid.uuid4())
 
     try:
         config = {"configurable": {"session_id": session_id}}
-        
-        if conversational_rag_chain is None:
+
+        web_answer = build_general_knowledge_answer(request.message)
+        if web_answer:
+            answer = web_answer
+        elif conversational_rag_chain is None:
             answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
         else:
             result = conversational_rag_chain.invoke(
                 {"input": request.message},
                 config=config
             )
+
             answer = result.get("answer") or "No response"
 
         pdf_url = None
         image_url = None
         image_id = None
 
-        # ================= PDF GENERATION =================
+        # ================= PDF GENERATION (UNCHANGED) =================
         if "pdf" in request.message.lower():
             if MarkdownPdf is not None and Section is not None:
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"lesson_{ts}.pdf"
                 path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+
                 pdf = MarkdownPdf()
                 pdf.add_section(Section(answer))
                 pdf.save(path)
+
                 pdf_url = f"/assets/{filename}"
 
-        # ================= IMAGE GENERATION (50 Steps) =================
-        if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual", "picture", "illustration"]):
+        # ================= IMAGE GENERATION (FIXED + SAFE) =================
+        if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual"]):
+
             if pipe is None:
-                answer = "Image generation is not available in this workspace."
-            else:
-                answer = "🖼️ Generating high-quality image (50 steps)... Please wait 30-60 seconds."
-                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"image_{ts}.png"
-                path = os.path.join(IMAGE_OUTPUT_DIR, filename)
-                image_id = ts
-                
-                enhanced_prompt = f"{request.message}, educational diagram, clear labels, textbook style, high quality, simple background, well organized"
+                answer = "Your image request was received, but image generation is unavailable in this workspace."
+                return ChatResponse(
+                    response=answer,
+                    session_id=session_id,
+                    pdf_url=pdf_url,
+                    image_url=None,
+                    image_id=None
+                )
 
-                # Start background generation
-                threading.Thread(
-                    target=generate_image_task,
-                    args=(enhanced_prompt, path, image_id),
-                    daemon=True
-                ).start()
-                
-                image_url = f"/assets/{filename}"
+            answer = "Your image is generating..."
 
-        # Safety check
-        if not answer or str(answer).strip() == "":
-            answer = "Sorry, I couldn't generate a proper response. Please try again."
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Save conversation to database
-        save_chat_to_db(log_id, request.message, answer)
+            filename = f"image_{ts}.png"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+
+            image_id = ts  # ✅ IMPORTANT for frontend polling
+
+            prompt = f"{request.message}. educational diagram, clean labels, high quality, textbook style"
+
+            # 🔥 NON-BLOCKING BACKGROUND THREAD (UNCHANGED LOGIC)
+            threading.Thread(
+                target=generate_image_task,
+                args=(prompt, path, image_id)
+            ).start()
+
+            image_url = f"/assets/{filename}"
 
         return ChatResponse(
             response=answer,
@@ -505,7 +554,7 @@ async def chat_endpoint(request: ChatRequest):
         )
 
     except Exception as e:
-        print("Chat Endpoint Error:", e)
+        print(e)
         raise HTTPException(status_code=500, detail="Server error")
 
 @app.get("/image-status/{image_id}")
@@ -520,6 +569,7 @@ async def image_status(image_id: str):
 
 @app.get("/health")
 def health():
+    
     return {"status": "ok"}
 
 # ====================== RUN ======================
