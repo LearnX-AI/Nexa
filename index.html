@@ -25,6 +25,8 @@
             font-size: 15.8px;
             line-height: 1.75;
             color: #1f2937;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
         .markdown-body h1 { font-size: 1.85rem; font-weight: 700; color: #0f172a; margin: 1.8rem 0 1rem; border-bottom: 3px solid #e2e8f0; padding-bottom: 0.6rem; }
         .markdown-body h2 { font-size: 1.45rem; font-weight: 600; color: #334155; margin: 1.8rem 0 0.9rem; }
@@ -34,6 +36,23 @@
         .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; background: white; }
         .markdown-body th, .markdown-body td { border: 1px solid #cbd5e1; padding: 12px 14px; text-align: left; }
         .markdown-body th { background-color: #f1f5f9; font-weight: 600; color: #1e40af; }
+        .markdown-body a { overflow-wrap: anywhere; word-break: break-word; }
+        .markdown-body pre {
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 14px 16px;
+        }
+        .markdown-body code {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+        }
         .bot-message {
             background-color: #f0f9ff;
             border-radius: 22px 22px 22px 8px;
