@@ -72,6 +72,7 @@ MODEL_NAME = "llama3.1:8b-instruct-q5_K_M"
 EMBED_MODEL = "nomic-embed-text"
 
 SESSION_STORE: Dict[str, Any] = {}
+SESSION_CHAT_HISTORY: Dict[str, Any] = {}
 
 IMAGE_OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "assets")
 UPLOAD_DIR = os.path.join(WORKSPACE_DIR, "uploads")
@@ -248,6 +249,17 @@ def build_general_knowledge_answer(message: str) -> str:
         return fetch_web_results(query)
 
     return ""
+
+
+def record_chat_turn(session_id: str, role: str, content: str) -> None:
+    if session_id not in SESSION_CHAT_HISTORY:
+        SESSION_CHAT_HISTORY[session_id] = []
+
+    SESSION_CHAT_HISTORY[session_id].append({"role": role, "content": content})
+
+
+def serialize_chat_history(session_id: str):
+    return SESSION_CHAT_HISTORY.get(session_id, [])
 
 # ====================== LOAD PDFs ======================
 docs = []
@@ -566,10 +578,16 @@ class ChatResponse(BaseModel):
     image_url: Optional[str] = None
     image_id: Optional[str] = None
 
+
+class ChatHistoryResponse(BaseModel):
+    session_id: str
+    messages: Any
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
     session_id = request.session_id or str(uuid.uuid4())
+    record_chat_turn(session_id, "user", request.message)
 
     try:
         config = {"configurable": {"session_id": session_id}}
@@ -609,6 +627,7 @@ async def chat_endpoint(request: ChatRequest):
 
             if pipe is None:
                 answer = "Your image request was received, but image generation is unavailable in this workspace."
+                record_chat_turn(session_id, "assistant", answer)
                 return ChatResponse(
                     response=answer,
                     session_id=session_id,
@@ -636,6 +655,8 @@ async def chat_endpoint(request: ChatRequest):
 
             image_url = f"/assets/{filename}"
 
+        record_chat_turn(session_id, "assistant", answer)
+
         return ChatResponse(
             response=answer,
             session_id=session_id,
@@ -647,6 +668,14 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
+
+
+@app.get("/api/chat-history/{session_id}", response_model=ChatHistoryResponse)
+def get_chat_history(session_id: str):
+    return {
+        "session_id": session_id,
+        "messages": serialize_chat_history(session_id),
+    }
 
 @app.get("/image-status/{image_id}")
 async def image_status(image_id: str):

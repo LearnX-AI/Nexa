@@ -730,6 +730,7 @@ const LOG_API_URL = "/api/chat-log";
 const RATING_API_URL = "/api/chat-rating";
 const POP_API_URL = "/api/chat-log/pop";
 const IMAGE_API_URL = "/api/chat-image";
+const CHAT_HISTORY_API_URL = "/api/chat-history";
 
 const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
@@ -745,6 +746,7 @@ const stackSizeLabel = document.getElementById('stack-size');
 let sessionId = localStorage.getItem('nexa_session_id') || null;
 let userMessageCount = 0;
 const FEEDBACK_TRIGGER_COUNT = 2; // show feedback after every 2 prompts
+let chatHistoryLoaded = false;
 
 const chatLogStack = [];
 const pendingLogRetryStack = [];
@@ -760,6 +762,35 @@ function getInternationalTimestamp() {
 
 function updateStackSizeLabel() {
     stackSizeLabel.textContent = `Logs in stack: ${chatLogStack.length}`;
+}
+
+async function loadChatHistory() {
+    if (!sessionId || chatHistoryLoaded) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionId)}`);
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        if (!messages.length) {
+            chatHistoryLoaded = true;
+            return;
+        }
+
+        messagesContainer.innerHTML = '';
+        for (const message of messages) {
+            addMessage(message.content || '', message.role === 'user');
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        chatHistoryLoaded = true;
+    } catch (err) {
+        console.error('Failed to load chat history', err);
+    }
 }
 
 const guardrailRules = [
@@ -1424,6 +1455,7 @@ undoLogBtn.addEventListener('click', async () => {
 });
 
 updateStackSizeLabel();
+loadChatHistory();
 
 // Input copy button
 const inputCopyBtn = document.getElementById('input-copy-btn');
