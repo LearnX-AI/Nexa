@@ -73,6 +73,7 @@ EMBED_MODEL = "nomic-embed-text"
 
 SESSION_STORE: Dict[str, Any] = {}
 SESSION_CHAT_HISTORY: Dict[str, Any] = {}
+SESSION_ACCESS_PROFILE: Dict[str, Dict[str, str]] = {}
 
 IMAGE_OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "assets")
 UPLOAD_DIR = os.path.join(WORKSPACE_DIR, "uploads")
@@ -261,6 +262,58 @@ def record_chat_turn(session_id: str, role: str, content: str) -> None:
 def serialize_chat_history(session_id: str):
     return SESSION_CHAT_HISTORY.get(session_id, [])
 
+
+def normalize_email_address(email: Optional[str]) -> str:
+    return (email or "").strip().lower()
+
+
+def _load_email_tokens(env_name: str) -> set[str]:
+    raw_value = os.getenv(env_name, "")
+    return {token.strip().lower() for token in raw_value.split(",") if token.strip()}
+
+
+def infer_access_role(email: Optional[str]) -> str:
+    normalized_email = normalize_email_address(email)
+    if not normalized_email or "@" not in normalized_email:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+
+    local_part, _, domain = normalized_email.partition("@")
+
+    teacher_emails = _load_email_tokens("NEXA_TEACHER_EMAILS")
+    student_emails = _load_email_tokens("NEXA_STUDENT_EMAILS")
+    teacher_domains = _load_email_tokens("NEXA_TEACHER_EMAIL_DOMAINS")
+    student_domains = _load_email_tokens("NEXA_STUDENT_EMAIL_DOMAINS")
+
+    if normalized_email in teacher_emails or domain in teacher_domains:
+        return "teacher"
+
+    if normalized_email in student_emails or domain in student_domains:
+        return "student"
+
+    teacher_keywords = ("teacher", "staff", "faculty", "educator", "instructor", "lecturer", "tutor", "prof")
+    student_keywords = ("student", "learner", "pupil", "scholar")
+
+    if any(keyword in local_part for keyword in teacher_keywords):
+        return "teacher"
+
+    if any(keyword in local_part for keyword in student_keywords):
+        return "student"
+
+    return "student"
+
+
+def build_role_instruction(role: str) -> str:
+    if role == "teacher":
+        return (
+            "Teacher mode: respond as a curriculum-support assistant. "
+            "Prioritize lesson structure, pedagogy, assessment, differentiation, and classroom use."
+        )
+
+    return (
+        "Student mode: respond in clear, simple, supportive language. "
+        "Focus on short explanations, examples, and study help without unnecessary teaching detail."
+    )
+
 # ====================== LOAD PDFs ======================
 docs = []
 retriever = None
@@ -300,7 +353,7 @@ if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
 
     history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
 # ====================== YOUR SYSTEM PROMPT (UNCHANGED) ======================
-system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
+system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Audience guidance: {audience}\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
 
 if LANGCHAIN_AVAILABLE and llm is not None:
     qa_prompt = ChatPromptTemplate.from_messages([
@@ -569,11 +622,13 @@ def get_chat_image(log_id: str, user_name: str):
 # ====================== CHAT ======================
 class ChatRequest(BaseModel):
     message: str
+    user_email: Optional[str] = None
     session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
+    access_role: Optional[str] = None
     pdf_url: Optional[str] = None
     image_url: Optional[str] = None
     image_id: Optional[str] = None
@@ -586,7 +641,10 @@ class ChatHistoryResponse(BaseModel):
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
+    access_role = infer_access_role(request.user_email)
+    normalized_email = normalize_email_address(request.user_email)
     session_id = request.session_id or str(uuid.uuid4())
+    SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
     record_chat_turn(session_id, "user", request.message)
 
     try:
@@ -599,7 +657,7 @@ async def chat_endpoint(request: ChatRequest):
             answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
         else:
             result = conversational_rag_chain.invoke(
-                {"input": request.message},
+                {"input": request.message, "audience": build_role_instruction(access_role)},
                 config=config
             )
 
@@ -631,6 +689,7 @@ async def chat_endpoint(request: ChatRequest):
                 return ChatResponse(
                     response=answer,
                     session_id=session_id,
+                    access_role=access_role,
                     pdf_url=pdf_url,
                     image_url=None,
                     image_id=None
@@ -660,6 +719,7 @@ async def chat_endpoint(request: ChatRequest):
         return ChatResponse(
             response=answer,
             session_id=session_id,
+            access_role=access_role,
             pdf_url=pdf_url,
             image_url=image_url,
             image_id=image_id

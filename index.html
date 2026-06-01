@@ -692,10 +692,16 @@
         <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
         <!-- Input Area -->
         <div id="input-area" class="px-3 py-3 border-t bg-white">
+            <div class="mb-2 flex items-center gap-2">
+                <input id="user-email" type="email"
+                       class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
+                       placeholder="Enter your school email (required)"/>
+                <span id="access-role-badge" class="shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600">Student mode</span>
+            </div>
             <div class="mb-2">
                 <input id="user-name" type="text"
                        class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
-                       placeholder="Enter your name (required for MySQL logging)"/>
+                       placeholder="Enter your name (optional for logs)"/>
             </div>
             <div class="flex items-center gap-2">
                 <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
@@ -736,14 +742,16 @@ const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
 const closeChat = document.getElementById('close-chat');
 const messagesContainer = document.getElementById('chat-messages');
+const userEmailInput = document.getElementById('user-email');
 const userInput = document.getElementById('user-input');
 const userNameInput = document.getElementById('user-name');
+const accessRoleBadge = document.getElementById('access-role-badge');
 const sendButton = document.getElementById('send-button');
 const attachBtn = document.getElementById('attach-btn');
 const undoLogBtn = document.getElementById('undo-log-btn');
 const stackSizeLabel = document.getElementById('stack-size');
 
-let sessionId = localStorage.getItem('nexa_session_id') || null;
+let sessionId = null;
 let userMessageCount = 0;
 const FEEDBACK_TRIGGER_COUNT = 2; // show feedback after every 2 prompts
 let chatHistoryLoaded = false;
@@ -751,10 +759,72 @@ let chatHistoryLoaded = false;
 const chatLogStack = [];
 const pendingLogRetryStack = [];
 
+function normalizeEmail(email) {
+    return (email || '').trim().toLowerCase();
+}
+
+function getSessionStorageKey(email) {
+    const normalizedEmail = normalizeEmail(email);
+    return normalizedEmail ? `nexa_session_id:${normalizedEmail}` : 'nexa_session_id';
+}
+
+function inferAccessRoleFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const localPart = normalizedEmail.split('@')[0] || '';
+
+    if (/(teacher|staff|faculty|educator|instructor|lecturer|tutor|prof)/.test(localPart)) {
+        return 'teacher';
+    }
+
+    if (/(student|learner|pupil|scholar)/.test(localPart)) {
+        return 'student';
+    }
+
+    return 'student';
+}
+
+function updateAccessRoleBadge(value) {
+    const role = value === 'teacher' || value === 'student'
+        ? value
+        : inferAccessRoleFromEmail(value);
+    accessRoleBadge.textContent = role === 'teacher' ? 'Teacher mode' : 'Student mode';
+    accessRoleBadge.className = role === 'teacher'
+        ? 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-amber-100 text-amber-800'
+        : 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600';
+    return role;
+}
+
+function getDisplayNameFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const localPart = normalizedEmail.split('@')[0] || '';
+    return localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'User';
+}
+
 userNameInput.value = localStorage.getItem('nexa_user_name') || '';
 userNameInput.addEventListener('change', () => {
     localStorage.setItem('nexa_user_name', userNameInput.value.trim());
 });
+
+userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
+
+function setSessionForEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    sessionId = normalizedEmail ? (localStorage.getItem(getSessionStorageKey(normalizedEmail)) || null) : null;
+    chatHistoryLoaded = false;
+    messagesContainer.innerHTML = '';
+    updateAccessRoleBadge(normalizedEmail);
+    if (sessionId) {
+        loadChatHistory();
+    }
+}
+
+userEmailInput.addEventListener('change', () => {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    localStorage.setItem('nexa_user_email', normalizedEmail);
+    setSessionForEmail(normalizedEmail);
+});
+
+setSessionForEmail(userEmailInput.value);
 
 function getInternationalTimestamp() {
     return new Date().toISOString();
@@ -1244,14 +1314,19 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
 
-    const userName = userNameInput.value.trim();
-    if (!userName) {
-        addMessage('Please enter your name first. Logs are stored user by user in MySQL.', false);
-        userNameInput.focus();
+    const userEmail = normalizeEmail(userEmailInput.value);
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email first. Nexa uses it to switch between student and teacher mode.', false);
+        userEmailInput.focus();
         return;
     }
 
+    const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
+
     localStorage.setItem('nexa_user_name', userName);
+    localStorage.setItem('nexa_user_email', userEmail);
+    sessionId = localStorage.getItem(getSessionStorageKey(userEmail)) || null;
+    updateAccessRoleBadge(userEmail);
 
     const assessment = classifyPrompt(text);
     if (!assessment.allowed) {
@@ -1329,6 +1404,7 @@ async function sendMessage() {
             },
             body: JSON.stringify({
                 message: text,
+                user_email: userEmail,
                 session_id: sessionId
             })
         });
@@ -1338,7 +1414,11 @@ async function sendMessage() {
         document.getElementById("typing-msg")?.remove();
 
         sessionId = data.session_id;
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem("nexa_session_id", sessionId);
+        if (data.access_role) {
+            updateAccessRoleBadge(data.access_role);
+        }
 
         const modelText = data.response || '';
         if (containsUnsafeModelOutput(modelText)) {
