@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
+import base64
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -6,7 +7,7 @@ import html
 import uuid
 import os
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import datetime
 from fastapi.staticfiles import StaticFiles
 import threading
@@ -71,6 +72,8 @@ MODEL_NAME = "llama3.1:8b-instruct-q5_K_M"
 EMBED_MODEL = "nomic-embed-text"
 
 SESSION_STORE: Dict[str, Any] = {}
+SESSION_CHAT_HISTORY: Dict[str, Any] = {}
+SESSION_ACCESS_PROFILE: Dict[str, Dict[str, str]] = {}
 
 IMAGE_OUTPUT_DIR = os.path.join(WORKSPACE_DIR, "assets")
 UPLOAD_DIR = os.path.join(WORKSPACE_DIR, "uploads")
@@ -97,6 +100,8 @@ class ChatLogPayload(BaseModel):
     user_prompt: str
     nexa_response: str
     timestamp: str
+    session_id: Optional[str] = None
+    user_email: Optional[str] = None
     stars: int = 0
 
 
@@ -109,6 +114,14 @@ class RatingPayload(BaseModel):
 
 class PopPayload(BaseModel):
     log_id: str
+
+
+class ImageBase64Payload(BaseModel):
+    log_id: str
+    user_name: str
+    image_base64: str
+    image_filename: Optional[str] = None
+    image_mime_type: Optional[str] = None
 
 
 # Server-side stack to mirror push/pop operations done by the UI.
@@ -240,6 +253,171 @@ def build_general_knowledge_answer(message: str) -> str:
 
     return ""
 
+
+def record_chat_turn(session_id: str, role: str, content: str) -> None:
+    if session_id not in SESSION_CHAT_HISTORY:
+        SESSION_CHAT_HISTORY[session_id] = []
+
+    SESSION_CHAT_HISTORY[session_id].append({"role": role, "content": content})
+
+
+def serialize_chat_history(session_id: str):
+    return SESSION_CHAT_HISTORY.get(session_id, [])
+
+
+def ensure_chat_log_schema():
+    if mysql.connector is None:
+        return
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'session_id'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN session_id VARCHAR(64) NULL AFTER log_id")
+
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'user_email'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN user_email VARCHAR(255) NULL AFTER user_name")
+
+        conn.commit()
+    except Exception as exc:
+        print(f"Failed to ensure chat log schema: {exc}")
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
+def fetch_chat_history_rows(session_id: str):
+    if mysql.connector is None:
+        return []
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """
+            SELECT user_prompt, nexa_response, timestamp_utc
+            FROM nexa_chat_logs
+            WHERE session_id = %s
+            ORDER BY timestamp_utc ASC, id ASC
+            """,
+            (session_id,),
+        )
+        return cur.fetchall() or []
+    except Exception as exc:
+        print(f"Failed to fetch chat history from database: {exc}")
+        return []
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
+def fetch_user_chat_sessions(user_email: str):
+    normalized_email = normalize_email_address(user_email)
+    if mysql.connector is None or not normalized_email:
+        return []
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """
+            SELECT session_id, MAX(timestamp_utc) AS last_activity, COUNT(*) AS message_count
+            FROM nexa_chat_logs
+            WHERE user_email = %s
+              AND session_id IS NOT NULL
+              AND session_id <> ''
+            GROUP BY session_id
+            ORDER BY last_activity DESC, session_id DESC
+            LIMIT 20
+            """,
+            (normalized_email,),
+        )
+        rows = cur.fetchall() or []
+        sessions = []
+        for row in rows:
+            last_activity = row.get("last_activity")
+            sessions.append(
+                {
+                    "session_id": row.get("session_id") or "",
+                    "last_activity": last_activity.isoformat() if hasattr(last_activity, "isoformat") else str(last_activity),
+                    "message_count": int(row.get("message_count") or 0),
+                }
+            )
+        return sessions
+    except Exception as exc:
+        print(f"Failed to fetch user chat sessions: {exc}")
+        return []
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
+def normalize_email_address(email: Optional[str]) -> str:
+    return (email or "").strip().lower()
+
+
+def _load_email_tokens(env_name: str) -> set[str]:
+    raw_value = os.getenv(env_name, "")
+    return {token.strip().lower() for token in raw_value.split(",") if token.strip()}
+
+
+def infer_access_role(email: Optional[str]) -> str:
+    normalized_email = normalize_email_address(email)
+    if not normalized_email or "@" not in normalized_email:
+        raise HTTPException(status_code=400, detail="A valid email address is required")
+
+    local_part, _, domain = normalized_email.partition("@")
+
+    teacher_emails = _load_email_tokens("NEXA_TEACHER_EMAILS")
+    student_emails = _load_email_tokens("NEXA_STUDENT_EMAILS")
+    teacher_domains = _load_email_tokens("NEXA_TEACHER_EMAIL_DOMAINS")
+    student_domains = _load_email_tokens("NEXA_STUDENT_EMAIL_DOMAINS")
+
+    if normalized_email in teacher_emails or domain in teacher_domains:
+        return "teacher"
+
+    if normalized_email in student_emails or domain in student_domains:
+        return "student"
+
+    teacher_keywords = ("teacher", "staff", "faculty", "educator", "instructor", "lecturer", "tutor", "prof")
+    student_keywords = ("student", "learner", "pupil", "scholar")
+
+    if any(keyword in local_part for keyword in teacher_keywords):
+        return "teacher"
+
+    if any(keyword in local_part for keyword in student_keywords):
+        return "student"
+
+    return "student"
+
+
+def build_role_instruction(role: str) -> str:
+    if role == "teacher":
+        return (
+            "Teacher mode: respond as a curriculum-support assistant. "
+            "Prioritize lesson structure, pedagogy, assessment, differentiation, and classroom use."
+        )
+
+    return (
+        "Student mode: respond in clear, simple, supportive language. "
+        "Focus on short explanations, examples, and study help without unnecessary teaching detail."
+    )
+
 # ====================== LOAD PDFs ======================
 docs = []
 retriever = None
@@ -278,9 +456,8 @@ if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
     ])
 
     history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
-
 # ====================== YOUR SYSTEM PROMPT (UNCHANGED) ======================
-system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
+system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Audience guidance: {audience}\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
 
 if LANGCHAIN_AVAILABLE and llm is not None:
     qa_prompt = ChatPromptTemplate.from_messages([
@@ -368,6 +545,11 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+
+@app.on_event("startup")
+def startup_tasks():
+    ensure_chat_log_schema()
+
 app.mount("/assets", StaticFiles(directory=IMAGE_OUTPUT_DIR), name="assets")
 
 @app.get("/", response_class=HTMLResponse)
@@ -386,17 +568,17 @@ async def serve_frontend():
 def save_chat_log(payload: ChatLogPayload):
     chat_stack.append(payload.log_id)
 
-    user_name = TEST_USER_NAME
-
     conn = get_conn()
     cur = conn.cursor()
     try:
         ts_utc = to_utc_datetime(payload.timestamp)
         cur.execute(
             """
-            INSERT INTO nexa_chat_logs (log_id, user_name, user_prompt, nexa_response, timestamp_utc, stars)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, timestamp_utc, stars)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
+                session_id = VALUES(session_id),
+                user_email = VALUES(user_email),
                 user_name = VALUES(user_name),
                 user_prompt = VALUES(user_prompt),
                 nexa_response = VALUES(nexa_response),
@@ -405,7 +587,9 @@ def save_chat_log(payload: ChatLogPayload):
             """,
             (
                 payload.log_id,
-                user_name,
+                payload.session_id,
+                normalize_email_address(payload.user_email),
+                payload.user_name,
                 payload.user_prompt,
                 payload.nexa_response,
                 ts_utc.strftime("%Y-%m-%d %H:%M:%S"),
@@ -463,22 +647,129 @@ def pop_last_log(payload: PopPayload):
 
     return {"status": "popped", "stack_size": len(chat_stack)}
 
+
+@app.post("/api/chat-image")
+def save_chat_image(payload: ImageBase64Payload):
+    log_id = payload.log_id.strip()
+    user_name = payload.user_name.strip()
+    image_filename = payload.image_filename.strip() if payload.image_filename else None
+    mime_type = payload.image_mime_type or "application/octet-stream"
+
+    image_base64 = payload.image_base64.strip()
+    if image_base64.startswith("data:") and "," in image_base64:
+        image_base64 = image_base64.split(",", 1)[1]
+
+    try:
+        base64.b64decode(image_base64, validate=True)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid base64 image payload") from exc
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE nexa_chat_logs
+            SET image_base64 = %s,
+                image_mime_type = %s,
+                image_filename = %s,
+                image_saved_at = %s
+            WHERE log_id = %s AND user_name = %s
+            """,
+            (
+                image_base64,
+                mime_type,
+                image_filename,
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                log_id,
+                user_name,
+            ),
+        )
+        conn.commit()
+
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Chat log not found for this user")
+    finally:
+        cur.close()
+        conn.close()
+
+    return {"status": "image_saved", "log_id": log_id, "user_name": user_name, "size": len(image_base64)}
+
+
+@app.get("/api/chat-image/{log_id}")
+def get_chat_image(log_id: str, user_name: str):
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT image_base64, image_mime_type, image_filename
+            FROM nexa_chat_logs
+            WHERE log_id = %s AND user_name = %s
+            """,
+            (log_id, user_name),
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if not row or row[0] is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    image_base64, image_mime_type, image_filename = row
+    try:
+        image_bytes = base64.b64decode(image_base64)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
+
+    headers = {}
+    if image_filename:
+        headers["Content-Disposition"] = f'inline; filename="{image_filename}"'
+
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+
+    return StreamingResponse(BytesIO(image_bytes), media_type=image_mime_type or "application/octet-stream", headers=headers)
+
 # ====================== CHAT ======================
 class ChatRequest(BaseModel):
     message: str
+    user_email: Optional[str] = None
     session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
+    access_role: Optional[str] = None
     pdf_url: Optional[str] = None
     image_url: Optional[str] = None
     image_id: Optional[str] = None
 
+
+class ChatHistoryResponse(BaseModel):
+    session_id: str
+    messages: Any
+
+
+class ChatSessionSummary(BaseModel):
+    session_id: str
+    last_activity: str
+    message_count: int
+
+
+class ChatSessionListResponse(BaseModel):
+    user_email: str
+    sessions: List[ChatSessionSummary]
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
+    access_role = infer_access_role(request.user_email)
+    normalized_email = normalize_email_address(request.user_email)
     session_id = request.session_id or str(uuid.uuid4())
+    SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
+    record_chat_turn(session_id, "user", request.message)
 
     try:
         config = {"configurable": {"session_id": session_id}}
@@ -490,7 +781,7 @@ async def chat_endpoint(request: ChatRequest):
             answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
         else:
             result = conversational_rag_chain.invoke(
-                {"input": request.message},
+                {"input": request.message, "audience": build_role_instruction(access_role)},
                 config=config
             )
 
@@ -518,9 +809,11 @@ async def chat_endpoint(request: ChatRequest):
 
             if pipe is None:
                 answer = "Your image request was received, but image generation is unavailable in this workspace."
+                record_chat_turn(session_id, "assistant", answer)
                 return ChatResponse(
                     response=answer,
                     session_id=session_id,
+                    access_role=access_role,
                     pdf_url=pdf_url,
                     image_url=None,
                     image_id=None
@@ -545,9 +838,12 @@ async def chat_endpoint(request: ChatRequest):
 
             image_url = f"/assets/{filename}"
 
+        record_chat_turn(session_id, "assistant", answer)
+
         return ChatResponse(
             response=answer,
             session_id=session_id,
+            access_role=access_role,
             pdf_url=pdf_url,
             image_url=image_url,
             image_id=image_id
@@ -556,6 +852,37 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
+
+
+@app.get("/api/chat-history/{session_id}", response_model=ChatHistoryResponse)
+def get_chat_history(session_id: str):
+    messages = []
+
+    for row in fetch_chat_history_rows(session_id):
+        user_prompt = (row.get("user_prompt") or "").strip()
+        nexa_response = (row.get("nexa_response") or "").strip()
+
+        if user_prompt:
+            messages.append({"role": "user", "content": user_prompt})
+        if nexa_response:
+            messages.append({"role": "assistant", "content": nexa_response})
+
+    if not messages:
+        messages = serialize_chat_history(session_id)
+
+    return {
+        "session_id": session_id,
+        "messages": messages,
+    }
+
+
+@app.get("/api/chat-sessions/{user_email}", response_model=ChatSessionListResponse)
+def get_chat_sessions(user_email: str):
+    normalized_email = normalize_email_address(user_email)
+    return {
+        "user_email": normalized_email,
+        "sessions": fetch_user_chat_sessions(normalized_email),
+    }
 
 @app.get("/image-status/{image_id}")
 async def image_status(image_id: str):

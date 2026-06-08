@@ -223,6 +223,35 @@
         .toolbar-btn:hover {
             background: #f9fafb;
         }
+        .history-toggle-btn {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+        }
+        .history-toggle-btn:hover {
+            background: #e0e7ff;
+        }
+        .history-panel {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+        .history-session-btn {
+            width: 100%;
+            text-align: left;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: white;
+            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .history-session-btn:hover {
+            transform: translateY(-1px);
+            border-color: #cbd5e1;
+            box-shadow: 0 10px 24px -14px rgba(15, 23, 42, 0.3);
+        }
+        .history-session-btn.active {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+        }
         .guardrail-banner {
             border: 1px solid #f59e0b;
             background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
@@ -685,17 +714,46 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button id="history-toggle-btn" class="toolbar-btn history-toggle-btn text-xs font-semibold" type="button">History</button>
                 <button id="close-chat" class="text-gray-500 hover:text-gray-700 text-2xl transition-colors">✕</button>
+            </div>
+        </div>
+        <div id="history-panel" class="history-panel hidden border-b border-gray-200 flex-shrink-0">
+            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">Previous chats</p>
+                    <p class="text-xs text-gray-500">Pick a session to preview its messages.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="refresh-history-btn" class="toolbar-btn text-xs" type="button">Refresh</button>
+                    <button id="close-history-btn" class="toolbar-btn text-xs" type="button">Close</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] max-h-80 overflow-hidden">
+                <div class="p-3 border-b md:border-b-0 md:border-r border-gray-200 overflow-y-auto">
+                    <div id="history-session-list" class="space-y-2"></div>
+                    <p id="history-session-list-empty" class="text-xs text-gray-500 mt-3">No saved sessions found for this email.</p>
+                </div>
+                <div class="p-4 overflow-y-auto bg-white">
+                    <div id="history-session-empty" class="text-sm text-gray-500">Select a session to preview its transcript.</div>
+                    <div id="history-session-detail" class="hidden space-y-4"></div>
+                </div>
             </div>
         </div>
         <!-- Messages Area -->
         <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
         <!-- Input Area -->
         <div id="input-area" class="px-3 py-3 border-t bg-white">
+            <div class="mb-2 flex items-center gap-2">
+                <input id="user-email" type="email"
+                       class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
+                       placeholder="Enter your school email (required)"/>
+                <span id="access-role-badge" class="shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600">Student mode</span>
+            </div>
             <div class="mb-2">
                 <input id="user-name" type="text"
                        class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
-                       placeholder="Enter your name (required for MySQL logging)"/>
+                       placeholder="Enter your name (optional for logs)"/>
             </div>
             <div class="flex items-center gap-2">
                 <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
@@ -726,36 +784,276 @@
 // ==================== CONFIG ====================
 const API_URL = "/chat";
 const UPLOAD_URL = "/upload";
-const LOGGER_BASE_URL =
-    window.NEXA_LOGGER_BASE_URL ||
-    localStorage.getItem('nexa_logger_base_url') ||
-    `${window.location.protocol}//${window.location.hostname}:8001`;
-const LOG_API_URL = `${LOGGER_BASE_URL}/api/chat-log`;
-const RATING_API_URL = `${LOGGER_BASE_URL}/api/chat-rating`;
-const POP_API_URL = `${LOGGER_BASE_URL}/api/chat-log/pop`;
+const LOG_API_URL = "/api/chat-log";
+const RATING_API_URL = "/api/chat-rating";
+const POP_API_URL = "/api/chat-log/pop";
+const IMAGE_API_URL = "/api/chat-image";
+const CHAT_HISTORY_API_URL = "/api/chat-history";
+const CHAT_SESSIONS_API_URL = "/api/chat-sessions";
 
 const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
 const closeChat = document.getElementById('close-chat');
 const messagesContainer = document.getElementById('chat-messages');
+const userEmailInput = document.getElementById('user-email');
 const userInput = document.getElementById('user-input');
 const userNameInput = document.getElementById('user-name');
+const accessRoleBadge = document.getElementById('access-role-badge');
 const sendButton = document.getElementById('send-button');
 const attachBtn = document.getElementById('attach-btn');
 const undoLogBtn = document.getElementById('undo-log-btn');
 const stackSizeLabel = document.getElementById('stack-size');
+const historyToggleBtn = document.getElementById('history-toggle-btn');
+const historyPanel = document.getElementById('history-panel');
+const historySessionList = document.getElementById('history-session-list');
+const historySessionListEmpty = document.getElementById('history-session-list-empty');
+const historySessionEmpty = document.getElementById('history-session-empty');
+const historySessionDetail = document.getElementById('history-session-detail');
+const refreshHistoryBtn = document.getElementById('refresh-history-btn');
+const closeHistoryBtn = document.getElementById('close-history-btn');
 
-let sessionId = localStorage.getItem('nexa_session_id') || null;
+let sessionId = null;
 let userMessageCount = 0;
 const FEEDBACK_TRIGGER_COUNT = 2; // show feedback after every 2 prompts
+let chatHistoryLoaded = false;
+let chatSessionsLoaded = false;
+let activeHistorySessionId = null;
+let cachedHistorySessions = [];
 
 const chatLogStack = [];
 const pendingLogRetryStack = [];
+
+function normalizeEmail(email) {
+    return (email || '').trim().toLowerCase();
+}
+
+function getSessionStorageKey(email) {
+    const normalizedEmail = normalizeEmail(email);
+    return normalizedEmail ? `nexa_session_id:${normalizedEmail}` : 'nexa_session_id';
+}
+
+function inferAccessRoleFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const localPart = normalizedEmail.split('@')[0] || '';
+
+    if (/(teacher|staff|faculty|educator|instructor|lecturer|tutor|prof)/.test(localPart)) {
+        return 'teacher';
+    }
+
+    if (/(student|learner|pupil|scholar)/.test(localPart)) {
+        return 'student';
+    }
+
+    return 'student';
+}
+
+function updateAccessRoleBadge(value) {
+    const role = value === 'teacher' || value === 'student'
+        ? value
+        : inferAccessRoleFromEmail(value);
+    accessRoleBadge.textContent = role === 'teacher' ? 'Teacher mode' : 'Student mode';
+    accessRoleBadge.className = role === 'teacher'
+        ? 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-amber-100 text-amber-800'
+        : 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600';
+    return role;
+}
+
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatHistoryTimestamp(timestamp) {
+    if (!timestamp) return 'Unknown time';
+    const parsed = new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? timestamp : parsed.toLocaleString();
+}
+
+function closeHistoryPanel() {
+    historyPanel.classList.add('hidden');
+}
+
+function openHistoryPanel() {
+    historyPanel.classList.remove('hidden');
+}
+
+function refreshHistoryIfVisible() {
+    if (!historyPanel.classList.contains('hidden')) {
+        chatSessionsLoaded = false;
+        loadChatSessions(true);
+    } else {
+        chatSessionsLoaded = false;
+    }
+}
+
+function renderHistoryTranscript(messages) {
+    if (!messages.length) {
+        historySessionEmpty.textContent = 'This session has no messages yet.';
+        historySessionEmpty.classList.remove('hidden');
+        historySessionDetail.classList.add('hidden');
+        historySessionDetail.innerHTML = '';
+        return;
+    }
+
+    historySessionEmpty.classList.add('hidden');
+    historySessionDetail.classList.remove('hidden');
+    historySessionDetail.innerHTML = messages.map(message => {
+        const isUser = message.role === 'user';
+        const bubbleClass = isUser ? 'bg-slate-900 text-white' : 'bg-sky-50 text-slate-800';
+        const text = isUser
+            ? `<div class="whitespace-pre-wrap break-words text-sm leading-6">${escapeHtml(message.content || '')}</div>`
+            : `<div class="markdown-body text-sm">${renderMarkdown(message.content || '')}</div>`;
+
+        return `
+            <div class="flex ${isUser ? 'justify-end' : 'justify-start'}">
+                <div class="max-w-full md:max-w-[92%] rounded-2xl px-4 py-3 ${bubbleClass}">
+                    ${text}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderHistorySessions(sessions) {
+    cachedHistorySessions = Array.isArray(sessions) ? sessions.slice() : [];
+    historySessionList.innerHTML = '';
+    historySessionListEmpty.classList.toggle('hidden', sessions.length > 0);
+
+    sessions.forEach((session, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-session-btn';
+        if (session.session_id === activeHistorySessionId) {
+            button.classList.add('active');
+        }
+
+        button.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="text-sm font-semibold text-slate-900 truncate">Session ${sessions.length - index}</div>
+                    <div class="text-xs text-slate-500 mt-1 break-all">${escapeHtml(session.session_id)}</div>
+                </div>
+                <span class="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">${Number(session.message_count || 0)} logs</span>
+            </div>
+            <div class="mt-2 text-xs text-slate-500">Last active ${escapeHtml(formatHistoryTimestamp(session.last_activity))}</div>
+        `;
+
+        button.addEventListener('click', () => loadHistorySession(session.session_id));
+        historySessionList.appendChild(button);
+    });
+}
+
+async function loadChatSessions(force = false) {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    if (!normalizedEmail) {
+        historySessionList.innerHTML = '';
+        historySessionListEmpty.textContent = 'Enter a school email to view saved sessions.';
+        historySessionListEmpty.classList.remove('hidden');
+        return;
+    }
+
+    if (chatSessionsLoaded && !force) {
+        return;
+    }
+
+    historySessionListEmpty.textContent = 'Loading saved sessions...';
+    historySessionListEmpty.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${CHAT_SESSIONS_API_URL}/${encodeURIComponent(normalizedEmail)}`);
+        if (!res.ok) {
+            throw new Error(`Session API returned ${res.status}`);
+        }
+
+        const data = await res.json();
+        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        renderHistorySessions(sessions);
+        chatSessionsLoaded = true;
+
+        if (sessions.length) {
+            const initialSessionId = activeHistorySessionId && sessions.some(session => session.session_id === activeHistorySessionId)
+                ? activeHistorySessionId
+                : sessions[0].session_id;
+            await loadHistorySession(initialSessionId);
+        } else {
+            historySessionEmpty.textContent = 'No saved sessions found for this email.';
+            historySessionEmpty.classList.remove('hidden');
+            historySessionDetail.classList.add('hidden');
+            historySessionDetail.innerHTML = '';
+        }
+    } catch (err) {
+        console.error('Failed to load saved sessions', err);
+        historySessionListEmpty.textContent = 'Unable to load saved sessions right now.';
+        historySessionListEmpty.classList.remove('hidden');
+    }
+}
+
+async function loadHistorySession(sessionToView) {
+    if (!sessionToView) return;
+
+    activeHistorySessionId = sessionToView;
+    historySessionEmpty.textContent = 'Loading transcript...';
+    historySessionEmpty.classList.remove('hidden');
+    historySessionDetail.classList.add('hidden');
+    historySessionDetail.innerHTML = '';
+
+    try {
+        const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionToView)}`);
+        if (!res.ok) {
+            throw new Error(`History API returned ${res.status}`);
+        }
+
+        const data = await res.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        renderHistoryTranscript(messages);
+        renderHistorySessions(cachedHistorySessions);
+    } catch (err) {
+        console.error('Failed to load session history', err);
+        historySessionEmpty.textContent = 'Unable to load the selected session.';
+        historySessionEmpty.classList.remove('hidden');
+        historySessionDetail.classList.add('hidden');
+    }
+}
+
+function getDisplayNameFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const localPart = normalizedEmail.split('@')[0] || '';
+    return localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'User';
+}
 
 userNameInput.value = localStorage.getItem('nexa_user_name') || '';
 userNameInput.addEventListener('change', () => {
     localStorage.setItem('nexa_user_name', userNameInput.value.trim());
 });
+
+userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
+
+function setSessionForEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    sessionId = normalizedEmail ? (localStorage.getItem(getSessionStorageKey(normalizedEmail)) || null) : null;
+    chatHistoryLoaded = false;
+    chatSessionsLoaded = false;
+    activeHistorySessionId = null;
+    cachedHistorySessions = [];
+    closeHistoryPanel();
+    messagesContainer.innerHTML = '';
+    updateAccessRoleBadge(normalizedEmail);
+    if (sessionId) {
+        loadChatHistory();
+    }
+}
+
+userEmailInput.addEventListener('change', () => {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    localStorage.setItem('nexa_user_email', normalizedEmail);
+    setSessionForEmail(normalizedEmail);
+});
+
+setSessionForEmail(userEmailInput.value);
 
 function getInternationalTimestamp() {
     return new Date().toISOString();
@@ -763,6 +1061,35 @@ function getInternationalTimestamp() {
 
 function updateStackSizeLabel() {
     stackSizeLabel.textContent = `Logs in stack: ${chatLogStack.length}`;
+}
+
+async function loadChatHistory() {
+    if (!sessionId || chatHistoryLoaded) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionId)}`);
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        if (!messages.length) {
+            chatHistoryLoaded = true;
+            return;
+        }
+
+        messagesContainer.innerHTML = '';
+        for (const message of messages) {
+            addMessage(message.content || '', message.role === 'user');
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        chatHistoryLoaded = true;
+    } catch (err) {
+        console.error('Failed to load chat history', err);
+    }
 }
 
 const guardrailRules = [
@@ -890,6 +1217,51 @@ async function updateLogResponse(logId, responseText) {
     logItem.timestamp = getInternationalTimestamp();
     await saveChatLogToDatabase(logItem);
     await retryPendingLogs();
+}
+
+async function blobToBase64(blob) {
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read image blob'));
+        reader.readAsDataURL(blob);
+    });
+
+    return String(dataUrl).split(',')[1] || '';
+}
+
+async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }) {
+    try {
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) {
+            throw new Error(`Image fetch returned ${imageResponse.status}`);
+        }
+
+        const imageBlob = await imageResponse.blob();
+        const imageBase64 = await blobToBase64(imageBlob);
+        const uploadResponse = await fetch(IMAGE_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                log_id: logId,
+                user_name: userName,
+                image_base64: imageBase64,
+                image_mime_type: imageBlob.type || 'application/octet-stream',
+                image_filename: filename || 'generated-image.png'
+            })
+        });
+
+        if (!uploadResponse.ok) {
+            throw new Error(`Image API returned ${uploadResponse.status}`);
+        }
+
+        return true;
+    } catch (err) {
+        console.error('Image base64 save failed', err);
+        return false;
+    }
 }
 
 // ==================== MARKDOWN ====================
@@ -1171,14 +1543,25 @@ async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
 
-    const userName = userNameInput.value.trim();
-    if (!userName) {
-        addMessage('Please enter your name first. Logs are stored user by user in MySQL.', false);
-        userNameInput.focus();
+    const userEmail = normalizeEmail(userEmailInput.value);
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email first. Nexa uses it to switch between student and teacher mode.', false);
+        userEmailInput.focus();
         return;
     }
 
+    const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
+
+    if (!sessionId) {
+        sessionId = crypto.randomUUID();
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+        localStorage.setItem('nexa_session_id', sessionId);
+    }
+
     localStorage.setItem('nexa_user_name', userName);
+    localStorage.setItem('nexa_user_email', userEmail);
+    sessionId = localStorage.getItem(getSessionStorageKey(userEmail)) || null;
+    updateAccessRoleBadge(userEmail);
 
     const assessment = classifyPrompt(text);
     if (!assessment.allowed) {
@@ -1191,6 +1574,8 @@ async function sendMessage() {
 
         const blockedLog = {
             log_id: logId,
+            session_id: sessionId,
+            user_email: userEmail,
             user_name: userName,
             user_prompt: text,
             nexa_response: blockedReply,
@@ -1213,6 +1598,8 @@ async function sendMessage() {
 
     pushChatLog({
         log_id: logId,
+        session_id: sessionId,
+        user_email: userEmail,
         user_name: userName,
         user_prompt: text,
         nexa_response: '',
@@ -1256,6 +1643,7 @@ async function sendMessage() {
             },
             body: JSON.stringify({
                 message: text,
+                user_email: userEmail,
                 session_id: sessionId
             })
         });
@@ -1265,13 +1653,24 @@ async function sendMessage() {
         document.getElementById("typing-msg")?.remove();
 
         sessionId = data.session_id;
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem("nexa_session_id", sessionId);
+        if (data.access_role) {
+            updateAccessRoleBadge(data.access_role);
+        }
+
+        const logItem = chatLogStack.find(item => item.log_id === logId);
+        if (logItem) {
+            logItem.session_id = sessionId;
+            logItem.user_email = userEmail;
+        }
 
         const modelText = data.response || '';
         if (containsUnsafeModelOutput(modelText)) {
             const blockedModelReply = 'I cannot provide that content. This response was blocked by Nexa student safety guardrails.';
             addMessage(blockedModelReply, false, null, false, pairId, { logId, userName });
             await updateLogResponse(logId, blockedModelReply);
+            refreshHistoryIfVisible();
             return;
         }
 
@@ -1297,6 +1696,13 @@ async function sendMessage() {
             if (statusData.status === "ready") {
 
                 clearInterval(interval);
+
+                await saveImageBase64ToDatabase({
+                    logId,
+                    userName,
+                    imageUrl,
+                    filename: imageUrl.split('/').pop() || `image_${imageId}.png`
+                });
 
                 addMessage(
                     "🖼️ Generated Image:",
@@ -1330,6 +1736,8 @@ async function sendMessage() {
             await updateLogResponse(logId, data.response || '');
         }
 
+        refreshHistoryIfVisible();
+
     } catch (err) {
         document.getElementById("typing-msg")?.remove();
 
@@ -1349,6 +1757,19 @@ sendButton.addEventListener('click', sendMessage);
 userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
 chatButton.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
 closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
+historyToggleBtn.addEventListener('click', async () => {
+    if (historyPanel.classList.contains('hidden')) {
+        openHistoryPanel();
+        await loadChatSessions(true);
+    } else {
+        closeHistoryPanel();
+    }
+});
+closeHistoryBtn.addEventListener('click', closeHistoryPanel);
+refreshHistoryBtn.addEventListener('click', async () => {
+    chatSessionsLoaded = false;
+    await loadChatSessions(true);
+});
 undoLogBtn.addEventListener('click', async () => {
     const removed = popChatLog();
     if (!removed) {
@@ -1375,6 +1796,7 @@ undoLogBtn.addEventListener('click', async () => {
 });
 
 updateStackSizeLabel();
+loadChatHistory();
 
 // Input copy button
 const inputCopyBtn = document.getElementById('input-copy-btn');
