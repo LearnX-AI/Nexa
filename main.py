@@ -367,6 +367,88 @@ def fetch_user_chat_sessions(user_email: str):
             conn.close()
 
 
+def _truncate_search_snippet(text: str, limit: int = 140) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(0, limit - 1)].rstrip() + "…"
+
+
+def search_user_chat_sessions(user_email: str, query: str, limit: int = 10):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    if mysql.connector is None or not normalized_email or not cleaned_query:
+        return []
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        like_query = f"%{cleaned_query}%"
+        cur.execute(
+            """
+            SELECT session_id, user_prompt, nexa_response, timestamp_utc
+            FROM nexa_chat_logs
+            WHERE user_email = %s
+              AND session_id IS NOT NULL
+              AND session_id <> ''
+              AND (user_prompt LIKE %s OR nexa_response LIKE %s)
+            ORDER BY timestamp_utc DESC, id DESC
+            LIMIT 200
+            """,
+            (normalized_email, like_query, like_query),
+        )
+        rows = cur.fetchall() or []
+        if not rows:
+            return []
+
+        session_meta = {item["session_id"]: item for item in fetch_user_chat_sessions(normalized_email)}
+        seen_sessions = set()
+        matches = []
+        lowered_query = cleaned_query.lower()
+
+        for row in rows:
+            session_id = row.get("session_id") or ""
+            if not session_id or session_id in seen_sessions:
+                continue
+
+            prompt = (row.get("user_prompt") or "").strip()
+            response = (row.get("nexa_response") or "").strip()
+            if lowered_query in prompt.lower():
+                snippet_source = prompt
+            elif lowered_query in response.lower():
+                snippet_source = response
+            else:
+                snippet_source = prompt or response
+
+            last_activity = row.get("timestamp_utc")
+            meta = session_meta.get(session_id, {})
+
+            matches.append(
+                {
+                    "session_id": session_id,
+                    "last_activity": (meta.get("last_activity") if meta else None) or (last_activity.isoformat() if hasattr(last_activity, "isoformat") else str(last_activity)),
+                    "message_count": int((meta.get("message_count") if meta else 0) or 0),
+                    "snippet": _truncate_search_snippet(snippet_source),
+                }
+            )
+            seen_sessions.add(session_id)
+
+            if len(matches) >= limit:
+                break
+
+        return matches
+    except Exception as exc:
+        print(f"Failed to search user chat sessions: {exc}")
+        return []
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
 def normalize_email_address(email: Optional[str]) -> str:
     return (email or "").strip().lower()
 
@@ -762,6 +844,16 @@ class ChatSessionListResponse(BaseModel):
     user_email: str
     sessions: List[ChatSessionSummary]
 
+
+class ChatSessionSearchSummary(ChatSessionSummary):
+    snippet: Optional[str] = None
+
+
+class ChatSessionSearchResponse(BaseModel):
+    user_email: str
+    query: str
+    sessions: List[ChatSessionSearchSummary]
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
@@ -882,6 +974,17 @@ def get_chat_sessions(user_email: str):
     return {
         "user_email": normalized_email,
         "sessions": fetch_user_chat_sessions(normalized_email),
+    }
+
+
+@app.get("/api/chat-sessions/{user_email}/search", response_model=ChatSessionSearchResponse)
+def search_chat_sessions(user_email: str, query: str):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    return {
+        "user_email": normalized_email,
+        "query": cleaned_query,
+        "sessions": search_user_chat_sessions(normalized_email, cleaned_query),
     }
 
 @app.get("/image-status/{image_id}")
