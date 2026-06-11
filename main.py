@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import html
 import uuid
+from urllib.parse import quote_plus
 import os
 import re
 from typing import Optional, Dict, Any, List
@@ -282,6 +283,26 @@ def ensure_chat_log_schema():
         cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'user_email'")
         if cur.fetchone() is None:
             cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN user_email VARCHAR(255) NULL AFTER user_name")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_base64'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_base64 LONGTEXT NULL AFTER nexa_response")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_blob'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_blob LONGBLOB NULL AFTER image_base64")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_mime_type'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_mime_type VARCHAR(100) NULL AFTER image_blob")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_filename'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_filename VARCHAR(255) NULL AFTER image_mime_type")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_saved_at'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_saved_at DATETIME NULL AFTER image_filename")
 
         conn.commit()
     except Exception as exc:
@@ -304,7 +325,7 @@ def fetch_chat_history_rows(session_id: str):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT user_prompt, nexa_response, timestamp_utc
+            SELECT log_id, user_name, user_prompt, nexa_response, image_base64, image_mime_type, image_filename, timestamp_utc
             FROM nexa_chat_logs
             WHERE session_id = %s
             ORDER BY timestamp_utc ASC, id ASC
@@ -359,6 +380,88 @@ def fetch_user_chat_sessions(user_email: str):
         return sessions
     except Exception as exc:
         print(f"Failed to fetch user chat sessions: {exc}")
+        return []
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
+def _truncate_search_snippet(text: str, limit: int = 140) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(0, limit - 1)].rstrip() + "…"
+
+
+def search_user_chat_sessions(user_email: str, query: str, limit: int = 10):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    if mysql.connector is None or not normalized_email or not cleaned_query:
+        return []
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        like_query = f"%{cleaned_query}%"
+        cur.execute(
+            """
+            SELECT session_id, user_prompt, nexa_response, timestamp_utc
+            FROM nexa_chat_logs
+            WHERE user_email = %s
+              AND session_id IS NOT NULL
+              AND session_id <> ''
+              AND (user_prompt LIKE %s OR nexa_response LIKE %s)
+            ORDER BY timestamp_utc DESC, id DESC
+            LIMIT 200
+            """,
+            (normalized_email, like_query, like_query),
+        )
+        rows = cur.fetchall() or []
+        if not rows:
+            return []
+
+        session_meta = {item["session_id"]: item for item in fetch_user_chat_sessions(normalized_email)}
+        seen_sessions = set()
+        matches = []
+        lowered_query = cleaned_query.lower()
+
+        for row in rows:
+            session_id = row.get("session_id") or ""
+            if not session_id or session_id in seen_sessions:
+                continue
+
+            prompt = (row.get("user_prompt") or "").strip()
+            response = (row.get("nexa_response") or "").strip()
+            if lowered_query in prompt.lower():
+                snippet_source = prompt
+            elif lowered_query in response.lower():
+                snippet_source = response
+            else:
+                snippet_source = prompt or response
+
+            last_activity = row.get("timestamp_utc")
+            meta = session_meta.get(session_id, {})
+
+            matches.append(
+                {
+                    "session_id": session_id,
+                    "last_activity": (meta.get("last_activity") if meta else None) or (last_activity.isoformat() if hasattr(last_activity, "isoformat") else str(last_activity)),
+                    "message_count": int((meta.get("message_count") if meta else 0) or 0),
+                    "snippet": _truncate_search_snippet(snippet_source),
+                }
+            )
+            seen_sessions.add(session_id)
+
+            if len(matches) >= limit:
+                break
+
+        return matches
+    except Exception as exc:
+        print(f"Failed to search user chat sessions: {exc}")
         return []
     finally:
         if cur is not None:
@@ -660,7 +763,7 @@ def save_chat_image(payload: ImageBase64Payload):
         image_base64 = image_base64.split(",", 1)[1]
 
     try:
-        base64.b64decode(image_base64, validate=True)
+        image_blob = base64.b64decode(image_base64, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid base64 image payload") from exc
 
@@ -671,6 +774,7 @@ def save_chat_image(payload: ImageBase64Payload):
             """
             UPDATE nexa_chat_logs
             SET image_base64 = %s,
+                image_blob = %s,
                 image_mime_type = %s,
                 image_filename = %s,
                 image_saved_at = %s
@@ -678,6 +782,7 @@ def save_chat_image(payload: ImageBase64Payload):
             """,
             (
                 image_base64,
+                image_blob,
                 mime_type,
                 image_filename,
                 datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -703,7 +808,7 @@ def get_chat_image(log_id: str, user_name: str):
     try:
         cur.execute(
             """
-            SELECT image_base64, image_mime_type, image_filename
+            SELECT image_base64, image_blob, image_mime_type, image_filename
             FROM nexa_chat_logs
             WHERE log_id = %s AND user_name = %s
             """,
@@ -717,11 +822,14 @@ def get_chat_image(log_id: str, user_name: str):
     if not row or row[0] is None:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    image_base64, image_mime_type, image_filename = row
-    try:
-        image_bytes = base64.b64decode(image_base64)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
+    image_base64, image_blob, image_mime_type, image_filename = row
+    if image_blob is not None:
+        image_bytes = image_blob
+    else:
+        try:
+            image_bytes = base64.b64decode(image_base64)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
 
     headers = {}
     if image_filename:
@@ -761,6 +869,16 @@ class ChatSessionSummary(BaseModel):
 class ChatSessionListResponse(BaseModel):
     user_email: str
     sessions: List[ChatSessionSummary]
+
+
+class ChatSessionSearchSummary(ChatSessionSummary):
+    snippet: Optional[str] = None
+
+
+class ChatSessionSearchResponse(BaseModel):
+    user_email: str
+    query: str
+    sessions: List[ChatSessionSearchSummary]
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -859,13 +977,25 @@ def get_chat_history(session_id: str):
     messages = []
 
     for row in fetch_chat_history_rows(session_id):
+        log_id = (row.get("log_id") or "").strip()
+        user_name = (row.get("user_name") or "").strip()
         user_prompt = (row.get("user_prompt") or "").strip()
         nexa_response = (row.get("nexa_response") or "").strip()
+        image_base64 = (row.get("image_base64") or "").strip()
+        image_mime_type = (row.get("image_mime_type") or "").strip()
+        image_filename = (row.get("image_filename") or "").strip()
 
         if user_prompt:
             messages.append({"role": "user", "content": user_prompt})
         if nexa_response:
-            messages.append({"role": "assistant", "content": nexa_response})
+            message = {"role": "assistant", "content": nexa_response}
+            if image_base64 and log_id and user_name:
+                message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
+                if image_mime_type:
+                    message["image_mime_type"] = image_mime_type
+                if image_filename:
+                    message["image_filename"] = image_filename
+            messages.append(message)
 
     if not messages:
         messages = serialize_chat_history(session_id)
@@ -882,6 +1012,17 @@ def get_chat_sessions(user_email: str):
     return {
         "user_email": normalized_email,
         "sessions": fetch_user_chat_sessions(normalized_email),
+    }
+
+
+@app.get("/api/chat-sessions/{user_email}/search", response_model=ChatSessionSearchResponse)
+def search_chat_sessions(user_email: str, query: str):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    return {
+        "user_email": normalized_email,
+        "query": cleaned_query,
+        "sessions": search_user_chat_sessions(normalized_email, cleaned_query),
     }
 
 @app.get("/image-status/{image_id}")
