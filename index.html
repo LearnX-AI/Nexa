@@ -753,8 +753,8 @@
                     <button id="close-history-btn" class="toolbar-btn text-xs" type="button">Close</button>
                 </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] max-h-80 overflow-hidden">
-                <div class="p-3 border-b md:border-b-0 md:border-r border-gray-200 overflow-y-auto">
+            <div class="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] max-h-80 overflow-hidden min-h-0">
+                <div class="p-3 border-b md:border-b-0 md:border-r border-gray-200 overflow-y-auto min-h-0">
                     <div class="mb-3">
                         <label for="history-search-input" class="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search previous chats</label>
                         <div class="mt-2 flex items-center gap-2">
@@ -766,7 +766,7 @@
                     <div id="history-session-list" class="space-y-2"></div>
                     <p id="history-session-list-empty" class="text-xs text-gray-500 mt-3">No saved sessions found for this email.</p>
                 </div>
-                <div class="p-4 overflow-y-auto bg-white">
+                <div class="p-4 overflow-y-auto bg-white min-h-0">
                     <div id="history-session-empty" class="text-sm text-gray-500">Select a session to preview its transcript.</div>
                     <div id="history-session-detail" class="hidden space-y-4"></div>
                 </div>
@@ -1104,6 +1104,15 @@ async function loadHistorySession(sessionToView) {
     historySessionDetail.classList.add('hidden');
     historySessionDetail.innerHTML = '';
 
+    sessionId = sessionToView;
+    chatHistoryLoaded = false;
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    if (normalizedEmail) {
+        localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
+    }
+    chatWindow.classList.remove('hidden');
+    closeHistoryPanel();
+
     try {
         const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionToView)}`);
         if (!res.ok) {
@@ -1114,6 +1123,7 @@ async function loadHistorySession(sessionToView) {
         const messages = Array.isArray(data.messages) ? data.messages : [];
         renderHistoryTranscript(messages);
         renderHistorySessions(cachedHistorySessions);
+        await loadChatHistory();
     } catch (err) {
         console.error('Failed to load session history', err);
         historySessionEmpty.textContent = 'Unable to load the selected session.';
