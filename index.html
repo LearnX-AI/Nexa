@@ -1196,7 +1196,10 @@ async function loadChatHistory() {
 
         messagesContainer.innerHTML = '';
         for (const message of messages) {
-            addMessage(message.content || '', message.role === 'user');
+            const isUser = message.role === 'user';
+            const fileUrl = !isUser && message.image_url ? message.image_url : null;
+            const isPdf = !isUser && !!message.pdf_url;
+            addMessage(message.content || '', isUser, fileUrl, isPdf);
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         chatHistoryLoaded = true;
