@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import html
 import uuid
+import secrets
+from urllib.parse import quote_plus
 import os
 import re
 from typing import Optional, Dict, Any, List
@@ -56,6 +58,86 @@ except ModuleNotFoundError:
     MarkdownPdf = None
     Section = None
 
+import textwrap
+
+
+def _escape_pdf_text(text: str) -> str:
+    return text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+
+
+def save_text_to_pdf(path: str, text: str) -> None:
+    lines = []
+    for paragraph in text.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
+        wrapped = textwrap.wrap(paragraph, width=90) or ['']
+        lines.extend(wrapped)
+
+    lines_per_page = 50
+    page_texts = [lines[i:i + lines_per_page] for i in range(0, len(lines), lines_per_page)] or [[]]
+
+    objects = []
+    obj_id = 1
+
+    # Catalog
+    objects.append((obj_id, '<< /Type /Catalog /Pages 2 0 R >>'))
+    obj_id += 1
+
+    # Pages placeholder
+    pages_obj_id = obj_id
+    obj_id += 1
+
+    # Font object
+    font_obj_id = obj_id
+    objects.append((font_obj_id, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'))
+    obj_id += 1
+
+    page_ids = []
+    content_ids = []
+    for _page in page_texts:
+        page_ids.append(obj_id)
+        obj_id += 1
+    for _page in page_texts:
+        content_ids.append(obj_id)
+        obj_id += 1
+
+    # Page objects
+    for page_id, content_id in zip(page_ids, content_ids):
+        page_content = f'<< /Type /Page /Parent {pages_obj_id} 0 R /MediaBox [0 0 612 792] '
+        page_content += f'/Resources << /Font << /F1 {font_obj_id} 0 R >> >> /Contents {content_id} 0 R >>'
+        objects.append((page_id, page_content))
+
+    # Content objects
+    for content_id, page_lines in zip(content_ids, page_texts):
+        stream_lines = ['BT', '/F1 12 Tf', '72 720 Td']
+        for index, line in enumerate(page_lines):
+            escaped = _escape_pdf_text(line)
+            stream_lines.append(f'({escaped}) Tj')
+            if index < len(page_lines) - 1:
+                stream_lines.append('0 -14 Td')
+        stream_lines.append('ET')
+        stream_text = '\n'.join(stream_lines)
+        stream_bytes = stream_text.encode('latin-1', errors='replace')
+        content_obj = f'<< /Length {len(stream_bytes)} >>\nstream\n{stream_text}\nendstream'
+        objects.append((content_id, content_obj))
+
+    # Pages object after content populated
+    kids = ' '.join(f'{pid} 0 R' for pid in page_ids)
+    pages_obj = f'<< /Type /Pages /Kids [ {kids} ] /Count {len(page_ids)} >>'
+    objects.insert(1, (pages_obj_id, pages_obj))
+
+    with open(path, 'wb') as f:
+        catalog_offset = 0
+        offsets = []
+        for obj_id, obj_content in objects:
+            offsets.append(f.tell())
+            obj_bytes = f'{obj_id} 0 obj\n{obj_content}\nendobj\n'.encode('latin-1')
+            f.write(obj_bytes)
+        xref_offset = f.tell()
+        f.write(b'xref\n0 %d\n0000000000 65535 f \n' % (len(objects) + 1))
+        for offset in offsets:
+            f.write(f'{offset:010d} 00000 n \n'.encode('latin-1'))
+        f.write(b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n' % (len(objects) + 1))
+        f.write(f'{xref_offset}\n%%EOF\n'.encode('latin-1'))
+
 # ====================== CONFIG ======================
 WORKSPACE_DIR = os.path.dirname(__file__)
 
@@ -102,6 +184,7 @@ class ChatLogPayload(BaseModel):
     timestamp: str
     session_id: Optional[str] = None
     user_email: Optional[str] = None
+    pdf_url: Optional[str] = None
     stars: int = 0
 
 
@@ -122,6 +205,23 @@ class ImageBase64Payload(BaseModel):
     image_base64: str
     image_filename: Optional[str] = None
     image_mime_type: Optional[str] = None
+
+
+class ShareChatPayload(BaseModel):
+    session_id: str
+    user_email: Optional[str] = None
+
+
+class ShareChatResponse(BaseModel):
+    share_token: str
+    share_url: str
+
+
+class SharedChatResponse(BaseModel):
+    share_token: str
+    session_id: str
+    created_at_utc: str
+    messages: Any
 
 
 # Server-side stack to mirror push/pop operations done by the UI.
@@ -254,6 +354,53 @@ def build_general_knowledge_answer(message: str) -> str:
     return ""
 
 
+NEXA_FAQ_ANSWERS = {
+    "what is nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "who created nexa ai": "NEXA AI was developed by the engineering team at PowerX Technologies as part of the EduNeX Digital Education Ecosystem.",
+    "who owns nexa ai": "NEXA AI is part of the EduNeX platform and is managed by its authorized operators and partners.",
+    "who is behind your creation": "NEXA AI is being developed under the leadership of Chandana Silva, with Yasaru Rathnasooriya leading the AI Engineering Team at PowerX Technologies. Together with a team of engineers, curriculum specialists, and stakeholders from the National Department of Education, they are building a next-generation AI-powered educational platform designed to transform teaching and learning across Papua New Guinea.",
+    "where were you created": "NEXA AI was developed within the PowerX AI Lab for educational use in PNG.",
+    "why were you created": "I was created to improve access to quality education and support teaching and learning across Papua New Guinea. My primary mission is to assist students, teachers, and schools, particularly in remote and underserved communities where access to educational resources, qualified teachers, and learning support may be limited. By providing AI-powered learning assistance, I aim to help ensure that every child has the opportunity to learn, grow, and achieve their full potential.",
+    "what is your mission": "To make learning more accessible, engaging, and effective for everyone.",
+    "are you a png ai": "Yes. NEXA AI is designed specifically to support the educational needs of Papua New Guinea.",
+    "what makes you different from other ai systems": "NEXA AI is tailored to PNG education, curriculum, and local needs.",
+    "what languages can you speak": "I can communicate in English and support other languages as configured.",
+    "can you understand tok pisin": "Yes, I can assist in Tok Pisin where supported.",
+    "can you understand local png languages": "Support may be added as language resources become available.",
+    "can you learn new information": "I can be updated with approved knowledge and educational content.",
+    "how often are you updated": "Updates are released periodically by administrators.",
+    "what information do you know": "I provide information based on my approved knowledge sources.",
+    "do you know the png curriculum": "Yes, I am designed to support PNG curriculum-aligned learning.",
+    "can you help with stem subjects": "Yes, I can assist with science, technology, engineering, and mathematics.",
+    "can you support vocational education": "Yes, I can support vocational and technical learning.",
+    "can you help with research": "Yes, I can help students and teachers explore topics and resources.",
+    "can you explain difficult concepts": "Yes, I can simplify and explain complex topics.",
+    "are you dangerous to humans": "No. I am designed to assist people safely and responsibly.",
+}
+
+
+def normalize_faq_query(message: str) -> str:
+    return re.sub(r"[^a-z0-9 ]+", "", (message or "").strip().lower())
+
+
+def build_nexa_faq_answer(message: str) -> str:
+    normalized = normalize_faq_query(message)
+    if not normalized:
+        return ""
+
+    for question, answer in NEXA_FAQ_ANSWERS.items():
+        if normalized == question:
+            return answer
+        if normalized.startswith(question):
+            return answer
+        if question in normalized:
+            return answer
+        if normalized in question:
+            return answer
+
+    return ""
+
+
 def record_chat_turn(session_id: str, role: str, content: str) -> None:
     if session_id not in SESSION_CHAT_HISTORY:
         SESSION_CHAT_HISTORY[session_id] = []
@@ -282,6 +429,48 @@ def ensure_chat_log_schema():
         cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'user_email'")
         if cur.fetchone() is None:
             cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN user_email VARCHAR(255) NULL AFTER user_name")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_base64'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_base64 LONGTEXT NULL AFTER nexa_response")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_blob'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_blob LONGBLOB NULL AFTER image_base64")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_mime_type'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_mime_type VARCHAR(100) NULL AFTER image_blob")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_filename'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_filename VARCHAR(255) NULL AFTER image_mime_type")
+        
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'image_saved_at'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_saved_at DATETIME NULL AFTER image_filename")
+
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'pdf_url'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN pdf_url VARCHAR(255) NULL AFTER image_saved_at")
+
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS nexa_shared_chats (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                share_token VARCHAR(128) NOT NULL,
+                session_id VARCHAR(64) NOT NULL,
+                created_by_email VARCHAR(255) NULL,
+                created_at_utc DATETIME NOT NULL,
+                expires_at_utc DATETIME NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                PRIMARY KEY (id),
+                UNIQUE KEY uq_share_token (share_token),
+                KEY idx_session_id (session_id),
+                KEY idx_created_by_email (created_by_email),
+                KEY idx_is_active (is_active)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
 
         conn.commit()
     except Exception as exc:
@@ -304,7 +493,7 @@ def fetch_chat_history_rows(session_id: str):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT user_prompt, nexa_response, timestamp_utc
+            SELECT log_id, user_name, user_prompt, nexa_response, image_base64, image_mime_type, image_filename, pdf_url, timestamp_utc
             FROM nexa_chat_logs
             WHERE session_id = %s
             ORDER BY timestamp_utc ASC, id ASC
@@ -367,8 +556,171 @@ def fetch_user_chat_sessions(user_email: str):
             conn.close()
 
 
+def _truncate_search_snippet(text: str, limit: int = 140) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: max(0, limit - 1)].rstrip() + "…"
+
+
+def search_user_chat_sessions(user_email: str, query: str, limit: int = 10):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    if mysql.connector is None or not normalized_email or not cleaned_query:
+        return []
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor(dictionary=True)
+        like_query = f"%{cleaned_query}%"
+        cur.execute(
+            """
+            SELECT session_id, user_prompt, nexa_response, timestamp_utc
+            FROM nexa_chat_logs
+            WHERE user_email = %s
+              AND session_id IS NOT NULL
+              AND session_id <> ''
+              AND (user_prompt LIKE %s OR nexa_response LIKE %s)
+            ORDER BY timestamp_utc DESC, id DESC
+            LIMIT 200
+            """,
+            (normalized_email, like_query, like_query),
+        )
+        rows = cur.fetchall() or []
+        if not rows:
+            return []
+
+        session_meta = {item["session_id"]: item for item in fetch_user_chat_sessions(normalized_email)}
+        seen_sessions = set()
+        matches = []
+        lowered_query = cleaned_query.lower()
+
+        for row in rows:
+            session_id = row.get("session_id") or ""
+            if not session_id or session_id in seen_sessions:
+                continue
+
+            prompt = (row.get("user_prompt") or "").strip()
+            response = (row.get("nexa_response") or "").strip()
+            if lowered_query in prompt.lower():
+                snippet_source = prompt
+            elif lowered_query in response.lower():
+                snippet_source = response
+            else:
+                snippet_source = prompt or response
+
+            last_activity = row.get("timestamp_utc")
+            meta = session_meta.get(session_id, {})
+
+            matches.append(
+                {
+                    "session_id": session_id,
+                    "last_activity": (meta.get("last_activity") if meta else None) or (last_activity.isoformat() if hasattr(last_activity, "isoformat") else str(last_activity)),
+                    "message_count": int((meta.get("message_count") if meta else 0) or 0),
+                    "snippet": _truncate_search_snippet(snippet_source),
+                }
+            )
+            seen_sessions.add(session_id)
+
+            if len(matches) >= limit:
+                break
+
+        return matches
+    except Exception as exc:
+        print(f"Failed to search user chat sessions: {exc}")
+        return []
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
 def normalize_email_address(email: Optional[str]) -> str:
     return (email or "").strip().lower()
+
+
+
+
+def session_belongs_to_user(session_id: str, user_email: Optional[str]) -> bool:
+    normalized_email = normalize_email_address(user_email)
+
+    if not normalized_email:
+        return True
+
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM nexa_chat_logs
+            WHERE session_id = %s
+              AND user_email = %s
+            """,
+            (session_id, normalized_email),
+        )
+        count = cur.fetchone()[0]
+        return count > 0
+    except Exception as exc:
+        print(f"Failed to verify chat ownership: {exc}")
+        return False
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
+def create_share_record(session_id: str, user_email: Optional[str]) -> str:
+    share_token = secrets.token_urlsafe(32)
+    created_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    conn = get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            INSERT INTO nexa_shared_chats
+                (share_token, session_id, created_by_email, created_at_utc, is_active)
+            VALUES
+                (%s, %s, %s, %s, 1)
+            """,
+            (
+                share_token,
+                session_id,
+                normalize_email_address(user_email),
+                created_at,
+            ),
+        )
+        conn.commit()
+        return share_token
+    finally:
+        cur.close()
+        conn.close()
+
+
+def get_share_record(share_token: str):
+    conn = get_conn()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute(
+            """
+            SELECT share_token, session_id, created_at_utc, expires_at_utc, is_active
+            FROM nexa_shared_chats
+            WHERE share_token = %s
+            LIMIT 1
+            """,
+            (share_token,),
+        )
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
 
 
 def _load_email_tokens(env_name: str) -> set[str]:
@@ -382,27 +734,16 @@ def infer_access_role(email: Optional[str]) -> str:
         raise HTTPException(status_code=400, detail="A valid email address is required")
 
     local_part, _, domain = normalized_email.partition("@")
-
-    teacher_emails = _load_email_tokens("NEXA_TEACHER_EMAILS")
-    student_emails = _load_email_tokens("NEXA_STUDENT_EMAILS")
-    teacher_domains = _load_email_tokens("NEXA_TEACHER_EMAIL_DOMAINS")
-    student_domains = _load_email_tokens("NEXA_STUDENT_EMAIL_DOMAINS")
-
-    if normalized_email in teacher_emails or domain in teacher_domains:
+    # Use explicit local-part markers used by EduNex accounts:
+    # - teacher accounts contain ".education" in the local-part (e.g. teacher.education@...)
+    # - student accounts contain ".edunex" in the local-part (e.g. student.edunex@...)
+    if ".education" in local_part:
         return "teacher"
 
-    if normalized_email in student_emails or domain in student_domains:
+    if ".edunex" in local_part:
         return "student"
 
-    teacher_keywords = ("teacher", "staff", "faculty", "educator", "instructor", "lecturer", "tutor", "prof")
-    student_keywords = ("student", "learner", "pupil", "scholar")
-
-    if any(keyword in local_part for keyword in teacher_keywords):
-        return "teacher"
-
-    if any(keyword in local_part for keyword in student_keywords):
-        return "student"
-
+    # Fallback: default to student
     return "student"
 
 
@@ -574,14 +915,15 @@ def save_chat_log(payload: ChatLogPayload):
         ts_utc = to_utc_datetime(payload.timestamp)
         cur.execute(
             """
-            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, timestamp_utc, stars)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, pdf_url, timestamp_utc, stars)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 session_id = VALUES(session_id),
                 user_email = VALUES(user_email),
                 user_name = VALUES(user_name),
                 user_prompt = VALUES(user_prompt),
                 nexa_response = VALUES(nexa_response),
+                pdf_url = VALUES(pdf_url),
                 timestamp_utc = VALUES(timestamp_utc),
                 stars = VALUES(stars)
             """,
@@ -592,6 +934,7 @@ def save_chat_log(payload: ChatLogPayload):
                 payload.user_name,
                 payload.user_prompt,
                 payload.nexa_response,
+                payload.pdf_url,
                 ts_utc.strftime("%Y-%m-%d %H:%M:%S"),
                 payload.stars,
             ),
@@ -660,7 +1003,7 @@ def save_chat_image(payload: ImageBase64Payload):
         image_base64 = image_base64.split(",", 1)[1]
 
     try:
-        base64.b64decode(image_base64, validate=True)
+        image_blob = base64.b64decode(image_base64, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid base64 image payload") from exc
 
@@ -671,6 +1014,7 @@ def save_chat_image(payload: ImageBase64Payload):
             """
             UPDATE nexa_chat_logs
             SET image_base64 = %s,
+                image_blob = %s,
                 image_mime_type = %s,
                 image_filename = %s,
                 image_saved_at = %s
@@ -678,6 +1022,7 @@ def save_chat_image(payload: ImageBase64Payload):
             """,
             (
                 image_base64,
+                image_blob,
                 mime_type,
                 image_filename,
                 datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -703,7 +1048,7 @@ def get_chat_image(log_id: str, user_name: str):
     try:
         cur.execute(
             """
-            SELECT image_base64, image_mime_type, image_filename
+            SELECT image_base64, image_blob, image_mime_type, image_filename
             FROM nexa_chat_logs
             WHERE log_id = %s AND user_name = %s
             """,
@@ -717,11 +1062,14 @@ def get_chat_image(log_id: str, user_name: str):
     if not row or row[0] is None:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    image_base64, image_mime_type, image_filename = row
-    try:
-        image_bytes = base64.b64decode(image_base64)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
+    image_base64, image_blob, image_mime_type, image_filename = row
+    if image_blob is not None:
+        image_bytes = image_blob
+    else:
+        try:
+            image_bytes = base64.b64decode(image_base64)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Stored base64 image is invalid") from exc
 
     headers = {}
     if image_filename:
@@ -731,6 +1079,295 @@ def get_chat_image(log_id: str, user_name: str):
     from fastapi.responses import StreamingResponse
 
     return StreamingResponse(BytesIO(image_bytes), media_type=image_mime_type or "application/octet-stream", headers=headers)
+
+
+
+@app.post("/api/share-chat", response_model=ShareChatResponse)
+def share_chat(payload: ShareChatPayload):
+    session_id = (payload.session_id or "").strip()
+    user_email = normalize_email_address(payload.user_email)
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    if not session_belongs_to_user(session_id, user_email):
+        raise HTTPException(status_code=403, detail="You can only share your own chat session")
+
+    rows = fetch_chat_history_rows(session_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No saved chat logs found for this session")
+
+    share_token = create_share_record(session_id, user_email)
+    share_url = f"/share/{share_token}"
+
+    return {
+        "share_token": share_token,
+        "share_url": share_url,
+    }
+
+
+@app.get("/api/shared-chat/{share_token}", response_model=SharedChatResponse)
+def get_shared_chat_data(share_token: str):
+    share = get_share_record(share_token)
+
+    if not share or not share.get("is_active"):
+        raise HTTPException(status_code=404, detail="Shared chat link not found")
+
+    expires_at = share.get("expires_at_utc")
+    if expires_at:
+        now_utc_naive = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        if expires_at < now_utc_naive:
+            raise HTTPException(status_code=410, detail="Shared chat link has expired")
+
+    session_id = share.get("session_id")
+    messages = []
+
+    for row in fetch_chat_history_rows(session_id):
+        log_id = (row.get("log_id") or "").strip()
+        user_name = (row.get("user_name") or "").strip()
+        user_prompt = (row.get("user_prompt") or "").strip()
+        nexa_response = (row.get("nexa_response") or "").strip()
+        image_base64 = (row.get("image_base64") or "").strip()
+        image_mime_type = (row.get("image_mime_type") or "").strip()
+        image_filename = (row.get("image_filename") or "").strip()
+
+        if user_prompt:
+            messages.append({
+                "role": "user",
+                "content": user_prompt,
+            })
+
+        if nexa_response:
+            assistant_message = {
+                "role": "assistant",
+                "content": nexa_response,
+            }
+
+            if image_base64 and log_id and user_name:
+                assistant_message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
+
+            if image_mime_type:
+                assistant_message["image_mime_type"] = image_mime_type
+
+            if image_filename:
+                assistant_message["image_filename"] = image_filename
+
+            messages.append(assistant_message)
+
+    created_at = share.get("created_at_utc")
+
+    return {
+        "share_token": share_token,
+        "session_id": session_id,
+        "created_at_utc": created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at),
+        "messages": messages,
+    }
+
+
+@app.get("/share/{share_token}", response_class=HTMLResponse)
+def shared_chat_page(share_token: str):
+    safe_token = html.escape(share_token)
+
+    return HTMLResponse(f'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Shared Nexa Chat</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden">
+            <div class="px-6 py-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">Shared Nexa Chat</h1>
+                    <p class="text-sm text-slate-500 mt-1">Read and continue this conversation from any browser.</p>
+                </div>
+                <span class="text-xs bg-amber-100 text-amber-800 px-3 py-2 rounded-full font-semibold">External access</span>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <div id="chat-messages" class="space-y-5"></div>
+                <div id="chat-empty" class="text-slate-500">Loading shared chat...</div>
+            </div>
+
+            <div class="px-6 py-5 border-t border-slate-200 bg-slate-50">
+                <form id="shared-chat-form" class="flex flex-col gap-3 sm:flex-row">
+                    <label class="sr-only" for="shared-message">Your message</label>
+                    <textarea id="shared-message" rows="2" class="min-h-[90px] w-full rounded-3xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:border-sky-500 focus:ring-sky-200" placeholder="Type your question or continue the shared chat..."></textarea>
+                    <button id="shared-send-btn" type="submit" class="inline-flex items-center justify-center rounded-3xl bg-sky-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-700">Send</button>
+                </form>
+                <p id="shared-status" class="mt-3 text-xs text-slate-500">Your messages will be added to the shared chat session.</p>
+            </div>
+        </div>
+    </main>
+
+<script>
+const SHARE_TOKEN = "{safe_token}";
+let SHARED_SESSION_ID = null;
+let isSubmitting = false;
+
+async function saveChatLog(logEntry) {{
+    try {{
+        await fetch('/api/chat-log', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify(logEntry)
+        }});
+    }} catch (err) {{
+        console.error('Shared log save failed', err);
+    }}
+}}
+
+async function saveSharedLogResponse(logId, userPrompt, assistantResponse) {{
+    const timestamp = new Date().toISOString();
+    await saveChatLog({{
+        log_id: logId,
+        session_id: SHARED_SESSION_ID,
+        user_name: 'External Visitor',
+        user_prompt: userPrompt,
+        nexa_response: assistantResponse,
+        timestamp,
+        stars: 0
+    }});
+}}
+
+function escapeHtml(str) {{
+    return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}}
+
+function appendSharedMessage(text, role) {{
+    const messages = document.getElementById("chat-messages");
+    const isUser = role === "user";
+    const bubbleClass = isUser ? 'bg-slate-900 text-white rounded-2xl rounded-br-md' : 'bg-sky-50 text-slate-800 rounded-2xl rounded-bl-md';
+    const content = isUser
+        ? `<div class="whitespace-pre-wrap break-words">${{escapeHtml(text)}}</div>`
+        : `<div class="prose max-w-none">${{marked.parse(text || "")}}</div>`;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = isUser ? 'flex justify-end' : 'flex justify-start';
+    wrapper.innerHTML = '<div class="max-w-[92%] ' + bubbleClass + ' px-5 py-4">' + content + '</div>';
+
+    messages.appendChild(wrapper);
+    messages.scrollTop = messages.scrollHeight;
+}}
+
+function renderSharedMessages(messages) {{
+    const messagesContainer = document.getElementById("chat-messages");
+    const emptyNotice = document.getElementById("chat-empty");
+
+    messagesContainer.innerHTML = "";
+    emptyNotice.classList.add('hidden');
+
+    if (!messages.length) {{
+        emptyNotice.textContent = 'No messages found in this shared chat yet. Start the conversation below.';
+        emptyNotice.classList.remove('hidden');
+        return;
+    }}
+
+    messages.forEach(message => {{
+        appendSharedMessage(message.content || '', message.role === 'assistant' ? 'assistant' : 'user');
+    }});
+}}
+
+async function loadSharedChat() {{
+    const status = document.getElementById('shared-status');
+    status.textContent = 'Loading shared chat...';
+
+    try {{
+        const res = await fetch(`/api/shared-chat/${{encodeURIComponent(SHARE_TOKEN)}}`);
+        if (!res.ok) {{
+            document.getElementById('chat-messages').innerHTML = '';
+            document.getElementById('chat-empty').textContent = 'This shared chat link is unavailable or expired.';
+            document.getElementById('chat-empty').classList.remove('hidden');
+            status.textContent = '';
+            return;
+        }}
+
+        const data = await res.json();
+        SHARED_SESSION_ID = data.session_id;
+        renderSharedMessages(Array.isArray(data.messages) ? data.messages : []);
+        status.textContent = 'Continue the conversation from this shared chat session.';
+    }} catch (err) {{
+        document.getElementById('chat-empty').textContent = 'Failed to load shared chat. Please refresh the page.';
+        document.getElementById('chat-empty').classList.remove('hidden');
+        console.error('Shared chat load failed', err);
+        status.textContent = 'Unable to load shared chat right now.';
+    }}
+}}
+
+async function sendSharedMessage(event) {{
+    event.preventDefault();
+    if (isSubmitting) return;
+
+    const textarea = document.getElementById('shared-message');
+    const message = textarea.value.trim();
+    if (!message) return;
+    if (!SHARED_SESSION_ID) {{
+        document.getElementById('shared-status').textContent = 'Unable to send message until shared chat has loaded.';
+        return;
+    }}
+
+    isSubmitting = true;
+    const sendBtn = document.getElementById('shared-send-btn');
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+    appendSharedMessage(message, 'user');
+    textarea.value = '';
+    document.getElementById('shared-status').textContent = 'Sending message...';
+
+    const logId = `ext-${{Date.now()}}-${{Math.random().toString(36).slice(2,9)}}`;
+    await saveChatLog({{
+        log_id: logId,
+        session_id: SHARED_SESSION_ID,
+        user_name: 'External Visitor',
+        user_prompt: message,
+        nexa_response: '',
+        timestamp: new Date().toISOString(),
+        stars: 0
+    }});
+
+    try {{
+        const response = await fetch('/chat', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ message, session_id: SHARED_SESSION_ID }})
+        }});
+
+        const data = await response.json();
+        if (!response.ok) {{
+            throw new Error(data.detail || `Chat API returned ${{response.status}}`);
+        }}
+
+        const assistantResponse = data.response || 'No response received.';
+        appendSharedMessage(assistantResponse, 'assistant');
+        await saveSharedLogResponse(logId, message, assistantResponse);
+        document.getElementById('shared-status').textContent = 'Message sent. You can continue the chat below.';
+    }} catch (err) {{
+        console.error('Shared chat send failed', err);
+        document.getElementById('shared-status').textContent = 'Failed to send message. Please try again.';
+    }} finally {{
+        isSubmitting = false;
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+    }}
+}}
+
+document.getElementById('shared-chat-form').addEventListener('submit', sendSharedMessage);
+loadSharedChat();
+</script>
+</body>
+</html>
+    ''')
+
 
 # ====================== CHAT ======================
 class ChatRequest(BaseModel):
@@ -762,6 +1399,16 @@ class ChatSessionListResponse(BaseModel):
     user_email: str
     sessions: List[ChatSessionSummary]
 
+
+class ChatSessionSearchSummary(ChatSessionSummary):
+    snippet: Optional[str] = None
+
+
+class ChatSessionSearchResponse(BaseModel):
+    user_email: str
+    query: str
+    sessions: List[ChatSessionSearchSummary]
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
@@ -771,21 +1418,38 @@ async def chat_endpoint(request: ChatRequest):
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
     record_chat_turn(session_id, "user", request.message)
 
+    # Block lesson-plan generation for non-teachers
+    lower_msg = (request.message or "").lower()
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
+        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
+        record_chat_turn(session_id, "assistant", answer)
+        return ChatResponse(
+            response=answer,
+            session_id=session_id,
+            access_role=access_role,
+            pdf_url=None,
+            image_url=None,
+            image_id=None,
+        )
+
     try:
         config = {"configurable": {"session_id": session_id}}
 
-        web_answer = build_general_knowledge_answer(request.message)
-        if web_answer:
-            answer = web_answer
-        elif conversational_rag_chain is None:
-            answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+        faq_answer = build_nexa_faq_answer(request.message)
+        if faq_answer:
+            answer = faq_answer
         else:
-            result = conversational_rag_chain.invoke(
-                {"input": request.message, "audience": build_role_instruction(access_role)},
-                config=config
-            )
-
-            answer = result.get("answer") or "No response"
+            web_answer = build_general_knowledge_answer(request.message)
+            if web_answer:
+                answer = web_answer
+            elif conversational_rag_chain is None:
+                answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+            else:
+                result = conversational_rag_chain.invoke(
+                    {"input": request.message, "audience": build_role_instruction(access_role)},
+                    config=config
+                )
+                answer = result.get("answer") or "No response"
 
         pdf_url = None
         image_url = None
@@ -793,15 +1457,17 @@ async def chat_endpoint(request: ChatRequest):
 
         # ================= PDF GENERATION (UNCHANGED) =================
         if "pdf" in request.message.lower():
-            if MarkdownPdf is not None and Section is not None:
-                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"lesson_{ts}.pdf"
-                path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"lesson_{ts}.pdf"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
 
+            if MarkdownPdf is not None and Section is not None:
                 pdf = MarkdownPdf()
                 pdf.add_section(Section(answer))
                 pdf.save(path)
-
+                pdf_url = f"/assets/{filename}"
+            else:
+                save_text_to_pdf(path, answer)
                 pdf_url = f"/assets/{filename}"
 
         # ================= IMAGE GENERATION (FIXED + SAFE) =================
@@ -859,13 +1525,28 @@ def get_chat_history(session_id: str):
     messages = []
 
     for row in fetch_chat_history_rows(session_id):
+        log_id = (row.get("log_id") or "").strip()
+        user_name = (row.get("user_name") or "").strip()
         user_prompt = (row.get("user_prompt") or "").strip()
         nexa_response = (row.get("nexa_response") or "").strip()
+        image_base64 = (row.get("image_base64") or "").strip()
+        image_mime_type = (row.get("image_mime_type") or "").strip()
+        image_filename = (row.get("image_filename") or "").strip()
 
         if user_prompt:
             messages.append({"role": "user", "content": user_prompt})
+        pdf_url = (row.get("pdf_url") or "").strip()
         if nexa_response:
-            messages.append({"role": "assistant", "content": nexa_response})
+            message = {"role": "assistant", "content": nexa_response}
+            if image_base64 and log_id and user_name:
+                message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
+                if image_mime_type:
+                    message["image_mime_type"] = image_mime_type
+                if image_filename:
+                    message["image_filename"] = image_filename
+            if pdf_url:
+                message["pdf_url"] = pdf_url
+            messages.append(message)
 
     if not messages:
         messages = serialize_chat_history(session_id)
@@ -882,6 +1563,17 @@ def get_chat_sessions(user_email: str):
     return {
         "user_email": normalized_email,
         "sessions": fetch_user_chat_sessions(normalized_email),
+    }
+
+
+@app.get("/api/chat-sessions/{user_email}/search", response_model=ChatSessionSearchResponse)
+def search_chat_sessions(user_email: str, query: str):
+    normalized_email = normalize_email_address(user_email)
+    cleaned_query = (query or "").strip()
+    return {
+        "user_email": normalized_email,
+        "query": cleaned_query,
+        "sessions": search_user_chat_sessions(normalized_email, cleaned_query),
     }
 
 @app.get("/image-status/{image_id}")
