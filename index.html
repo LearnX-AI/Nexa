@@ -1248,6 +1248,11 @@ const guardrailRules = [
         name: 'severe profanity',
         pattern: /\b(fuck|shit|bitch|bastard)\b/i,
         reply: 'Let us keep this school-appropriate. I can still help with a clean version of your question.'
+    },
+    {
+        name: 'Tok Pisin language',
+        pattern: /\b(gutpela|nogut|tasol|plis|mi|yu|em|ol|wantaim|bai|ken|gat|stap|kamap|go-daun|nau|liklik|bigfela|no-get|givim|soim|helpim|wanem|husat|we|weate|finis|nambis|ples|dispela|yet|tu|tri|tu-pis|tru|bilong|moa|lain|harim|tok|singim|dring|gro|ting|hed|lek|han|bel|maus)\b/i,
+        reply: 'I can help with English and other major languages, but I cannot respond to Tok Pisin. Please ask your question in English instead.'
     }
 ];
 
