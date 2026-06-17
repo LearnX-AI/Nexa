@@ -58,6 +58,86 @@ except ModuleNotFoundError:
     MarkdownPdf = None
     Section = None
 
+import textwrap
+
+
+def _escape_pdf_text(text: str) -> str:
+    return text.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')
+
+
+def save_text_to_pdf(path: str, text: str) -> None:
+    lines = []
+    for paragraph in text.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
+        wrapped = textwrap.wrap(paragraph, width=90) or ['']
+        lines.extend(wrapped)
+
+    lines_per_page = 50
+    page_texts = [lines[i:i + lines_per_page] for i in range(0, len(lines), lines_per_page)] or [[]]
+
+    objects = []
+    obj_id = 1
+
+    # Catalog
+    objects.append((obj_id, '<< /Type /Catalog /Pages 2 0 R >>'))
+    obj_id += 1
+
+    # Pages placeholder
+    pages_obj_id = obj_id
+    obj_id += 1
+
+    # Font object
+    font_obj_id = obj_id
+    objects.append((font_obj_id, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'))
+    obj_id += 1
+
+    page_ids = []
+    content_ids = []
+    for _page in page_texts:
+        page_ids.append(obj_id)
+        obj_id += 1
+    for _page in page_texts:
+        content_ids.append(obj_id)
+        obj_id += 1
+
+    # Page objects
+    for page_id, content_id in zip(page_ids, content_ids):
+        page_content = f'<< /Type /Page /Parent {pages_obj_id} 0 R /MediaBox [0 0 612 792] '
+        page_content += f'/Resources << /Font << /F1 {font_obj_id} 0 R >> >> /Contents {content_id} 0 R >>'
+        objects.append((page_id, page_content))
+
+    # Content objects
+    for content_id, page_lines in zip(content_ids, page_texts):
+        stream_lines = ['BT', '/F1 12 Tf', '72 720 Td']
+        for index, line in enumerate(page_lines):
+            escaped = _escape_pdf_text(line)
+            stream_lines.append(f'({escaped}) Tj')
+            if index < len(page_lines) - 1:
+                stream_lines.append('0 -14 Td')
+        stream_lines.append('ET')
+        stream_text = '\n'.join(stream_lines)
+        stream_bytes = stream_text.encode('latin-1', errors='replace')
+        content_obj = f'<< /Length {len(stream_bytes)} >>\nstream\n{stream_text}\nendstream'
+        objects.append((content_id, content_obj))
+
+    # Pages object after content populated
+    kids = ' '.join(f'{pid} 0 R' for pid in page_ids)
+    pages_obj = f'<< /Type /Pages /Kids [ {kids} ] /Count {len(page_ids)} >>'
+    objects.insert(1, (pages_obj_id, pages_obj))
+
+    with open(path, 'wb') as f:
+        catalog_offset = 0
+        offsets = []
+        for obj_id, obj_content in objects:
+            offsets.append(f.tell())
+            obj_bytes = f'{obj_id} 0 obj\n{obj_content}\nendobj\n'.encode('latin-1')
+            f.write(obj_bytes)
+        xref_offset = f.tell()
+        f.write(b'xref\n0 %d\n0000000000 65535 f \n' % (len(objects) + 1))
+        for offset in offsets:
+            f.write(f'{offset:010d} 00000 n \n'.encode('latin-1'))
+        f.write(b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n' % (len(objects) + 1))
+        f.write(f'{xref_offset}\n%%EOF\n'.encode('latin-1'))
+
 # ====================== CONFIG ======================
 WORKSPACE_DIR = os.path.dirname(__file__)
 
@@ -104,6 +184,7 @@ class ChatLogPayload(BaseModel):
     timestamp: str
     session_id: Optional[str] = None
     user_email: Optional[str] = None
+    pdf_url: Optional[str] = None
     stars: int = 0
 
 
@@ -273,6 +354,124 @@ def build_general_knowledge_answer(message: str) -> str:
     return ""
 
 
+NEXA_FAQ_ANSWERS = {
+    "what is nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "who created nexa ai": "NEXA AI was developed by the engineering team at PowerX Technologies as part of the EduNeX Digital Education Ecosystem.",
+    "who owns nexa ai": "NEXA AI is part of the EduNeX platform and is managed by its authorized operators and partners.",
+    "who is behind your creation": "NEXA AI is being developed under the leadership of Chandana Silva, with Yasaru Rathnasooriya leading the AI Engineering Team at PowerX Technologies. Together with a team of engineers, curriculum specialists, and stakeholders from the National Department of Education, they are building a next-generation AI-powered educational platform designed to transform teaching and learning across Papua New Guinea.",
+    "where were you created": "NEXA AI was developed within the PowerX AI Lab for educational use in PNG.",
+    "why were you created": "I was created to improve access to quality education and support teaching and learning across Papua New Guinea. My primary mission is to assist students, teachers, and schools, particularly in remote and underserved communities where access to educational resources, qualified teachers, and learning support may be limited. By providing AI-powered learning assistance, I aim to help ensure that every child has the opportunity to learn, grow, and achieve their full potential.",
+    "what is your mission": "To make learning more accessible, engaging, and effective for everyone.",
+    "are you a png ai": "Yes. NEXA AI is designed specifically to support the educational needs of Papua New Guinea.",
+    "what makes you different from other ai systems": "NEXA AI is tailored to PNG education, curriculum, and local needs.",
+    "what languages can you speak": "I can communicate in English and support other languages as configured.",
+    "can you understand tok pisin": "Yes, I can assist in Tok Pisin where supported.",
+    "can you understand local png languages": "Support may be added as language resources become available.",
+    "can you learn new information": "I can be updated with approved knowledge and educational content.",
+    "how often are you updated": "Updates are released periodically by administrators.",
+    "what information do you know": "I provide information based on my approved knowledge sources.",
+    "do you know the png curriculum": "Yes, I am designed to support PNG curriculum-aligned learning.",
+    "can you help with stem subjects": "Yes, I can assist with science, technology, engineering, and mathematics.",
+    "can you support vocational education": "Yes, I can support vocational and technical learning.",
+    "can you help with research": "Yes, I can help students and teachers explore topics and resources.",
+    "can you explain difficult concepts": "Yes, I can simplify and explain complex topics.",
+    "are you dangerous to humans": "No. I am designed to assist people safely and responsibly.",
+    "do you steal information":"No. I do not steal information and follow approved privacy controls.",
+    "do you record conversations":"Only authorized systems may store interactions according to policy.",
+    "who can see my questions":"Access is controlled by the platform's privacy and security settings.",
+    "is my data secure":"Data is protected using approved security measures.",
+    "can you access my phone":"No, unless explicitly authorized through an application.",
+    "can you access my camera":"No.",
+    "can you access my files":"Only if a user intentionally uploads or shares them.",
+    "can you access my bank account":"No.",
+    "can you access social media accounts":"No.",
+    "can you be hacked":"Like any digital system, security measures are required to protect against threats.",
+    "can I trust everything you say":"No. Important information should always be verified.",
+    "what if you make a mistake":"Consult a teacher, expert, or trusted source to verify the answer.",
+    "how do you protect children":"By following safety guidelines and educational safeguards.",
+    "are you safe for students":"Yes, when used appropriately and under school policies.",
+    "can you replace teachers":"No. Teachers remain essential to education. I’m only a digital tool.",
+    "can you mark assignments":"I can assist, but final assessment should be overseen by teachers.",
+    "can you help with homework":"Yes.",
+    "can you write essays for me":"I can help you learn and draft ideas, but students should do their own work.",
+    "can you solve mathematics problems":"Yes, and explain the steps.",
+    "can you explain science concepts":"Yes.",
+    "can you help me prepare for exams":"Yes.",
+    "can you create lesson plans":"Yes, for teachers.",
+    "can you generate quizzes":"Yes, for teachers.",
+    "can you help teachers prepare notes":"Yes.",
+    "can you support special-needs learners":"Yes, where suitable accommodations are available.",
+    "can you work offline":"Yes, EduNeX supports offline learning in remote environments.",
+    "can you help schools without internet":"Yes, through offline and synchronized deployments.",
+    "how does NEXA support remote communities":"By providing access to educational resources even in low-connectivity areas.",
+    "what is the future vision of NEXA AI":"To provide safe connectivity, smarter learning, and equitable access to quality education across PNG.",
+    "why was NEXA created":"NEXA was created from the vision of Menuka Silva and Chandana Silva, who recognized the opportunity to use modern artificial intelligence to address the unique educational challenges of Papua New Guinea. Drawing on their extensive experience in education and technology, they envisioned a locally relevant AI platform that could support PNG students, teachers, schools, and the Department of Education while helping to improve educational outcomes nationwide.",
+    "is NEXA AI a PNG-developed AI":"Yes. NEXA AI is being developed specifically to support the educational needs of Papua New Guinea and is designed around the PNG curriculum, educational goals, and local challenges.",
+    "is NEXA AI owned by the Government":"No. NEXA AI is developed by PowerX Technologies as part of the EduNeX Digital Education Ecosystem. It works in partnership with educational stakeholders and government agencies where appropriate.",
+    "is NEXA AI connected to the Department of Education":"NEXA AI is being developed to support educational initiatives and may integrate with programs approved by the National Department of Education.",
+    "what makes NEXA AI different from ChatGPT, Gemini, or Copilot":"NEXA AI is specifically designed for Papua New Guinea. It focuses on the PNG curriculum, local educational needs, remote learning challenges, and supporting teachers and students throughout the country.",
+    "why does PNG need its own AI model":"Papua New Guinea has unique educational, cultural, linguistic, and geographical challenges. A locally focused AI can provide more relevant and effective support for students, teachers, and schools.",
+    "can NEXA understand PNG culture and traditions":"Yes. NEXA is being designed to respect and support the diverse cultures, traditions, and values of Papua New Guinea.",
+    "can NEXA understand Tok Pisin":"Yes Support for Tok Pisin is part of the long-term vision for NEXA AI.",
+    "can NEXA support local PNG languages":"As the platform evolves, support for additional PNG languages may be introduced where resources and linguistic data are available.",
+    "how will NEXA continue to improve":"NEXA will continue to improve through ongoing development, curriculum updates, user feedback, and advances in artificial intelligence technology.",
+    "what AI technology powers NEXA":"NEXA uses modern artificial intelligence technologies, including large language models, machine learning, and educational knowledge systems.",
+    "does NEXA use Large Language Models (LLMs)":"Yes. NEXA leverages advanced language models to understand questions and generate helpful responses.",
+    "does NEXA have access to the internet":"Depending on the deployment model, NEXA may operate online, offline, or in a hybrid environment.",
+    "how does NEXA find answers":"NEXA generates answers using its trained knowledge base, educational resources, and approved information sources.",
+    "does NEXA learn from users":"NEXA may improve through approved updates and training processes while maintaining privacy and security standards.",
+    "can NEXA generate images":"Yes. NEXA can generate educational related image generation and visual learning resources.",
+    "can NEXA create lesson plans automatically":"Yes. NEXA can assist teachers in preparing lesson plans aligned with curriculum requirements.",
+    "can NEXA create quizzes and examinations":"Yes. NEXA can generate quizzes, practice tests, and assessment materials.",
+    "can NEXA mark assignments":"NEXA can assist with marking and feedback, but final assessment decisions should be made by teachers.",
+    "can NEXA provide personalized learning":"Yes. NEXA is designed to support personalized learning based on the needs and progress of individual students.",
+    "is my information confidential":"Yes. NEXA follows approved privacy and security practices to protect user information.",
+    "where is NEXA data stored":"Data storage depends on deployment requirements and may be hosted locally, in the cloud, or within DoE approved educational infrastructure.",
+    "can parents see student conversations":"Access permissions are determined by school policies and administrative settings.",
+    "does NEXA collect personal information":"Only information necessary to provide educational services and platform functionality is collected.",
+    "can schools control access to NEXA":"Yes. Schools can manage user accounts, permissions, and access settings.",
+    "how does NEXA protect children online":"NEXA includes safeguards designed to promote safe, responsible, and age-appropriate learning experiences.",
+    "can NEXA identify inappropriate content":"Yes. NEXA is designed to help detect and filter inappropriate content.",
+    "can NEXA help prevent cyberbullying":"NEXA can support digital citizenship education and assist schools in promoting safe online interactions.",
+    "what happens if someone misuses NEXA":"Schools and administrators can apply policies, monitoring, and disciplinary procedures where necessary.",
+    "can NEXA be used safely by young children":"Yes. NEXA is designed to support learners of different ages in a safe and educational manner.",
+    "can NEXA help teachers create lesson plans":"Yes. NEXA can assist teachers in preparing engaging and curriculum-aligned lessons.",
+    "can NEXA explain difficult concepts in simple language":"Yes. NEXA can simplify complex topics to suit different learning levels.",
+    "can NEXA help students prepare for Grade 10 examinations":"Yes. NEXA can provide revision support, practice questions, and learning guidance.",
+    "can NEXA help students prepare for Grade 12 examinations":"Yes. NEXA can assist with exam preparation and study planning.",
+    "can NEXA support STEM education":"Yes. Supporting science, technology, engineering, and mathematics education is one of NEXA’s core objectives.",
+    "can NEXA support vocational and technical education":"Yes. NEXA can assist with vocational, technical, and skills-based learning programs.",
+    "can NEXA help students with disabilities":"NEXA aims to support inclusive education and provide accessible learning opportunities wherever possible.",
+    "can NEXA recommend learning resources":"Yes. NEXA can suggest relevant resources based on curriculum requirements and learner needs.",
+    "can NEXA support teacher professional development":"Yes. NEXA can assist with training materials, educational research, and professional learning resources.",
+    "can NEXA help improve learning outcomes":"Yes. By providing personalized support and educational resources, NEXA aims to improve student achievement and engagement.",
+    "what is the long-term vision for NEXA AI":"The vision for NEXA AI is to become Papua New Guinea's leading AI-powered educational assistant, providing personalized learning, voice-based support, and inclusive educational services for all students, including those with special learning needs, while helping improve educational outcomes across the nation.",
+
+}
+
+
+def normalize_faq_query(message: str) -> str:
+    return re.sub(r"[^a-z0-9 ]+", "", (message or "").strip().lower())
+
+
+def build_nexa_faq_answer(message: str) -> str:
+    normalized = normalize_faq_query(message)
+    if not normalized:
+        return ""
+
+    for question, answer in NEXA_FAQ_ANSWERS.items():
+        if normalized == question:
+            return answer
+        if normalized.startswith(question):
+            return answer
+        if question in normalized:
+            return answer
+        if normalized in question:
+            return answer
+
+    return ""
+
+
 def record_chat_turn(session_id: str, role: str, content: str) -> None:
     if session_id not in SESSION_CHAT_HISTORY:
         SESSION_CHAT_HISTORY[session_id] = []
@@ -322,6 +521,10 @@ def ensure_chat_log_schema():
         if cur.fetchone() is None:
             cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN image_saved_at DATETIME NULL AFTER image_filename")
 
+        cur.execute("SHOW COLUMNS FROM nexa_chat_logs LIKE 'pdf_url'")
+        if cur.fetchone() is None:
+            cur.execute("ALTER TABLE nexa_chat_logs ADD COLUMN pdf_url VARCHAR(255) NULL AFTER image_saved_at")
+
 
         cur.execute("""
             CREATE TABLE IF NOT EXISTS nexa_shared_chats (
@@ -361,7 +564,7 @@ def fetch_chat_history_rows(session_id: str):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             """
-            SELECT log_id, user_name, user_prompt, nexa_response, image_base64, image_mime_type, image_filename, timestamp_utc
+            SELECT log_id, user_name, user_prompt, nexa_response, image_base64, image_mime_type, image_filename, pdf_url, timestamp_utc
             FROM nexa_chat_logs
             WHERE session_id = %s
             ORDER BY timestamp_utc ASC, id ASC
@@ -602,27 +805,16 @@ def infer_access_role(email: Optional[str]) -> str:
         raise HTTPException(status_code=400, detail="A valid email address is required")
 
     local_part, _, domain = normalized_email.partition("@")
-
-    teacher_emails = _load_email_tokens("NEXA_TEACHER_EMAILS")
-    student_emails = _load_email_tokens("NEXA_STUDENT_EMAILS")
-    teacher_domains = _load_email_tokens("NEXA_TEACHER_EMAIL_DOMAINS")
-    student_domains = _load_email_tokens("NEXA_STUDENT_EMAIL_DOMAINS")
-
-    if normalized_email in teacher_emails or domain in teacher_domains:
+    # Use explicit local-part markers used by EduNex accounts:
+    # - teacher accounts contain ".education" in the local-part (e.g. teacher.education@...)
+    # - student accounts contain ".edunex" in the local-part (e.g. student.edunex@...)
+    if ".education" in local_part:
         return "teacher"
 
-    if normalized_email in student_emails or domain in student_domains:
+    if ".edunex" in local_part:
         return "student"
 
-    teacher_keywords = ("teacher", "staff", "faculty", "educator", "instructor", "lecturer", "tutor", "prof")
-    student_keywords = ("student", "learner", "pupil", "scholar")
-
-    if any(keyword in local_part for keyword in teacher_keywords):
-        return "teacher"
-
-    if any(keyword in local_part for keyword in student_keywords):
-        return "student"
-
+    # Fallback: default to student
     return "student"
 
 
@@ -794,14 +986,15 @@ def save_chat_log(payload: ChatLogPayload):
         ts_utc = to_utc_datetime(payload.timestamp)
         cur.execute(
             """
-            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, timestamp_utc, stars)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, pdf_url, timestamp_utc, stars)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 session_id = VALUES(session_id),
                 user_email = VALUES(user_email),
                 user_name = VALUES(user_name),
                 user_prompt = VALUES(user_prompt),
                 nexa_response = VALUES(nexa_response),
+                pdf_url = VALUES(pdf_url),
                 timestamp_utc = VALUES(timestamp_utc),
                 stars = VALUES(stars)
             """,
@@ -812,6 +1005,7 @@ def save_chat_log(payload: ChatLogPayload):
                 payload.user_name,
                 payload.user_prompt,
                 payload.nexa_response,
+                payload.pdf_url,
                 ts_utc.strftime("%Y-%m-%d %H:%M:%S"),
                 payload.stars,
             ),
@@ -1295,21 +1489,38 @@ async def chat_endpoint(request: ChatRequest):
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
     record_chat_turn(session_id, "user", request.message)
 
+    # Block lesson-plan generation for non-teachers
+    lower_msg = (request.message or "").lower()
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
+        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
+        record_chat_turn(session_id, "assistant", answer)
+        return ChatResponse(
+            response=answer,
+            session_id=session_id,
+            access_role=access_role,
+            pdf_url=None,
+            image_url=None,
+            image_id=None,
+        )
+
     try:
         config = {"configurable": {"session_id": session_id}}
 
-        web_answer = build_general_knowledge_answer(request.message)
-        if web_answer:
-            answer = web_answer
-        elif conversational_rag_chain is None:
-            answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+        faq_answer = build_nexa_faq_answer(request.message)
+        if faq_answer:
+            answer = faq_answer
         else:
-            result = conversational_rag_chain.invoke(
-                {"input": request.message, "audience": build_role_instruction(access_role)},
-                config=config
-            )
-
-            answer = result.get("answer") or "No response"
+            web_answer = build_general_knowledge_answer(request.message)
+            if web_answer:
+                answer = web_answer
+            elif conversational_rag_chain is None:
+                answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+            else:
+                result = conversational_rag_chain.invoke(
+                    {"input": request.message, "audience": build_role_instruction(access_role)},
+                    config=config
+                )
+                answer = result.get("answer") or "No response"
 
         pdf_url = None
         image_url = None
@@ -1317,15 +1528,17 @@ async def chat_endpoint(request: ChatRequest):
 
         # ================= PDF GENERATION (UNCHANGED) =================
         if "pdf" in request.message.lower():
-            if MarkdownPdf is not None and Section is not None:
-                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"lesson_{ts}.pdf"
-                path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"lesson_{ts}.pdf"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
 
+            if MarkdownPdf is not None and Section is not None:
                 pdf = MarkdownPdf()
                 pdf.add_section(Section(answer))
                 pdf.save(path)
-
+                pdf_url = f"/assets/{filename}"
+            else:
+                save_text_to_pdf(path, answer)
                 pdf_url = f"/assets/{filename}"
 
         # ================= IMAGE GENERATION (FIXED + SAFE) =================
@@ -1393,6 +1606,7 @@ def get_chat_history(session_id: str):
 
         if user_prompt:
             messages.append({"role": "user", "content": user_prompt})
+        pdf_url = (row.get("pdf_url") or "").strip()
         if nexa_response:
             message = {"role": "assistant", "content": nexa_response}
             if image_base64 and log_id and user_name:
@@ -1401,6 +1615,8 @@ def get_chat_history(session_id: str):
                     message["image_mime_type"] = image_mime_type
                 if image_filename:
                     message["image_filename"] = image_filename
+            if pdf_url:
+                message["pdf_url"] = pdf_url
             messages.append(message)
 
     if not messages:

@@ -565,7 +565,7 @@
             opacity: 0.88;
         }
 
-        /* ===== RESPONSIVE: ALL DEVICES ===== */
+                /* ===== RESPONSIVE: ALL DEVICES ===== */
         /* CSS variables for easy cross-breakpoint consistency */
         :root {
             --btn-size: 5rem;
@@ -777,13 +777,13 @@
         <!-- Input Area -->
         <div id="input-area" class="px-3 py-3 border-t bg-white">
             <div class="mb-2 flex items-center gap-2">
-                <input id="user-email" type="email"
+                <input id="user-email" type="email" style="display:none;"
                        class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
                        placeholder="Enter your school email (required)"/>
                 <span id="access-role-badge" class="shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600">Student mode</span>
             </div>
             <div class="mb-2">
-                <input id="user-name" type="text"
+                <input id="user-name" type="text" style="display:none;"
                        class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
                        placeholder="Enter your name (optional for logs)"/>
             </div>
@@ -894,12 +894,12 @@ function getSessionStorageKey(email) {
 function inferAccessRoleFromEmail(email) {
     const normalizedEmail = normalizeEmail(email);
     const localPart = normalizedEmail.split('@')[0] || '';
-
-    if (/(teacher|staff|faculty|educator|instructor|lecturer|tutor|prof)/.test(localPart)) {
+    // EduNex local-part rules: ".education" => teacher, ".edunex" => student
+    if (localPart.includes('.education')) {
         return 'teacher';
     }
 
-    if (/(student|learner|pupil|scholar)/.test(localPart)) {
+    if (localPart.includes('.edunex')) {
         return 'student';
     }
 
@@ -1325,11 +1325,14 @@ async function retryPendingLogs() {
     }
 }
 
-async function updateLogResponse(logId, responseText) {
+async function updateLogResponse(logId, responseText, pdfUrl = null) {
     const logItem = chatLogStack.find(item => item.log_id === logId);
     if (!logItem) return;
 
     logItem.nexa_response = responseText;
+    if (pdfUrl) {
+        logItem.pdf_url = pdfUrl;
+    }
     logItem.timestamp = getInternationalTimestamp();
     await saveChatLogToDatabase(logItem);
     await retryPendingLogs();
@@ -1695,6 +1698,7 @@ async function sendMessage() {
             user_name: userName,
             user_prompt: text,
             nexa_response: blockedReply,
+            pdf_url: null,
             timestamp: getInternationalTimestamp(),
             stars: 0
         };
@@ -1719,6 +1723,7 @@ async function sendMessage() {
         user_name: userName,
         user_prompt: text,
         nexa_response: '',
+        pdf_url: null,
         timestamp,
         stars: 0
     });
@@ -1794,7 +1799,7 @@ async function sendMessage() {
 	if (data.image_url && data.image_id) {
 
     addMessage(data.response, false, null, false, pairId, { logId, userName });
-    await updateLogResponse(logId, data.response || '');
+    await updateLogResponse(logId, data.response || '', data.pdf_url || null);
 
     const imageUrl = data.image_url;
     const imageId = data.image_id;
