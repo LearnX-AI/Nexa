@@ -119,15 +119,6 @@ def build_pdf_report(manifest: Dict, chunk_rows: List[Dict], output_path: Path) 
     )
     styles.add(
         ParagraphStyle(
-            name="ChunkLabel",
-            parent=styles["BodyText"],
-            textColor=colors.HexColor("#334E68"),
-            fontName="Helvetica-Bold",
-            leading=12,
-        )
-    )
-    styles.add(
-        ParagraphStyle(
             name="MiniHeader",
             parent=styles["Heading3"],
             textColor=colors.HexColor("#102A43"),

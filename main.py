@@ -1532,14 +1532,25 @@ async def chat_endpoint(request: ChatRequest):
             filename = f"lesson_{ts}.pdf"
             path = os.path.join(IMAGE_OUTPUT_DIR, filename)
 
-            if MarkdownPdf is not None and Section is not None:
-                pdf = MarkdownPdf()
-                pdf.add_section(Section(answer))
-                pdf.save(path)
-                pdf_url = f"/assets/{filename}"
-            else:
-                save_text_to_pdf(path, answer)
-                pdf_url = f"/assets/{filename}"
+            safe_answer = answer if isinstance(answer, str) else str(answer or "")
+
+            try:
+                if MarkdownPdf is not None and Section is not None:
+                    pdf = MarkdownPdf()
+                    pdf.add_section(Section(safe_answer))
+                    pdf.save(path)
+                    pdf_url = f"/assets/{filename}"
+                else:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+            except Exception as pdf_error:
+                print(f"PDF generation failed: {pdf_error}")
+                try:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+                except Exception as fallback_error:
+                    print(f"Fallback PDF generation failed: {fallback_error}")
+                    pdf_url = None
 
         # ================= IMAGE GENERATION (FIXED + SAFE) =================
         if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual"]):
