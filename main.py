@@ -9,6 +9,7 @@ import secrets
 from urllib.parse import quote_plus
 import os
 import re
+import json
 from typing import Optional, Dict, Any, List
 import datetime
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +38,7 @@ try:
     from langchain_chroma import Chroma
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.messages import AIMessage, HumanMessage
     from langchain.chains import create_history_aware_retriever, create_retrieval_chain
     from langchain_core.runnables.history import RunnableWithMessageHistory
     from langchain_community.chat_message_histories import ChatMessageHistory
@@ -469,6 +471,38 @@ def build_nexa_faq_answer(message: str) -> str:
         if normalized in question:
             return answer
 
+    if LANGCHAIN_AVAILABLE and llm is not None:
+        faq_prompt = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                "You match user questions to the single best FAQ entry. "
+                "Return only valid JSON with keys match and confidence. "
+                "match must be either the exact FAQ question text or an empty string. "
+                "Use empty string if no FAQ entry fits."
+            ),
+            (
+                "human",
+                "User question: {question}\n\nFAQ questions:\n{faq_questions}"
+            ),
+        ])
+
+        faq_questions = "\n".join(f"- {question}" for question in NEXA_FAQ_ANSWERS.keys())
+
+        try:
+            raw_result = (faq_prompt | llm | StrOutputParser()).invoke({
+                "question": message or "",
+                "faq_questions": faq_questions,
+            })
+            parsed_result = json.loads(raw_result)
+            matched_question = normalize_faq_query(parsed_result.get("match", ""))
+
+            if matched_question in NEXA_FAQ_ANSWERS:
+                confidence = float(parsed_result.get("confidence", 0) or 0)
+                if confidence >= 0.45:
+                    return NEXA_FAQ_ANSWERS[matched_question]
+        except Exception:
+            pass
+
     return ""
 
 
@@ -580,6 +614,53 @@ def fetch_chat_history_rows(session_id: str):
             cur.close()
         if conn is not None:
             conn.close()
+
+
+def hydrate_session_history(session_id: str) -> None:
+    if not session_id or mysql.connector is None:
+        return
+
+    session_messages = SESSION_CHAT_HISTORY.setdefault(session_id, [])
+
+    session_history = SESSION_STORE.get(session_id) if LANGCHAIN_AVAILABLE else None
+    if LANGCHAIN_AVAILABLE and session_history is None:
+        SESSION_STORE[session_id] = ChatMessageHistory()
+        session_history = SESSION_STORE[session_id]
+
+    if LANGCHAIN_AVAILABLE and session_history is not None and getattr(session_history, "messages", None):
+        return
+
+    if session_messages:
+        if session_history is not None and not getattr(session_history, "messages", None):
+            for message in session_messages:
+                role = (message.get("role") or "").strip().lower()
+                content = (message.get("content") or "").strip()
+                if not content:
+                    continue
+
+                if role == "user":
+                    session_history.add_message(HumanMessage(content=content))
+                elif role == "assistant":
+                    session_history.add_message(AIMessage(content=content))
+        return
+
+    rows = fetch_chat_history_rows(session_id)
+    if not rows:
+        return
+
+    for row in rows:
+        user_prompt = (row.get("user_prompt") or "").strip()
+        nexa_response = (row.get("nexa_response") or "").strip()
+
+        if user_prompt:
+            SESSION_CHAT_HISTORY[session_id].append({"role": "user", "content": user_prompt})
+            if session_history is not None:
+                session_history.add_message(HumanMessage(content=user_prompt))
+
+        if nexa_response:
+            SESSION_CHAT_HISTORY[session_id].append({"role": "assistant", "content": nexa_response})
+            if session_history is not None:
+                session_history.add_message(AIMessage(content=nexa_response))
 
 
 def fetch_user_chat_sessions(user_email: str):
@@ -885,6 +966,8 @@ if LANGCHAIN_AVAILABLE and llm is not None:
 # ====================== SESSION ======================
 if LANGCHAIN_AVAILABLE and rag_chain is not None:
     def get_session_history(session_id: str):
+        hydrate_session_history(session_id)
+
         if session_id not in SESSION_STORE:
             SESSION_STORE[session_id] = ChatMessageHistory()
         return SESSION_STORE[session_id]
@@ -1487,6 +1570,8 @@ async def chat_endpoint(request: ChatRequest):
     normalized_email = normalize_email_address(request.user_email)
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
+
+    hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
 
     # Block lesson-plan generation for non-teachers
