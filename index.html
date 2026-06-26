@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -716,7 +717,7 @@
                 <div class="text-gray-800 text-sm font-medium whitespace-nowrap">Hello! I'm Nexa. How can I help?</div>
             </div>
             <div class="w-20 h-20">
-                <img id="nexa-logo" src="assets/edunex.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
+                <img id="nexa-logo" src="assets/nexa.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
             </div>
         </div>
     </div>
@@ -905,6 +906,35 @@ function inferAccessRoleFromEmail(email) {
 
     return 'student';
 }
+
+// ==================== MOODLE INTEGRATION - FORCE EMAIL ====================
+const urlParams = new URLSearchParams(window.location.search);
+let emailFromMoodle = urlParams.get('email');
+
+if (emailFromMoodle) {
+    emailFromMoodle = decodeURIComponent(emailFromMoodle);
+    console.log("🔐 Moodle email received:", emailFromMoodle);
+    
+    // FORCE set email
+    userEmailInput.value = emailFromMoodle;
+    localStorage.setItem('nexa_user_email', emailFromMoodle);
+    
+    // Auto set session
+    setSessionForEmail(emailFromMoodle);
+    
+    // Auto open chat window
+    setTimeout(() => {
+        chatWindow.classList.remove('hidden');
+        console.log("✅ Nexa chat auto-opened for Moodle user");
+    }, 600);
+}
+
+// Also listen for any future changes
+userEmailInput.addEventListener('change', function() {
+    if (this.value && this.value.includes('@')) {
+        localStorage.setItem('nexa_user_email', normalizeEmail(this.value));
+    }
+});
 
 function updateAccessRoleBadge(value) {
     const role = value === 'teacher' || value === 'student'
@@ -1669,6 +1699,16 @@ fileInput.addEventListener('change', async (e) => {
     }
 });
 
+
+function generateSessionId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    // Fallback
+    return 'sess-' + Date.now().toString(36) + '-' + 
+           Math.random().toString(36).substr(2, 9);
+}
+
 async function sendMessage() {
     const text = userInput.value.trim();
     if (!text) return;
@@ -1681,12 +1721,12 @@ async function sendMessage() {
     }
 
     const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
-
-    if (!sessionId) {
-        sessionId = crypto.randomUUID();
-        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
-        localStorage.setItem('nexa_session_id', sessionId);
-    }
+    
+	if (!sessionId) {
+    sessionId = generateSessionId();
+    localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+    localStorage.setItem('nexa_session_id', sessionId);
+}    
 
     localStorage.setItem('nexa_user_name', userName);
     localStorage.setItem('nexa_user_email', userEmail);
