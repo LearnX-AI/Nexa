@@ -456,7 +456,7 @@ def normalize_faq_query(message: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", "", (message or "").strip().lower())
 
 
-def build_nexa_faq_answer(message: str) -> str:
+def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str:
     normalized = normalize_faq_query(message)
     if not normalized:
         return ""
@@ -472,17 +472,27 @@ def build_nexa_faq_answer(message: str) -> str:
             return answer
 
     if LANGCHAIN_AVAILABLE and llm is not None:
+        recent_history = []
+        if session_id:
+            recent_history = SESSION_CHAT_HISTORY.get(session_id, [])[-6:]
+
+        history_lines = []
+        for item in recent_history:
+            role = (item.get("role") or "").strip().lower()
+            content = (item.get("content") or "").strip()
+            if content:
+                history_lines.append(f"{role}: {content}")
+
         faq_prompt = ChatPromptTemplate.from_messages([
             (
                 "system",
-                "You match user questions to the single best FAQ entry. "
-                "Return only valid JSON with keys match and confidence. "
-                "match must be either the exact FAQ question text or an empty string. "
-                "Use empty string if no FAQ entry fits."
+                "You match the user's question to the single best FAQ entry. "
+                "Use the conversation history when the current question is vague, misspelled, or refers to a previous topic. "
+                "Return only the exact FAQ question text from the list, or NO_MATCH if nothing fits."
             ),
             (
                 "human",
-                "User question: {question}\n\nFAQ questions:\n{faq_questions}"
+                "Conversation history:\n{history}\n\nCurrent question: {question}\n\nFAQ questions:\n{faq_questions}"
             ),
         ])
 
@@ -491,15 +501,13 @@ def build_nexa_faq_answer(message: str) -> str:
         try:
             raw_result = (faq_prompt | llm | StrOutputParser()).invoke({
                 "question": message or "",
+                "history": "\n".join(history_lines) if history_lines else "No prior history.",
                 "faq_questions": faq_questions,
             })
-            parsed_result = json.loads(raw_result)
-            matched_question = normalize_faq_query(parsed_result.get("match", ""))
+            matched_question = normalize_faq_query(raw_result)
 
             if matched_question in NEXA_FAQ_ANSWERS:
-                confidence = float(parsed_result.get("confidence", 0) or 0)
-                if confidence >= 0.45:
-                    return NEXA_FAQ_ANSWERS[matched_question]
+                return NEXA_FAQ_ANSWERS[matched_question]
         except Exception:
             pass
 
@@ -1591,7 +1599,7 @@ async def chat_endpoint(request: ChatRequest):
     try:
         config = {"configurable": {"session_id": session_id}}
 
-        faq_answer = build_nexa_faq_answer(request.message)
+        faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
         if faq_answer:
             answer = faq_answer
         else:
