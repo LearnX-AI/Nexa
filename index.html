@@ -1140,8 +1140,10 @@ async function loadHistorySession(sessionToView) {
     if (normalizedEmail) {
         localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
     }
+    // Show chat window and keep the history panel open briefly so the user
+    // can preview the transcript, then close the panel and switch to chat.
     chatWindow.classList.remove('hidden');
-    closeHistoryPanel();
+    openHistoryPanel();
 
     try {
         const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionToView)}`);
@@ -1153,6 +1155,13 @@ async function loadHistorySession(sessionToView) {
         const messages = Array.isArray(data.messages) ? data.messages : [];
         renderHistoryTranscript(messages);
         renderHistorySessions(cachedHistorySessions);
+
+        // Briefly show the transcript in the history panel, then close it
+        // and load the session into the main chat view.
+        setTimeout(() => {
+            closeHistoryPanel();
+        }, 700);
+
         await loadChatHistory();
     } catch (err) {
         console.error('Failed to load session history', err);
@@ -1317,23 +1326,7 @@ function popChatLog() {
 }
 
 async function saveChatLogToDatabase(logEntry) {
-    try {
-        const res = await fetch(LOG_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(logEntry)
-        });
-
-        if (!res.ok) {
-            throw new Error(`Logger API returned ${res.status}`);
-        }
-
-        return true;
-    } catch (err) {
-        pendingLogRetryStack.push(logEntry);
-        console.error('Log save failed; moved to retry stack.', err);
-        return false;
-    }
+    return true;
 }
 
 async function saveRatingToDatabase(payload) {
@@ -1353,11 +1346,7 @@ async function saveRatingToDatabase(payload) {
 }
 
 async function retryPendingLogs() {
-    while (pendingLogRetryStack.length > 0) {
-        const nextLog = pendingLogRetryStack.pop();
-        const ok = await saveChatLogToDatabase(nextLog);
-        if (!ok) break;
-    }
+    return true;
 }
 
 async function updateLogResponse(logId, responseText, pdfUrl = null) {
@@ -1369,8 +1358,6 @@ async function updateLogResponse(logId, responseText, pdfUrl = null) {
         logItem.pdf_url = pdfUrl;
     }
     logItem.timestamp = getInternationalTimestamp();
-    await saveChatLogToDatabase(logItem);
-    await retryPendingLogs();
 }
 
 async function blobToBase64(blob) {
@@ -1736,7 +1723,8 @@ async function sendMessage() {
     const assessment = classifyPrompt(text);
     if (!assessment.allowed) {
         const pairId = 'p' + Date.now();
-        const logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const clientLogId = logId;
         const blockedReply = `${assessment.reply} This request was blocked by Nexa student safety guardrails.`;
 
         addMessage(text, true, null, false, pairId);
@@ -1754,15 +1742,40 @@ async function sendMessage() {
             stars: 0
         };
         pushChatLog(blockedLog);
-        await saveChatLogToDatabase(blockedLog);
-        await retryPendingLogs();
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: text,
+                    user_email: userEmail,
+                    session_id: sessionId
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.log_id) {
+                logId = data.log_id;
+                blockedLog.log_id = logId;
+                const pushedItem = chatLogStack.find(item => item.log_id === clientLogId);
+                if (pushedItem) {
+                    pushedItem.log_id = logId;
+                }
+            }
+        } catch (err) {
+            console.error('Blocked log sync failed', err);
+        }
 
         userInput.value = '';
         return;
     }
 
     const pairId = 'p' + Date.now();
-    const logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const clientLogId = logId;
     const timestamp = getInternationalTimestamp();
 
     addMessage(text, true, null, false, pairId);
@@ -1825,16 +1838,20 @@ async function sendMessage() {
         document.getElementById("typing-msg")?.remove();
 
         sessionId = data.session_id;
+        if (data.log_id) {
+            logId = data.log_id;
+        }
         localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem("nexa_session_id", sessionId);
         if (data.access_role) {
             updateAccessRoleBadge(data.access_role);
         }
 
-        const logItem = chatLogStack.find(item => item.log_id === logId);
+        const logItem = chatLogStack.find(item => item.log_id === clientLogId || item.log_id === logId);
         if (logItem) {
             logItem.session_id = sessionId;
             logItem.user_email = userEmail;
+            logItem.log_id = logId;
         }
 
         const modelText = typeof data.response === 'string' ? data.response : '';

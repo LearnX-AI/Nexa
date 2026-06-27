@@ -10,6 +10,7 @@ from urllib.parse import quote_plus
 import os
 import re
 import json
+import difflib
 from typing import Optional, Dict, Any, List
 import datetime
 from fastapi.staticfiles import StaticFiles
@@ -236,6 +237,54 @@ def get_conn():
     return mysql.connector.connect(**DB_CONFIG)
 
 
+def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optional[str], user_name: str, user_prompt: str, nexa_response: str, pdf_url: Optional[str] = None, stars: int = 0, timestamp: Optional[datetime.datetime] = None) -> bool:
+    if mysql.connector is None:
+        return False
+
+    ts = timestamp or datetime.datetime.now(datetime.timezone.utc)
+    conn = None
+    cur = None
+    try:
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, pdf_url, timestamp_utc, stars)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                session_id = VALUES(session_id),
+                user_email = VALUES(user_email),
+                user_name = VALUES(user_name),
+                user_prompt = VALUES(user_prompt),
+                nexa_response = VALUES(nexa_response),
+                pdf_url = VALUES(pdf_url),
+                timestamp_utc = VALUES(timestamp_utc),
+                stars = VALUES(stars)
+            """,
+            (
+                log_id,
+                session_id,
+                normalize_email_address(user_email),
+                user_name,
+                user_prompt,
+                nexa_response,
+                pdf_url,
+                ts.strftime("%Y-%m-%d %H:%M:%S"),
+                stars,
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception as exc:
+        print(f"Failed to persist chat log: {exc}")
+        return False
+    finally:
+        if cur is not None:
+            cur.close()
+        if conn is not None:
+            conn.close()
+
+
 def to_utc_datetime(iso_str: str) -> datetime.datetime:
     try:
         parsed = datetime.datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
@@ -358,12 +407,21 @@ def build_general_knowledge_answer(message: str) -> str:
 
 NEXA_FAQ_ANSWERS = {
     "what is nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "what are you": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "who are you": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "what can you do": "I can answer curriculum and education questions, explain difficult topics, help with homework, support teachers, generate lesson plans and quizzes, and help you find the right FAQ answer.",
     "who created nexa ai": "NEXA AI was developed by the engineering team at PowerX Technologies as part of the EduNeX Digital Education Ecosystem.",
+    "who made you": "NEXA AI was developed by the engineering team at PowerX Technologies as part of the EduNeX Digital Education Ecosystem.",
     "who owns nexa ai": "NEXA AI is part of the EduNeX platform and is managed by its authorized operators and partners.",
     "who is behind your creation": "NEXA AI is being developed under the leadership of Chandana Silva, with Yasaru Rathnasooriya leading the AI Engineering Team at PowerX Technologies. Together with a team of engineers, curriculum specialists, and stakeholders from the National Department of Education, they are building a next-generation AI-powered educational platform designed to transform teaching and learning across Papua New Guinea.",
     "where were you created": "NEXA AI was developed within the PowerX AI Lab for educational use in PNG.",
+    "where are you from": "NEXA AI was developed within the PowerX AI Lab for educational use in PNG.",
     "why were you created": "I was created to improve access to quality education and support teaching and learning across Papua New Guinea. My primary mission is to assist students, teachers, and schools, particularly in remote and underserved communities where access to educational resources, qualified teachers, and learning support may be limited. By providing AI-powered learning assistance, I aim to help ensure that every child has the opportunity to learn, grow, and achieve their full potential.",
     "what is your mission": "To make learning more accessible, engaging, and effective for everyone.",
+    "what's your mission": "To make learning more accessible, engaging, and effective for everyone.",
+    "what's your purpose": "To make learning more accessible, engaging, and effective for everyone.",
+    "tell me about nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
+    "what's nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
     "are you a png ai": "Yes. NEXA AI is designed specifically to support the educational needs of Papua New Guinea.",
     "what makes you different from other ai systems": "NEXA AI is tailored to PNG education, curriculum, and local needs.",
     "what languages can you speak": "I can communicate in English and support other languages as configured.",
@@ -453,11 +511,187 @@ NEXA_FAQ_ANSWERS = {
 
 
 def normalize_faq_query(message: str) -> str:
-    return re.sub(r"[^a-z0-9 ]+", "", (message or "").strip().lower())
+    return re.sub(r"[^a-z0-9 ]+", "", expand_common_contractions(message or "").strip().lower())
+
+
+FAQ_ALIAS_TO_CANONICAL = {
+    "tell me about": "tell me about nexa ai",
+    "what can you tell me about": "tell me about nexa ai",
+    "give me info about": "tell me about nexa ai",
+    "give me information about": "tell me about nexa ai",
+    "who made you": "who made you",
+    "who made": "who made you",
+    "who built you": "who made you",
+    "what do you do": "what can you do",
+    "how do you work": "how does NEXA find answers",
+    "what can you do": "what can you do",
+    "what are you": "what are you",
+    "who are you": "who are you",
+    "what's your mission": "what's your mission",
+    "what's your purpose": "what's your purpose",
+    "where are you from": "where are you from",
+}
+
+
+def canonicalize_faq_query(message: str) -> str:
+    normalized = normalize_faq_query(message)
+    if not normalized:
+        return ""
+
+    for alias, canonical in FAQ_ALIAS_TO_CANONICAL.items():
+        alias_normalized = normalize_faq_query(alias)
+        if normalized == alias_normalized or normalized.startswith(alias_normalized) or alias_normalized in normalized:
+            return canonical
+
+    return normalized
+
+
+def build_faq_candidate_questions(message: str, limit: int = 12) -> List[str]:
+    normalized = canonicalize_faq_query(message)
+    if not normalized:
+        return []
+
+    candidate_scores: Dict[str, int] = {}
+    query_terms = {token for token in normalized.split() if len(token) > 2}
+
+    for question in NEXA_FAQ_ANSWERS.keys():
+        score = 0
+        question_normalized = normalize_faq_query(question)
+
+        if question_normalized == normalized:
+            score += 100
+        if question_normalized.startswith(normalized):
+            score += 30
+        if normalized.startswith(question_normalized):
+            score += 20
+
+        question_terms = {token for token in question_normalized.split() if len(token) > 2}
+        score += len(query_terms & question_terms) * 6
+
+        for alias, canonical in FAQ_ALIAS_TO_CANONICAL.items():
+            alias_normalized = normalize_faq_query(alias)
+            if canonical == question and (alias_normalized in normalized or normalized in alias_normalized):
+                score += 10
+
+        if score > 0:
+            candidate_scores[question] = score
+
+    ordered_candidates = sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))
+    return [question for question, _ in ordered_candidates[:limit]]
+
+
+def score_faq_match(query: str, question: str) -> float:
+    query_text = normalize_faq_query(query)
+    question_text = normalize_faq_query(question)
+    if not query_text or not question_text:
+        return 0.0
+
+    query_tokens = {token for token in query_text.split() if len(token) > 2}
+    question_tokens = {token for token in question_text.split() if len(token) > 2}
+
+    token_overlap = 0.0
+    if query_tokens or question_tokens:
+        token_overlap = len(query_tokens & question_tokens) / max(len(query_tokens | question_tokens), 1)
+
+    sequence_ratio = difflib.SequenceMatcher(None, query_text, question_text).ratio()
+    alias_bonus = 0.0
+
+    for alias, canonical in FAQ_ALIAS_TO_CANONICAL.items():
+        if canonical == question:
+            alias_text = normalize_faq_query(alias)
+            if alias_text and (alias_text in query_text or query_text in alias_text):
+                alias_bonus = 0.12
+                break
+
+    return (sequence_ratio * 0.7) + (token_overlap * 0.3) + alias_bonus
+
+
+def find_best_faq_answer(message: str, minimum_score: float = 0.68) -> str:
+    normalized = canonicalize_faq_query(message)
+    if not normalized:
+        return ""
+
+    best_question = ""
+    best_score = 0.0
+
+    for question in NEXA_FAQ_ANSWERS.keys():
+        score = score_faq_match(normalized, question)
+        if score > best_score:
+            best_score = score
+            best_question = question
+
+    if best_question and best_score >= minimum_score:
+        return NEXA_FAQ_ANSWERS[best_question]
+
+    return ""
+
+
+def expand_common_contractions(text: str) -> str:
+    normalized = (text or "").lower()
+
+    contraction_map = [
+        (r"\bwhat's\b", "what is"),
+        (r"\bwho's\b", "who is"),
+        (r"\bwhere's\b", "where is"),
+        (r"\bwhen's\b", "when is"),
+        (r"\bwhy's\b", "why is"),
+        (r"\bhow's\b", "how is"),
+        (r"\bit's\b", "it is"),
+        (r"\bthat's\b", "that is"),
+        (r"\bthere's\b", "there is"),
+        (r"\bhere's\b", "here is"),
+        (r"\bI'm\b", "i am"),
+        (r"\bI've\b", "i have"),
+        (r"\bI'll\b", "i will"),
+        (r"\bI'd\b", "i would"),
+        (r"\byou're\b", "you are"),
+        (r"\byou've\b", "you have"),
+        (r"\byou'll\b", "you will"),
+        (r"\bwe're\b", "we are"),
+        (r"\bwe've\b", "we have"),
+        (r"\bwe'll\b", "we will"),
+        (r"\bthey're\b", "they are"),
+        (r"\bthey've\b", "they have"),
+        (r"\bthey'll\b", "they will"),
+        (r"\bcan't\b", "can not"),
+        (r"\bcannot\b", "can not"),
+        (r"\bdon't\b", "do not"),
+        (r"\bdoesn't\b", "does not"),
+        (r"\bdidn't\b", "did not"),
+        (r"\bwon't\b", "will not"),
+        (r"\bwouldn't\b", "would not"),
+        (r"\bshouldn't\b", "should not"),
+        (r"\bcouldn't\b", "could not"),
+        (r"\bhasn't\b", "has not"),
+        (r"\bhaven't\b", "have not"),
+        (r"\bhadn't\b", "had not"),
+        (r"\blet's\b", "let us"),
+    ]
+
+    for pattern, replacement in contraction_map:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+
+    phrase_map = [
+        (r"\btell me about\b", "what is"),
+        (r"\bwhat can you tell me about\b", "what is"),
+        (r"\bgive me info about\b", "what is"),
+        (r"\bgive me information about\b", "what is"),
+        (r"\bwho made you\b", "who created you"),
+        (r"\bwho made\b", "who created"),
+        (r"\bwho built you\b", "who created you"),
+        (r"\bwhat do you do\b", "what is your mission"),
+        (r"\bhow do you work\b", "how does NEXA find answers"),
+        (r"\bwhat can you do\b", "what can you help with"),
+    ]
+
+    for pattern, replacement in phrase_map:
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+
+    return normalized
 
 
 def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str:
-    normalized = normalize_faq_query(message)
+    normalized = canonicalize_faq_query(message)
     if not normalized:
         return ""
 
@@ -470,6 +704,10 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
             return answer
         if normalized in question:
             return answer
+
+    fuzzy_answer = find_best_faq_answer(normalized)
+    if fuzzy_answer:
+        return fuzzy_answer
 
     if LANGCHAIN_AVAILABLE and llm is not None:
         recent_history = []
@@ -487,8 +725,10 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
             (
                 "system",
                 "You match the user's question to the single best FAQ entry. "
-                "Use the conversation history when the current question is vague, misspelled, or refers to a previous topic. "
-                "Return only the exact FAQ question text from the list, or NO_MATCH if nothing fits."
+                "Use the conversation history when the current question is vague, misspelled, uses contractions, or refers to a previous topic. "
+                "Treat paraphrases like 'what's' as 'what is', 'tell me about' as 'what is', and 'who made' as 'who created'. "
+                "Return only the exact FAQ question text from the list, or NO_MATCH if nothing fits. "
+                "Prefer a canonical FAQ question that best matches the user's intent rather than repeating the user's wording."
             ),
             (
                 "human",
@@ -496,7 +736,9 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
             ),
         ])
 
-        faq_questions = "\n".join(f"- {question}" for question in NEXA_FAQ_ANSWERS.keys())
+        candidate_questions = build_faq_candidate_questions(message)
+        faq_question_pool = candidate_questions or list(NEXA_FAQ_ANSWERS.keys())
+        faq_questions = "\n".join(f"- {question}" for question in faq_question_pool)
 
         try:
             raw_result = (faq_prompt | llm | StrOutputParser()).invoke({
@@ -504,10 +746,14 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
                 "history": "\n".join(history_lines) if history_lines else "No prior history.",
                 "faq_questions": faq_questions,
             })
-            matched_question = normalize_faq_query(raw_result)
+            matched_question = canonicalize_faq_query(raw_result)
 
             if matched_question in NEXA_FAQ_ANSWERS:
                 return NEXA_FAQ_ANSWERS[matched_question]
+
+            fuzzy_model_answer = find_best_faq_answer(matched_question)
+            if fuzzy_model_answer:
+                return fuzzy_model_answer
         except Exception:
             pass
 
@@ -1372,31 +1618,6 @@ const SHARE_TOKEN = "{safe_token}";
 let SHARED_SESSION_ID = null;
 let isSubmitting = false;
 
-async function saveChatLog(logEntry) {{
-    try {{
-        await fetch('/api/chat-log', {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify(logEntry)
-        }});
-    }} catch (err) {{
-        console.error('Shared log save failed', err);
-    }}
-}}
-
-async function saveSharedLogResponse(logId, userPrompt, assistantResponse) {{
-    const timestamp = new Date().toISOString();
-    await saveChatLog({{
-        log_id: logId,
-        session_id: SHARED_SESSION_ID,
-        user_name: 'External Visitor',
-        user_prompt: userPrompt,
-        nexa_response: assistantResponse,
-        timestamp,
-        stars: 0
-    }});
-}}
-
 function escapeHtml(str) {{
     return String(str || "")
         .replace(/&/g, "&amp;")
@@ -1486,17 +1707,6 @@ async function sendSharedMessage(event) {{
     textarea.value = '';
     document.getElementById('shared-status').textContent = 'Sending message...';
 
-    const logId = `ext-${{Date.now()}}-${{Math.random().toString(36).slice(2,9)}}`;
-    await saveChatLog({{
-        log_id: logId,
-        session_id: SHARED_SESSION_ID,
-        user_name: 'External Visitor',
-        user_prompt: message,
-        nexa_response: '',
-        timestamp: new Date().toISOString(),
-        stars: 0
-    }});
-
     try {{
         const response = await fetch('/chat', {{
             method: 'POST',
@@ -1510,8 +1720,10 @@ async function sendSharedMessage(event) {{
         }}
 
         const assistantResponse = data.response || 'No response received.';
+        if (data.log_id) {{
+            console.log('Shared chat stored with log_id:', data.log_id);
+        }}
         appendSharedMessage(assistantResponse, 'assistant');
-        await saveSharedLogResponse(logId, message, assistantResponse);
         document.getElementById('shared-status').textContent = 'Message sent. You can continue the chat below.';
     }} catch (err) {{
         console.error('Shared chat send failed', err);
@@ -1544,6 +1756,7 @@ class ChatResponse(BaseModel):
     pdf_url: Optional[str] = None
     image_url: Optional[str] = None
     image_id: Optional[str] = None
+    log_id: Optional[str] = None
 
 
 class ChatHistoryResponse(BaseModel):
@@ -1582,11 +1795,45 @@ async def chat_endpoint(request: ChatRequest):
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
 
+    # Create a single log_id for this user -> assistant turn so frontend can attach images/files.
+    user_log_id = str(uuid.uuid4())
+    try:
+        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+        persist_chat_log(
+            log_id=user_log_id,
+            session_id=session_id,
+            user_email=normalized_email,
+            user_name=user_name,
+            user_prompt=(request.message or "").strip(),
+            nexa_response="",
+            pdf_url=None,
+            stars=0,
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
+        )
+    except Exception:
+        # If persistence fails (e.g., DB not available), continue without blocking the chat flow.
+        pass
+
     # Block lesson-plan generation for non-teachers
     lower_msg = (request.message or "").lower()
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
         answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=user_log_id,
+                session_id=session_id,
+                user_email=normalized_email,
+                user_name=user_name,
+                user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(),
+                pdf_url=None,
+                stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
         return ChatResponse(
             response=answer,
             session_id=session_id,
@@ -1594,6 +1841,7 @@ async def chat_endpoint(request: ChatRequest):
             pdf_url=None,
             image_url=None,
             image_id=None,
+            log_id=user_log_id,
         )
 
     try:
@@ -1651,6 +1899,21 @@ async def chat_endpoint(request: ChatRequest):
             if pipe is None:
                 answer = "Your image request was received, but image generation is unavailable in this workspace."
                 record_chat_turn(session_id, "assistant", answer)
+                try:
+                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                    persist_chat_log(
+                        log_id=user_log_id,
+                        session_id=session_id,
+                        user_email=normalized_email,
+                        user_name=user_name,
+                        user_prompt=(request.message or "").strip(),
+                        nexa_response=(answer or "").strip(),
+                        pdf_url=pdf_url,
+                        stars=0,
+                        timestamp=datetime.datetime.now(datetime.timezone.utc),
+                    )
+                except Exception:
+                    pass
                 return ChatResponse(
                     response=answer,
                     session_id=session_id,
@@ -1658,6 +1921,7 @@ async def chat_endpoint(request: ChatRequest):
                     pdf_url=pdf_url,
                     image_url=None,
                     image_id=None
+                    ,log_id=user_log_id
                 )
 
             answer = "Your image is generating..."
@@ -1681,13 +1945,31 @@ async def chat_endpoint(request: ChatRequest):
 
         record_chat_turn(session_id, "assistant", answer)
 
+        # Server-side persistence: update the earlier user log entry with the assistant response
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=user_log_id,
+                session_id=session_id,
+                user_email=normalized_email,
+                user_name=user_name,
+                user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(),
+                pdf_url=pdf_url,
+                stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
         return ChatResponse(
             response=answer,
             session_id=session_id,
             access_role=access_role,
             pdf_url=pdf_url,
             image_url=image_url,
-            image_id=image_id
+            image_id=image_id,
+            log_id=user_log_id,
         )
 
     except Exception as e:
