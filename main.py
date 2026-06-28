@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, HTTPException, UploadFile, File
 import base64
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +23,7 @@ except ModuleNotFoundError:
     mysql.connector = None
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
 except ModuleNotFoundError:
     DDGS = None
 
@@ -404,6 +405,21 @@ def build_general_knowledge_answer(message: str) -> str:
 
     return ""
 
+RAG_WEAK_SIGNALS = (
+    "i don't have", "i do not have", "not in the curriculum",
+    "not mentioned", "cannot find", "can't find", "no information",
+    "does not contain", "doesn't contain", "not provided in",
+    "not available in the", "i'm not sure", "i am not sure",
+    "no relevant information", "unable to find", "the curriculum does not",
+    "the provided excerpts", "out of scope",
+)
+
+def rag_answer_is_weak(answer: str) -> bool:
+    """True when the RAG chain effectively didn't find an answer in the PDFs."""
+    text = (answer or "").strip().lower()
+    if len(text) < 40:
+        return True
+    return any(signal in text for signal in RAG_WEAK_SIGNALS)
 
 NEXA_FAQ_ANSWERS = {
     "what is nexa ai": "NEXA AI is an educational AI assistant designed to support students, teachers, schools, and the Department of Education in Papua New Guinea.",
@@ -690,11 +706,29 @@ def expand_common_contractions(text: str) -> str:
     return normalized
 
 
+def query_is_about_nexa(message: str) -> bool:
+    """FAQ entries are all about the assistant itself. Only treat a message as a
+    potential FAQ hit if it references Nexa or the assistant directly. This stops
+    curriculum questions (Newton's laws, photosynthesis, etc.) from being captured."""
+    text = expand_common_contractions(message or "").lower()
+    self_reference_signals = (
+        "nexa", "you", "your", "yourself", "who made", "who created",
+        "who built", "who owns", "who is behind", "what are you",
+        "tell me about", "this ai", "this assistant", "this bot",
+    )
+    return any(signal in text for signal in self_reference_signals)
+
+
 def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str:
+    # Gate: skip FAQ entirely for questions that are not about Nexa.
+    if not query_is_about_nexa(message):
+        return ""
+
     normalized = canonicalize_faq_query(message)
     if not normalized:
         return ""
 
+    # Exact / substring matches against the FAQ keys.
     for question, answer in NEXA_FAQ_ANSWERS.items():
         if normalized == question:
             return answer
@@ -705,60 +739,15 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
         if normalized in question:
             return answer
 
-    fuzzy_answer = find_best_faq_answer(normalized)
+    # Stricter fuzzy match (was 0.68 — too loose, caused false hits).
+    fuzzy_answer = find_best_faq_answer(normalized, minimum_score=0.82)
     if fuzzy_answer:
         return fuzzy_answer
 
-    if LANGCHAIN_AVAILABLE and llm is not None:
-        recent_history = []
-        if session_id:
-            recent_history = SESSION_CHAT_HISTORY.get(session_id, [])[-6:]
-
-        history_lines = []
-        for item in recent_history:
-            role = (item.get("role") or "").strip().lower()
-            content = (item.get("content") or "").strip()
-            if content:
-                history_lines.append(f"{role}: {content}")
-
-        faq_prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "You match the user's question to the single best FAQ entry. "
-                "Use the conversation history when the current question is vague, misspelled, uses contractions, or refers to a previous topic. "
-                "Treat paraphrases like 'what's' as 'what is', 'tell me about' as 'what is', and 'who made' as 'who created'. "
-                "Return only the exact FAQ question text from the list, or NO_MATCH if nothing fits. "
-                "Prefer a canonical FAQ question that best matches the user's intent rather than repeating the user's wording."
-            ),
-            (
-                "human",
-                "Conversation history:\n{history}\n\nCurrent question: {question}\n\nFAQ questions:\n{faq_questions}"
-            ),
-        ])
-
-        candidate_questions = build_faq_candidate_questions(message)
-        faq_question_pool = candidate_questions or list(NEXA_FAQ_ANSWERS.keys())
-        faq_questions = "\n".join(f"- {question}" for question in faq_question_pool)
-
-        try:
-            raw_result = (faq_prompt | llm | StrOutputParser()).invoke({
-                "question": message or "",
-                "history": "\n".join(history_lines) if history_lines else "No prior history.",
-                "faq_questions": faq_questions,
-            })
-            matched_question = canonicalize_faq_query(raw_result)
-
-            if matched_question in NEXA_FAQ_ANSWERS:
-                return NEXA_FAQ_ANSWERS[matched_question]
-
-            fuzzy_model_answer = find_best_faq_answer(matched_question)
-            if fuzzy_model_answer:
-                return fuzzy_model_answer
-        except Exception:
-            pass
-
+    # NOTE: the old LLM fallback was removed. A small local model frequently
+    # returned a wrong FAQ instead of NO_MATCH, which is exactly what made
+    # "explain three laws of Newton" return the image-generation answer.
     return ""
-
 
 def record_chat_turn(session_id: str, role: str, content: str) -> None:
     if session_id not in SESSION_CHAT_HISTORY:
@@ -1976,6 +1965,85 @@ async def chat_endpoint(request: ChatRequest):
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
 
+
+def gather_web_context(query: str, limit: int = 5) -> str:
+    """Collect plain-text context from Wikipedia + DuckDuckGo for LLM synthesis.
+    Wikipedia is prioritized because it is most reliable for 'who is / what is'
+    factual questions like 'Who is Michael Somare'."""
+    parts = []
+    primary_source = ""
+
+    if wikipedia is not None:
+        try:
+            wikipedia.set_lang("en")
+            hits = wikipedia.search(query, results=3)
+            if hits:
+                page = wikipedia.page(hits[0], auto_suggest=False)
+                summary = wikipedia.summary(page.title, sentences=5, auto_suggest=False)
+                parts.append(f"Wikipedia ({page.title}): {summary}")
+                primary_source = page.url
+        except Exception:
+            pass
+
+    if DDGS is not None:
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=limit, safesearch="moderate"))
+            for item in results:
+                title = (item.get("title") or "").strip()
+                body = (item.get("body") or "").strip()
+                url = (item.get("href") or item.get("url") or "").strip()
+                if body:
+                    parts.append(f"{title}: {body}")
+                    if not primary_source and url:
+                        primary_source = url
+        except Exception:
+            pass
+
+    if not parts:
+        return ""
+
+    context = "\n\n".join(parts)
+    if primary_source:
+        context += f"\n\nMost relevant source URL: {primary_source}"
+    return context
+
+
+def synthesize_web_answer(message: str, access_role: str) -> str:
+    """Fetch web context and have the LLM write a direct, student-friendly answer.
+    Returns '' if nothing usable was found."""
+    query = build_web_results_query(message)
+    context = gather_web_context(query)
+    if not context:
+        return ""
+
+    # No LLM available — degrade gracefully to the cleaned link list.
+    if not (LANGCHAIN_AVAILABLE and llm is not None):
+        return fetch_web_results(query)
+
+    synth_prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            "You are Nexa, an educational assistant for Papua New Guinea. "
+            "Answer the user's question directly and accurately using ONLY the web "
+            "context provided below. Write a clear explanation in your own words in "
+            "clean Markdown. Do NOT invent facts beyond the context. If the topic is "
+            "relevant to Papua New Guinea, mention that relevance. "
+            "Finish with one line exactly like: 'Source: <url>'. "
+            "Audience guidance: {audience}"
+        ),
+        ("human", "Question: {question}\n\nWeb context:\n{context}"),
+    ])
+
+    try:
+        return (synth_prompt | llm | StrOutputParser()).invoke({
+            "question": message,
+            "context": context,
+            "audience": build_role_instruction(access_role),
+        }).strip()
+    except Exception as exc:
+        print(f"Web synthesis failed: {exc}")
+        return fetch_web_results(query)
 
 @app.get("/api/chat-history/{session_id}", response_model=ChatHistoryResponse)
 def get_chat_history(session_id: str):
