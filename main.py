@@ -1,5 +1,5 @@
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 import base64
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -169,6 +169,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 IMAGE_STATUS: Dict[str, str] = {}
 
+SESSION_DOCUMENT_BUFFER: Dict[str, str] = {}
+
 DB_CONFIG = {
     "host": os.getenv("NEXA_DB_HOST", "127.0.0.1"),
     "port": int(os.getenv("NEXA_DB_PORT", "3306")),
@@ -178,7 +180,7 @@ DB_CONFIG = {
 }
 
 TEST_USER_NAME = "Test User"
-
+MAX_DOC_CHARS = 12000 
 
 class ChatLogPayload(BaseModel):
     log_id: str
@@ -237,6 +239,26 @@ def get_conn():
         raise HTTPException(status_code=503, detail="MySQL connector is not installed")
     return mysql.connector.connect(**DB_CONFIG)
 
+def extract_text_from_upload(path: str, filename: str) -> str:
+    name = (filename or "").lower()
+    try:
+        if name.endswith(".pdf") and LANGCHAIN_AVAILABLE:
+            loader = PyPDFLoader(path)
+            pages = loader.load()
+            return "\n\n".join(p.page_content for p in pages)
+        if name.endswith(".txt"):
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read()
+        if name.endswith(".docx"):
+            try:
+                import docx  # python-docx
+                document = docx.Document(path)
+                return "\n".join(p.text for p in document.paragraphs)
+            except ModuleNotFoundError:
+                return ""
+    except Exception as exc:
+        print(f"Text extraction failed: {exc}")
+    return ""
 
 def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optional[str], user_name: str, user_prompt: str, nexa_response: str, pdf_url: Optional[str] = None, stars: int = 0, timestamp: Optional[datetime.datetime] = None) -> bool:
     if mysql.connector is None:
@@ -1282,7 +1304,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+SESSION_DOCUMENTS: Dict[str, Dict[str, str]] = {}
 
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...), session_id: str = Form(None)):
+    filename = file.filename or "upload"
+    dest = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}_{filename}")
+    with open(dest, "wb") as out:
+        out.write(await file.read())
+
+    text = extract_text_from_upload(dest, filename)
+    if not text.strip():
+        raise HTTPException(status_code=422, detail="Could not extract text from this file.")
+
+    if session_id:
+        existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+        combined = (existing + f"\n\n--- Document: {filename} ---\n{text}").strip()
+        SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
+    return {"message": f"'{filename}' uploaded and added to this chat's knowledge.", "chars": len(text)}
 
 @app.on_event("startup")
 def startup_tasks():
@@ -1732,11 +1772,11 @@ loadSharedChat();
     ''')
 
 
-# ====================== CHAT ======================
 class ChatRequest(BaseModel):
     message: str
     user_email: Optional[str] = None
     session_id: Optional[str] = None
+    reply_context: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -1772,6 +1812,8 @@ class ChatSessionSearchResponse(BaseModel):
     user_email: str
     query: str
     sessions: List[ChatSessionSearchSummary]
+
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -1836,27 +1878,58 @@ async def chat_endpoint(request: ChatRequest):
     try:
         config = {"configurable": {"session_id": session_id}}
 
+        # ============ ANSWER RESOLUTION: FAQ -> explicit web -> RAG -> web fallback ============
         faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
         if faq_answer:
             answer = faq_answer
         else:
-            web_answer = build_general_knowledge_answer(request.message)
-            if web_answer:
-                answer = web_answer
+            # Explicit "search the web" / "wikipedia ..." requests still go straight to web.
+            explicit_web = build_general_knowledge_answer(request.message)
+            if explicit_web:
+                answer = explicit_web
             elif conversational_rag_chain is None:
-                answer = "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+                # No RAG available — try web synthesis before giving up.
+                answer = synthesize_web_answer(request.message, access_role) or (
+                    "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+                )
             else:
+                # Build the augmented question: inject reply context and any uploaded document.
+                doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+                augmented_input = request.message
+
+                if request.reply_context:
+                    augmented_input = (
+                        f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                        f"Their follow-up: {request.message}"
+                    )
+
+                if doc_context:
+                    augmented_input = (
+                        f"Use the following document the user uploaded in this session when relevant:\n"
+                        f"{doc_context}\n\n"
+                        f"User question: {augmented_input}"
+                    )
+
+                # 1) Try the curriculum RAG chain first.
                 result = conversational_rag_chain.invoke(
-                    {"input": request.message, "audience": build_role_instruction(access_role)},
+                    {"input": augmented_input, "audience": build_role_instruction(access_role)},
                     config=config
                 )
-                answer = result.get("answer") or "No response"
+                rag_answer = (result.get("answer") or "").strip()
+
+                # 2) If the PDFs didn't cover it (and there's no uploaded doc driving the
+                #    answer), fall back to a web-synthesized answer.
+                if rag_answer_is_weak(rag_answer) and not doc_context:
+                    web_answer = synthesize_web_answer(request.message, access_role)
+                    answer = web_answer or rag_answer or "No response"
+                else:
+                    answer = rag_answer or "No response"
 
         pdf_url = None
         image_url = None
         image_id = None
 
-        # ================= PDF GENERATION (UNCHANGED) =================
+        # ================= PDF GENERATION =================
         if "pdf" in request.message.lower():
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"lesson_{ts}.pdf"
@@ -1882,7 +1955,7 @@ async def chat_endpoint(request: ChatRequest):
                     print(f"Fallback PDF generation failed: {fallback_error}")
                     pdf_url = None
 
-        # ================= IMAGE GENERATION (FIXED + SAFE) =================
+        # ================= IMAGE GENERATION =================
         if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual"]):
 
             if pipe is None:
@@ -1909,22 +1982,21 @@ async def chat_endpoint(request: ChatRequest):
                     access_role=access_role,
                     pdf_url=pdf_url,
                     image_url=None,
-                    image_id=None
-                    ,log_id=user_log_id
+                    image_id=None,
+                    log_id=user_log_id,
                 )
 
             answer = "Your image is generating..."
 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
             filename = f"image_{ts}.png"
             path = os.path.join(IMAGE_OUTPUT_DIR, filename)
 
-            image_id = ts  # ✅ IMPORTANT for frontend polling
+            image_id = ts  # IMPORTANT for frontend polling
 
             prompt = f"{request.message}. educational diagram, clean labels, high quality, textbook style"
 
-            # 🔥 NON-BLOCKING BACKGROUND THREAD (UNCHANGED LOGIC)
+            # NON-BLOCKING BACKGROUND THREAD
             threading.Thread(
                 target=generate_image_task,
                 args=(prompt, path, image_id)
@@ -1964,7 +2036,6 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
-
 
 def gather_web_context(query: str, limit: int = 5) -> str:
     """Collect plain-text context from Wikipedia + DuckDuckGo for LLM synthesis.

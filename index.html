@@ -1428,8 +1428,19 @@ function classifyPrompt(text) {
     return { allowed: true, category: null, reply: null };
 }
 
+const OUTPUT_BLOCKED_CATEGORIES = [
+    'sexual content',
+    'violence or weapons',
+    'self-harm',
+    'hate or harassment',
+    'drugs or substances'
+];
+
 function containsUnsafeModelOutput(text) {
-    return guardrailRules.some(rule => rule.pattern.test(text || ''));
+    const value = text || '';
+    return guardrailRules.some(rule =>
+        OUTPUT_BLOCKED_CATEGORIES.includes(rule.name) && rule.pattern.test(value)
+    );
 }
 
 function pushChatLog(logEntry) {
@@ -1494,6 +1505,7 @@ async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }
         const imageResponse = await fetch(imageUrl);
         if (!imageResponse.ok) {
             throw new Error(`Image fetch returned ${imageResponse.status}`);
+
         }
 
         const imageBlob = await imageResponse.blob();
@@ -1795,25 +1807,37 @@ document.body.appendChild(fileInput);
 
 attachBtn.addEventListener('click', () => fileInput.click());
 
-fileInput.addEventListener('change', async (e) => {
+let stagedFile = null;
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    addMessage(`Uploading: ${file.name}`, true);
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-        const res = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-            throw new Error(data.detail || data.error || `Server returned ${res.status}`);
-        }
-        addMessage(data.message || "File uploaded successfully!", false);
-    } catch (err) {
-        addMessage("Failed to upload file.", false);
-    }
+    stagedFile = file;
+    showAttachmentChip(file.name);
+    userInput.focus();
 });
 
+function showAttachmentChip(name) {
+    let chip = document.getElementById('attachment-chip');
+    if (!chip) {
+        chip = document.createElement('div');
+        chip.id = 'attachment-chip';
+        chip.style.cssText = 'display:flex;align-items:center;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#3730a3;';
+        document.getElementById('input-area').insertBefore(chip, document.getElementById('input-area').firstChild);
+    }
+    chip.innerHTML = `<i class="fa-solid fa-paperclip"></i><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span><button id="attachment-chip-close" style="background:none;border:none;cursor:pointer;color:#64748b;">✕</button>`;
+    chip.style.display = 'flex';
+    document.getElementById('attachment-chip-close').onclick = clearStagedFile;
+}
+
+function clearStagedFile() {
+    stagedFile = null;
+    fileInput.value = '';
+    const chip = document.getElementById('attachment-chip');
+    if (chip) chip.style.display = 'none';
+}
 
 function generateSessionId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -1825,15 +1849,16 @@ function generateSessionId() {
 }
 
 async function sendMessage() {
-	let text = userInput.value.trim();
-    if (!text) return;
+    let text = userInput.value.trim();
+    if (!text && !stagedFile) return;
+    if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
 
-    // Prepend the quoted Nexa response when the user is replying to one.
+    // Capture the quoted Nexa response separately (don't pollute the question text).
+    let replyContext = null;
     if (pendingReplyText) {
-        const quoted = pendingReplyText.length > 300
-            ? pendingReplyText.slice(0, 300).trim() + '…'
+        replyContext = pendingReplyText.length > 500
+            ? pendingReplyText.slice(0, 500).trim() + '…'
             : pendingReplyText;
-        text = `↩ Replying to Nexa: "${quoted}"\n\n${text}`;
         clearReplyContext();
     }
 
@@ -1845,12 +1870,12 @@ async function sendMessage() {
     }
 
     const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
-    
-	if (!sessionId) {
-    sessionId = generateSessionId();
-    localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
-    localStorage.setItem('nexa_session_id', sessionId);
-}    
+
+    if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+        localStorage.setItem('nexa_session_id', sessionId);
+    }
 
     localStorage.setItem('nexa_user_name', userName);
     localStorage.setItem('nexa_user_email', userEmail);
@@ -1907,6 +1932,7 @@ async function sendMessage() {
         }
 
         userInput.value = '';
+        clearStagedFile();
         return;
     }
 
@@ -1930,6 +1956,23 @@ async function sendMessage() {
     });
 
     userInput.value = "";
+
+    // If a document is staged, upload it first so its text enters the session buffer.
+    if (stagedFile) {
+        const fd = new FormData();
+        fd.append('file', stagedFile);
+        fd.append('session_id', sessionId);
+        try {
+            const up = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
+            const upData = await up.json().catch(() => ({}));
+            if (!up.ok) throw new Error(upData.detail || 'Upload failed');
+        } catch (err) {
+            addMessage('⚠️ Could not read the attached document.', false);
+            clearStagedFile();
+            return;
+        }
+        clearStagedFile();
+    }
 
     // Track user message count & trigger feedback window ONCE after 2 prompts
     userMessageCount++;
@@ -1966,7 +2009,8 @@ async function sendMessage() {
             body: JSON.stringify({
                 message: text,
                 user_email: userEmail,
-                session_id: sessionId
+                session_id: sessionId,
+                reply_context: replyContext
             })
         });
 
@@ -2000,61 +2044,40 @@ async function sendMessage() {
             return;
         }
 
-        // ================= IMAGE HANDLING (FIXED) =================
-	if (data.image_url && data.image_id) {
+        // ================= IMAGE HANDLING =================
+        if (data.image_url && data.image_id) {
 
-    addMessage(data.response, false, null, false, pairId, { logId, userName });
-    await updateLogResponse(logId, data.response || '', data.pdf_url || null);
+            addMessage(data.response, false, null, false, pairId, { logId, userName });
+            await updateLogResponse(logId, data.response || '', data.pdf_url || null);
 
-    const imageUrl = data.image_url;
-    const imageId = data.image_id;
+            const imageUrl = data.image_url;
+            const imageId = data.image_id;
 
-    const interval = setInterval(async () => {
+            const interval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`/image-status/${imageId}`);
+                    const statusData = await statusRes.json();
+                    console.log("IMAGE STATUS:", statusData);
 
-        try {
+                    if (statusData.status === "ready") {
+                        clearInterval(interval);
+                        await saveImageBase64ToDatabase({
+                            logId,
+                            userName,
+                            imageUrl,
+                            filename: imageUrl.split('/').pop() || `image_${imageId}.png`
+                        });
+                        addMessage("🖼️ Generated Image:", false, imageUrl, false, pairId);
+                    }
 
-            const statusRes = await fetch(`/image-status/${imageId}`);
-
-            const statusData = await statusRes.json();
-
-            console.log("IMAGE STATUS:", statusData);
-
-            if (statusData.status === "ready") {
-
-                clearInterval(interval);
-
-                await saveImageBase64ToDatabase({
-                    logId,
-                    userName,
-                    imageUrl,
-                    filename: imageUrl.split('/').pop() || `image_${imageId}.png`
-                });
-
-                addMessage(
-                    "🖼️ Generated Image:",
-                    false,
-                    imageUrl,
-                    false,
-                    pairId
-                );
-            }
-
-            if (statusData.status === "failed") {
-
-                clearInterval(interval);
-
-                addMessage(
-                    "❌ Image generation failed.",
-                    false
-                );
-            }
-
-        } catch (err) {
-
-            console.log("Polling error:", err);
-        }
-
-    }, 2000);
+                    if (statusData.status === "failed") {
+                        clearInterval(interval);
+                        addMessage("❌ Image generation failed.", false);
+                    }
+                } catch (err) {
+                    console.log("Polling error:", err);
+                }
+            }, 2000);
 
         } else {
             // normal text response
@@ -2066,15 +2089,11 @@ async function sendMessage() {
 
     } catch (err) {
         document.getElementById("typing-msg")?.remove();
-
         console.error(err);
-
         addMessage(err?.message ? `⚠️ ${err.message}` : "⚠️ Sorry, I'm having trouble connecting. Please try again.", false);
-
         await updateLogResponse(logId, 'Connection error: response not received.');
     }
 }
-
 
 async function shareCurrentChat() {
     const userEmail = normalizeEmail(userEmailInput.value);
