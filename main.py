@@ -1151,13 +1151,14 @@ def infer_access_role(email: Optional[str]) -> str:
         raise HTTPException(status_code=400, detail="A valid email address is required")
 
     local_part, _, domain = normalized_email.partition("@")
-    # Use explicit local-part markers used by EduNex accounts:
-    # - teacher accounts contain ".education" in the local-part (e.g. teacher.education@...)
-    # - student accounts contain ".edunex" in the local-part (e.g. student.edunex@...)
-    if ".education" in local_part:
+    # Prefer the domain-based EduNex account rules:
+    # - teacher accounts use the education domain marker (e.g. yasaru.rathnasooriya@education.edu.pg)
+    # - student accounts use the edunex domain marker (e.g. yasaru.rathnasooriya@edunex.edu.pg)
+    # Keep the older local-part markers as a fallback so existing accounts still work.
+    if domain.startswith("education.") or ".education" in local_part:
         return "teacher"
 
-    if ".edunex" in local_part:
+    if domain.startswith("edunex.") or ".edunex" in local_part:
         return "student"
 
     # Fallback: default to student

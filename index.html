@@ -977,13 +977,16 @@ window.addEventListener('load', notifyParentSize);
 
 function inferAccessRoleFromEmail(email) {
     const normalizedEmail = normalizeEmail(email);
-    const localPart = normalizedEmail.split('@')[0] || '';
-    // EduNex local-part rules: ".education" => teacher, ".edunex" => student
-    if (localPart.includes('.education')) {
+    const [localPart, domain = ''] = normalizedEmail.split('@');
+    // Prefer the domain-based EduNex account rules:
+    // - teacher accounts use the education domain marker (e.g. yasaru.rathnasooriya@education.edu.pg)
+    // - student accounts use the edunex domain marker (e.g. yasaru.rathnasooriya@edunex.edu.pg)
+    // Keep the older local-part markers as a fallback so existing accounts still work.
+    if (domain.startsWith('education.') || localPart.includes('.education')) {
         return 'teacher';
     }
 
-    if (localPart.includes('.edunex')) {
+    if (domain.startsWith('edunex.') || localPart.includes('.edunex')) {
         return 'student';
     }
 
