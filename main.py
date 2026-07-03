@@ -1900,16 +1900,23 @@ class ChatRequest(BaseModel):
     user_email: Optional[str] = None
     session_id: Optional[str] = None
     reply_context: Optional[str] = None
+    staged_file_name: Optional[str] = None
     url: Optional[str] = None   # NEW: web page to read
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
     access_role: Optional[str] = None
+    status_message: Optional[str] = None
     pdf_url: Optional[str] = None
     image_url: Optional[str] = None
     image_id: Optional[str] = None
     log_id: Optional[str] = None
+
+
+class ChatStatusResponse(BaseModel):
+    status_message: str
+    action: str
 
 
 class ChatHistoryResponse(BaseModel):
@@ -1942,6 +1949,39 @@ class UrlReadRequest(BaseModel):
     question: Optional[str] = None
     user_email: Optional[str] = None
     session_id: Optional[str] = None
+
+
+def infer_chat_status(message: str, access_role: str, staged_file_name: Optional[str] = None) -> tuple[str, str]:
+    lower_msg = (message or "").lower()
+    lower_file = (staged_file_name or "").lower()
+
+    if staged_file_name:
+        return ("Processing document...", "document")
+
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")):
+        if access_role != "teacher":
+            return ("Checking lesson plan access...", "lesson-plan-blocked")
+        return ("Generating lesson plan...", "lesson-plan")
+
+    if "short notes" in lower_msg or "short note" in lower_msg or "summarize" in lower_msg:
+        return ("Generating short notes...", "short-notes")
+
+    if "pdf" in lower_msg:
+        return ("Generating PDF...", "pdf")
+
+    if any(keyword in lower_msg for keyword in ["image", "diagram", "draw", "visual"]):
+        return ("Generating image...", "image")
+
+    if "wikipedia" in lower_msg or "wiki" in lower_msg:
+        return ("Searching Wikipedia...", "wikipedia")
+
+    if looks_like_web_query(message):
+        return ("Searching the web...", "web")
+
+    if lower_file.endswith((".pdf", ".docx", ".txt")):
+        return ("Processing document...", "document")
+
+    return ("Thinking...", "general")
 
 
 @app.post("/read-url", response_model=ChatResponse)
@@ -2006,8 +2046,16 @@ async def read_url_endpoint(request: UrlReadRequest):
 
     return ChatResponse(
         response=answer, session_id=session_id, access_role=access_role,
+        status_message="Reading web page...",
         pdf_url=None, image_url=None, image_id=None, log_id=user_log_id,
     )
+
+
+@app.post("/chat-status", response_model=ChatStatusResponse)
+async def chat_status_endpoint(request: ChatRequest):
+    access_role = infer_access_role(request.user_email)
+    status_message, action = infer_chat_status(request.message, access_role, request.staged_file_name)
+    return ChatStatusResponse(status_message=status_message, action=action)
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -2041,6 +2089,7 @@ async def chat_endpoint(request: ChatRequest):
 
     # Block lesson-plan generation for non-teachers
     lower_msg = (request.message or "").lower()
+    status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
         answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
@@ -2063,6 +2112,7 @@ async def chat_endpoint(request: ChatRequest):
             response=answer,
             session_id=session_id,
             access_role=access_role,
+            status_message=status_message,
             pdf_url=None,
             image_url=None,
             image_id=None,
@@ -2207,7 +2257,7 @@ async def chat_endpoint(request: ChatRequest):
                     log_id=user_log_id,
                 )
 
-            answer = "Your image is generating..."
+            answer = "Generating image..."
 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_{ts}.png"
@@ -2248,6 +2298,7 @@ async def chat_endpoint(request: ChatRequest):
             response=answer,
             session_id=session_id,
             access_role=access_role,
+            status_message=status_message,
             pdf_url=pdf_url,
             image_url=image_url,
             image_id=image_id,

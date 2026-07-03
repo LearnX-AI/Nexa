@@ -912,6 +912,7 @@
 <script>
 // ==================== CONFIG ====================
 const API_URL = "/chat";
+const CHAT_STATUS_URL = "/chat-status";
 const UPLOAD_URL = "/upload";
 const LOG_API_URL = "/api/chat-log";
 const RATING_API_URL = "/api/chat-rating";
@@ -1885,6 +1886,7 @@ async function sendMessage() {
     let text = userInput.value.trim();
     if (!text && !stagedFile) return;
     if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
+    const stagedFileName = stagedFile ? stagedFile.name : null;
 
     // Capture the quoted Nexa response separately (don't pollute the question text).
     let replyContext = null;
@@ -2022,12 +2024,33 @@ async function sendMessage() {
         }, 800);
     }
 
+    let loadingMessage = 'Thinking...';
+    try {
+        const statusRes = await fetch(CHAT_STATUS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: text,
+                user_email: userEmail,
+                session_id: sessionId,
+                reply_context: replyContext,
+                staged_file_name: stagedFileName
+            })
+        });
+        const statusData = await statusRes.json();
+        if (statusRes.ok && statusData?.status_message) {
+            loadingMessage = statusData.status_message;
+        }
+    } catch (err) {
+        console.warn('Status preview failed', err);
+    }
+
     // typing indicator
     const typing = document.createElement("div");
     typing.id = "typing-msg";
     typing.innerHTML = `
         <div class="bot-message">
-            ⏳ Nexa is thinking / generating image...
+            ${loadingMessage}
         </div>
     `;
     messagesContainer.appendChild(typing);
@@ -2043,7 +2066,8 @@ async function sendMessage() {
                 message: text,
                 user_email: userEmail,
                 session_id: sessionId,
-                reply_context: replyContext
+                reply_context: replyContext,
+                staged_file_name: stagedFileName
             })
         });
 
