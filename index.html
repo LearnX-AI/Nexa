@@ -763,6 +763,32 @@
             #feedback-submit-btn { padding: 16px; font-size: 16px; }
             #send-button, #attach-btn { min-width: 48px; min-height: 48px; }
         }
+	.nexa-search-results { margin: 4px 0; }
+.nexa-search-head {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #64748b; margin-bottom: 10px;
+}
+.nexa-search-card {
+    border: 1px solid #e2e8f0; border-left: 3px solid #0ea5e9;
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+    background: #fff; transition: box-shadow 0.15s, transform 0.15s;
+}
+.nexa-search-card:hover {
+    box-shadow: 0 8px 20px -12px rgba(15,23,42,0.35);
+    transform: translateY(-1px);
+}
+.nexa-search-title {
+    display: block; font-size: 15px; font-weight: 600;
+    color: #1d4ed8; text-decoration: none; line-height: 1.35;
+}
+.nexa-search-title:hover { text-decoration: underline; }
+.nexa-search-domain { font-size: 11.5px; color: #16a34a; margin: 2px 0 6px; }
+.nexa-search-snippet { font-size: 13px; color: #475569; line-height: 1.55; }
+.nexa-search-more {
+    display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600;
+    color: #0ea5e9; text-decoration: none;
+}
+.nexa-search-more:hover { text-decoration: underline; }
     </style>
 </head>
 <body class="font-sans" style="background:transparent;">
@@ -858,6 +884,9 @@
             <div class="flex items-center gap-2">
                 <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
                     <i class="fa-solid fa-paperclip text-lg"></i>
+                </button>
+		<button id="url-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-sky-600 hover:bg-gray-100 rounded-xl transition-all" title="Read a web page">
+                    <i class="fa-solid fa-globe text-lg"></i>
                 </button>
                 <div class="input-copy-wrapper">
                     <input id="user-input" type="text"
@@ -1538,10 +1567,11 @@ async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }
     }
 }
 
-// ==================== MARKDOWN ====================
 function renderMarkdown(text) {
     const safeText = typeof text === 'string' ? text : '';
-    return marked.parse(safeText, { breaks: true, gfm: true });
+    const parsed = marked.parse(safeText, { breaks: true, gfm: true });
+    // Links live inside an iframe — force them to open in a new browser tab.
+    return parsed.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ');
 }
 
 // ==================== ADD MESSAGE ====================
@@ -2217,6 +2247,55 @@ undoLogBtn.addEventListener('click', async () => {
         addMessage('Log removed locally but failed to remove from database.', false);
     }
 });
+
+document.getElementById('url-btn').addEventListener('click', async () => {
+    const userEmail = normalizeEmail(userEmailInput.value);
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email first.', false);
+        userEmailInput.focus();
+        return;
+    }
+    if (inferAccessRoleFromEmail(userEmail) === 'none') {
+        addMessage('This account does not have access to Nexa.', false);
+        return;
+    }
+
+    const url = prompt('Enter a web page URL for Nexa to read:');
+    if (!url || !url.trim()) return;
+
+    const question = prompt('What should Nexa do with this page?\n(Leave blank for a summary)') || '';
+
+    if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+    }
+
+    const pairId = 'p' + Date.now();
+    addMessage(`🌐 Read: ${url}${question ? '\n\n' + question : ''}`, true, null, false, pairId);
+
+    const typing = document.createElement('div');
+    typing.id = 'typing-msg';
+    typing.innerHTML = `<div class="bot-message">🌐 Nexa is reading the page...</div>`;
+    messagesContainer.appendChild(typing);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const res = await fetch('/read-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url.trim(), question: question.trim(), user_email: userEmail, session_id: sessionId })
+        });
+        const data = await res.json();
+        document.getElementById('typing-msg')?.remove();
+        sessionId = data.session_id || sessionId;
+        addMessage(data.response || 'No response.', false, null, false, pairId, { logId: data.log_id, userName: getDisplayNameFromEmail(userEmail) });
+        refreshHistoryIfVisible();
+    } catch (err) {
+        document.getElementById('typing-msg')?.remove();
+        addMessage('⚠️ Could not read that page. Please check the URL and try again.', false);
+    }
+});
+
 
 updateStackSizeLabel();
 loadChatHistory();

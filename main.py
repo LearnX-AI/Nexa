@@ -1,4 +1,5 @@
-
+import requests
+from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 import base64
 from fastapi.middleware.cors import CORSMiddleware
@@ -146,10 +147,32 @@ def save_text_to_pdf(path: str, text: str) -> None:
 WORKSPACE_DIR = os.path.dirname(__file__)
 
 PDF_PATHS = [
-    os.path.join(WORKSPACE_DIR, "G6_Science_Textbook_removed_compressed (1).pdf"),
     os.path.join(WORKSPACE_DIR, "gr12Ente3.pdf"),
     os.path.join(WORKSPACE_DIR, "gr13Phyte3.pdf"),
-    os.path.join(WORKSPACE_DIR, "Gr12te3.pdf")
+    os.path.join(WORKSPACE_DIR, "Gr12te3.pdf"),
+
+    # STEM Biology
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGYTG.pdf"),
+
+    # STEM Chemistry
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-Syllabus.pdf"),
+
+    # STEM Engineering
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-TG.pdf"),
+
+    # STEM Technology
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-TG.pdf"),
 ]
 
 INDEX_PATH = os.path.join(WORKSPACE_DIR, "index.html")
@@ -238,6 +261,34 @@ def get_conn():
     if mysql.connector is None:
         raise HTTPException(status_code=503, detail="MySQL connector is not installed")
     return mysql.connector.connect(**DB_CONFIG)
+
+
+
+def fetch_page_text(url: str, max_chars: int = 8000) -> str:
+    """Fetch a web page and return clean readable text (scripts/styles stripped)."""
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; NexaBot/1.0; educational assistant)"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+    except Exception as exc:
+        return f"__ERROR__ Could not fetch the page: {exc}"
+
+    ctype = resp.headers.get("Content-Type", "")
+    if "html" not in ctype and "text" not in ctype:
+        return "__ERROR__ That link is not a readable web page (it may be a file or media)."
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for tag in soup(["script", "style", "noscript", "header", "footer", "nav", "aside"]):
+        tag.decompose()
+
+    title = (soup.title.string.strip() if soup.title and soup.title.string else "")
+    text = " ".join(soup.get_text(separator=" ").split())
+    if not text:
+        return "__ERROR__ The page had no readable text content."
+
+    text = text[:max_chars]
+    return f"PAGE TITLE: {title}\n\nPAGE CONTENT:\n{text}"
+
 
 def extract_text_from_upload(path: str, filename: str) -> str:
     name = (filename or "").lower()
@@ -360,27 +411,37 @@ def fetch_web_results(query: str, limit: int = 5) -> str:
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=limit, safesearch="moderate"))
     except Exception as exc:
-        return f"I could not fetch web results right now: {escape_markdown(str(exc))}"
+        return f"I could not fetch web results right now: {_clean_md_text(str(exc))}"
 
     if not results:
         return (
-            f"I could not fetch live web results for **{escape_markdown(query)}** right now. "
+            f"I could not fetch live web results for **{_clean_md_text(query)}** right now. "
             "You can ask again with a more specific phrase, or try a Wikipedia lookup instead."
         )
 
-    lines = [f"# Search Results for {escape_markdown(query)}", ""]
-    for index, item in enumerate(results, start=1):
-        title = escape_markdown(item.get("title") or "Untitled result")
-        snippet = escape_markdown(item.get("body") or "No snippet available.")
-        url = item.get("href") or item.get("url") or ""
-        link = f"[{title}]({url})" if url else title
-        lines.append(f"{index}. {link}")
-        lines.append(f"   - {snippet}")
+    cards = [f'<div class="nexa-search-results">'
+             f'<div class="nexa-search-head">Web results for &ldquo;{html.escape(query)}&rdquo;</div>']
 
-    lines.append("")
-    lines.append("These are web search results. If you want, I can also open Wikipedia-style summaries for the same topic.")
-    return "\n".join(lines)
+    for item in results:
+        title = html.escape((item.get("title") or "Untitled result").strip())
+        snippet = html.escape((item.get("body") or "").strip())
+        url = (item.get("href") or item.get("url") or "").strip()
+        safe_url = html.escape(url, quote=True)
+        try:
+            domain = html.escape(url.split("/")[2]) if "//" in url else ""
+        except Exception:
+            domain = ""
 
+        cards.append(f'''
+<div class="nexa-search-card">
+  <a class="nexa-search-title" href="{safe_url}" target="_blank" rel="noopener noreferrer">{title}</a>
+  <div class="nexa-search-domain">{domain}</div>
+  <div class="nexa-search-snippet">{snippet}</div>
+  <a class="nexa-search-more" href="{safe_url}" target="_blank" rel="noopener noreferrer">Read more &rarr;</a>
+</div>''')
+
+    cards.append("</div>")
+    return "\n".join(cards)
 
 def fetch_wikipedia_summary(query: str) -> str:
     if wikipedia is None:
@@ -1215,8 +1276,69 @@ if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
     ])
 
     history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
-# ====================== YOUR SYSTEM PROMPT (UNCHANGED) ======================
-system_prompt = ( "You are an expert educator and curriculum designer. " "Use ONLY the provided curriculum excerpts and previous conversation context " "to create high-quality, engaging lesson plans. " "Always stay faithful to the curriculum PDFs. " "\n\n" "- If the user asks a simple question (What is..., Explain..., Define..., etc.), give a **clear, direct, and student-friendly explanation**. Do NOT use >" "- Only use the full lesson plan structure when the user explicitly says 'lesson plan', 'create a lesson plan', 'teaching plan', or 'make a lesson'.\n\n" "Output **everything in clean Markdown format** so it can be easily converted to PDF:\n" "- Start with a single # Main Title\n" "- Use ## for major sections (Objectives, Materials, Activities, etc.)\n" "- Use ### for subsections\n" "- Use - or * for bullet points\n" "- Use 1. 2. 3. for numbered steps\n" "- Use **bold** and *italic* where appropriate\n" "- Use Markdown tables when showing rubrics, materials lists, or schedules\n" "\n" "Required structure:\n" "Grade\n" "Subject\n" "Topic\n" "Learning Objectives (aligned to curriculum)\n" "Duration\n" "Materials\n" "Step-by-step Activities\n" "Differentiation strategies\n" "Assessment methods\n" "Extensions / Homework\n\n" "Audience guidance: {audience}\n\n" "Curriculum context: {context}\n\n" "Chat history (for continuity): {chat_history}" )
+
+
+system_prompt = (
+    "You are an expert curriculum designer and master educator creating professional, "
+    "classroom-ready lesson plans for any subject area. "
+    "Use the provided curriculum excerpts and prior conversation context to ground your content, "
+    "and stay faithful to the curriculum where it applies.\n\n"
+
+    "RESPONSE MODE:\n"
+    "- If the user asks a simple question (What is..., Explain..., Define...), give a clear, direct, "
+    "student-friendly explanation. Do NOT produce a lesson plan.\n"
+    "- Only produce the full lesson plan when the user explicitly asks for a 'lesson plan', "
+    "'teaching plan', or 'make a lesson'.\n\n"
+
+    "When producing a LESSON PLAN, write a lengthy, detailed, well-structured, professional document "
+    "in clean Markdown, following this exact structure:\n\n"
+
+    "# [Lesson Title]\n\n"
+    "## Overview\n"
+    "A concise paragraph describing the lesson, its purpose, and how it fits the wider topic.\n\n"
+    "## Lesson Details\n"
+    "Present as a Markdown table with rows for: Grade / Level, Subject, Topic, Duration, "
+    "Prerequisite Knowledge.\n\n"
+    "## Learning Objectives\n"
+    "4 to 6 measurable objectives written as 'By the end of this lesson, students will be able to...', "
+    "aligned to the curriculum where relevant.\n\n"
+    "## Key Concepts and Vocabulary\n"
+    "A bulleted list of the essential terms with a short definition for each.\n\n"
+    "## Lesson Structure\n"
+    "A detailed, time-sequenced breakdown using these subsections:\n"
+    "### Introduction / Engagement\n"
+    "### Direct Instruction / Explanation\n"
+    "### Guided Practice\n"
+    "### Independent Practice\n"
+    "### Closure / Consolidation\n"
+    "For each subsection give an estimated time, what the teacher does, and what students do.\n\n"
+    "## Differentiation\n"
+    "Concrete strategies for three groups: support for struggling learners, core activities, "
+    "and extension for advanced learners.\n\n"
+    "## Assessment\n"
+    "Both formative checks during the lesson and a summative task, with clear success criteria. "
+    "Include a short Markdown rubric table where appropriate.\n\n"
+    "## Extension and Homework\n"
+    "Meaningful follow-up tasks that reinforce the objectives.\n\n"
+    "## Teacher Notes\n"
+    "Practical guidance: common misconceptions, pacing tips, and safety or sensitivity notes if relevant.\n\n"
+
+    "FORMATTING RULES:\n"
+    "- Start with a single # title, use ## for sections and ### for subsections.\n"
+    "- Use bullet points, numbered steps, **bold**, and *italic* purposefully.\n"
+    "- Use Markdown tables for the lesson details, rubrics, and any structured data.\n"
+    "- Be thorough and specific to the requested subject; avoid generic filler.\n\n"
+
+    "At the very end of every lesson plan, on its own line, append exactly:\n"
+    "'---\\n*This content is generated by Nexa AI. Please review and adapt it to your classroom "
+    "context, verify accuracy against your official curriculum, and use professional judgement "
+    "before delivery.*'\n\n"
+
+    "Audience guidance: {audience}\n\n"
+    "Curriculum context: {context}\n\n"
+    "Chat history (for continuity): {chat_history}"
+)
+
 
 if LANGCHAIN_AVAILABLE and llm is not None:
     qa_prompt = ChatPromptTemplate.from_messages([
@@ -1778,6 +1900,7 @@ class ChatRequest(BaseModel):
     user_email: Optional[str] = None
     session_id: Optional[str] = None
     reply_context: Optional[str] = None
+    url: Optional[str] = None   # NEW: web page to read
 
 class ChatResponse(BaseModel):
     response: str
@@ -1814,7 +1937,77 @@ class ChatSessionSearchResponse(BaseModel):
     query: str
     sessions: List[ChatSessionSearchSummary]
 
+class UrlReadRequest(BaseModel):
+    url: str
+    question: Optional[str] = None
+    user_email: Optional[str] = None
+    session_id: Optional[str] = None
 
+
+@app.post("/read-url", response_model=ChatResponse)
+async def read_url_endpoint(request: UrlReadRequest):
+    access_role = infer_access_role(request.user_email)
+    normalized_email = normalize_email_address(request.user_email)
+    session_id = request.session_id or str(uuid.uuid4())
+
+    url = (request.url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        url = "https://" + url
+
+    page_text = fetch_page_text(url)
+    user_log_id = str(uuid.uuid4())
+
+    if page_text.startswith("__ERROR__"):
+        answer = page_text.replace("__ERROR__", "").strip()
+        return ChatResponse(
+            response=answer, session_id=session_id, access_role=access_role,
+            pdf_url=None, image_url=None, image_id=None, log_id=user_log_id,
+        )
+
+    # Store the page in the session document buffer so later questions can reference it too.
+    existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+    combined = (existing + f"\n\n--- Web page: {url} ---\n{page_text}").strip()
+    SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
+    question = (request.question or "").strip() or "Summarize this web page clearly for a student."
+
+    if LANGCHAIN_AVAILABLE and llm is not None:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are Nexa, an educational assistant. Read the web page content provided and "
+             "answer the user's request accurately in clean Markdown, using only that content. "
+             "Do not invent details. Audience guidance: {audience}"),
+            ("human", "User request: {question}\n\nWeb page content:\n{page}"),
+        ])
+        try:
+            answer = (prompt | llm | StrOutputParser()).invoke({
+                "question": question,
+                "page": page_text,
+                "audience": build_role_instruction(access_role),
+            }).strip()
+        except Exception as exc:
+            print(f"URL read synthesis failed: {exc}")
+            answer = "I read the page but could not process it just now. Please try again."
+    else:
+        answer = f"I read the page **{url}** but the language model is unavailable to summarize it."
+
+    record_chat_turn(session_id, "user", f"[Read URL] {url} — {question}")
+    record_chat_turn(session_id, "assistant", answer)
+    try:
+        user_name = normalized_email or TEST_USER_NAME
+        persist_chat_log(
+            log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+            user_name=user_name, user_prompt=f"[Read URL] {url} — {question}",
+            nexa_response=answer, pdf_url=None, stars=0,
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
+        )
+    except Exception:
+        pass
+
+    return ChatResponse(
+        response=answer, session_id=session_id, access_role=access_role,
+        pdf_url=None, image_url=None, image_id=None, log_id=user_log_id,
+    )
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -1911,20 +2104,40 @@ async def chat_endpoint(request: ChatRequest):
                         f"User question: {augmented_input}"
                     )
 
-                # 1) Try the curriculum RAG chain first.
-                result = conversational_rag_chain.invoke(
-                    {"input": augmented_input, "audience": build_role_instruction(access_role)},
-                    config=config
-                )
-                rag_answer = (result.get("answer") or "").strip()
+                # 1) Try the curriculum RAG chain first (guarded against Ollama load failures).
+                try:
+                    result = conversational_rag_chain.invoke(
+                        {"input": augmented_input, "audience": build_role_instruction(access_role)},
+                        config=config
+                    )
+                    rag_answer = (result.get("answer") or "").strip()
+                except Exception as model_error:
+                    print(f"RAG/LLM call failed: {model_error}")
+                    rag_answer = ""  # fall through to web fallback / friendly message below
 
                 # 2) If the PDFs didn't cover it (and there's no uploaded doc driving the
                 #    answer), fall back to a web-synthesized answer.
                 if rag_answer_is_weak(rag_answer) and not doc_context:
                     web_answer = synthesize_web_answer(request.message, access_role)
-                    answer = web_answer or rag_answer or "No response"
+                    answer = web_answer or rag_answer or (
+                        "I'm having trouble reaching the language model right now (it may be low on memory). "
+                        "Please try again in a moment."
+                    )
                 else:
-                    answer = rag_answer or "No response"
+                    answer = rag_answer or (
+                        "I'm having trouble reaching the language model right now (it may be low on memory). "
+                        "Please try again in a moment."
+                    )
+
+        # Guarantee the Nexa disclaimer on lesson plans even if the model omits it.
+        disclaimer = (
+            "\n\n---\n*This content is generated by Nexa AI. Please review and adapt it to your "
+            "classroom context, verify accuracy against your official curriculum, and use "
+            "professional judgement before delivery.*"
+        )
+        if any(p in lower_msg for p in ("lesson plan", "teaching plan", "make a lesson")) \
+           and isinstance(answer, str) and "generated by Nexa AI" not in answer:
+            answer = answer + disclaimer
 
         pdf_url = None
         image_url = None
@@ -1938,9 +2151,16 @@ async def chat_endpoint(request: ChatRequest):
 
             safe_answer = answer if isinstance(answer, str) else str(answer or "")
 
+            # markdown-pdf builds a TOC that requires the doc to start at H1.
+            # Ensure there is a leading H1 so it never throws "hierarchy level must be 1".
+            stripped = safe_answer.lstrip()
+            if not stripped.startswith("# "):
+                safe_answer = "# Nexa AI Document\n\n" + safe_answer
+
             try:
                 if MarkdownPdf is not None and Section is not None:
-                    pdf = MarkdownPdf()
+                    # toc_level=0 disables the table of contents and its hierarchy check.
+                    pdf = MarkdownPdf(toc_level=0)
                     pdf.add_section(Section(safe_answer))
                     pdf.save(path)
                     pdf_url = f"/assets/{filename}"
@@ -1959,7 +2179,7 @@ async def chat_endpoint(request: ChatRequest):
         # ================= IMAGE GENERATION =================
         if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual"]):
 
-            if pipe is None:
+            if not IMAGE_RUNTIME_AVAILABLE:
                 answer = "Your image request was received, but image generation is unavailable in this workspace."
                 record_chat_turn(session_id, "assistant", answer)
                 try:
