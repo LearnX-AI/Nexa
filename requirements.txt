@@ -1,0 +1,39 @@
+# ---- Web framework ----
+fastapi
+uvicorn[standard]
+python-multipart          # required for UploadFile / Form (file uploads)
+pydantic
+
+# ---- Database ----
+mysql-connector-python
+
+# ---- LangChain + RAG stack ----
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-ollama
+langchain-chroma
+chromadb
+
+# ---- Document loading / text extraction ----
+pypdf                     # used by PyPDFLoader
+python-docx               # .docx text extraction for uploads
+
+# ---- Web search / knowledge ----
+duckduckgo-search
+wikipedia
+
+# ---- URL reading feature ----
+requests
+beautifulsoup4
+
+# ---- PDF generation ----
+markdown-pdf
+
+# ---- Image generation (Qwen) ----
+diffusers
+transformers
+accelerate
+torch                     # install the CUDA build matching your GB10 driver
+Pillow                    # image save/handling
