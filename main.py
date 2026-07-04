@@ -1897,6 +1897,7 @@ loadSharedChat();
 
 class ChatRequest(BaseModel):
     message: str
+    question: Optional[str] = None
     user_email: Optional[str] = None
     session_id: Optional[str] = None
     reply_context: Optional[str] = None
@@ -2054,6 +2055,9 @@ async def read_url_endpoint(request: UrlReadRequest):
 @app.post("/chat-status", response_model=ChatStatusResponse)
 async def chat_status_endpoint(request: ChatRequest):
     access_role = infer_access_role(request.user_email)
+    if (request.url or "").strip():
+        return ChatStatusResponse(status_message="Searching the web...", action="web")
+
     status_message, action = infer_chat_status(request.message, access_role, request.staged_file_name)
     return ChatStatusResponse(status_message=status_message, action=action)
 
@@ -2067,6 +2071,78 @@ async def chat_endpoint(request: ChatRequest):
 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
+
+    page_url = (request.url or "").strip()
+    page_question = (request.question or "").strip() or (request.message or "").strip()
+
+    if page_url:
+        page_text = fetch_page_text(page_url)
+        if page_text.startswith("__ERROR__"):
+            answer = page_text.replace("__ERROR__", "").strip()
+            return ChatResponse(
+                response=answer,
+                session_id=session_id,
+                access_role=access_role,
+                status_message="Searching the web...",
+                pdf_url=None,
+                image_url=None,
+                image_id=None,
+                log_id=str(uuid.uuid4()),
+            )
+
+        existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+        combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
+        SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
+        question = page_question or "Summarize this web page clearly for a student."
+
+        if LANGCHAIN_AVAILABLE and llm is not None:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system",
+                 "You are Nexa, an educational assistant. Read the web page content provided and "
+                 "answer the user's request accurately in clean Markdown, using only that content. "
+                 "Do not invent details. Audience guidance: {audience}"),
+                ("human", "User request: {question}\n\nWeb page content:\n{page}"),
+            ])
+            try:
+                answer = (prompt | llm | StrOutputParser()).invoke({
+                    "question": question,
+                    "page": page_text,
+                    "audience": build_role_instruction(access_role),
+                }).strip()
+            except Exception as exc:
+                print(f"URL read synthesis failed: {exc}")
+                answer = "I read the page but could not process it just now. Please try again."
+        else:
+            answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
+
+        record_chat_turn(session_id, "assistant", answer)
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=str(uuid.uuid4()),
+                session_id=session_id,
+                user_email=normalized_email,
+                user_name=user_name,
+                user_prompt=f"[Read URL] {page_url} — {question}",
+                nexa_response=answer,
+                pdf_url=None,
+                stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
+        return ChatResponse(
+            response=answer,
+            session_id=session_id,
+            access_role=access_role,
+            status_message="Searching the web...",
+            pdf_url=None,
+            image_url=None,
+            image_id=None,
+            log_id=str(uuid.uuid4()),
+        )
 
     # Create a single log_id for this user -> assistant turn so frontend can attach images/files.
     user_log_id = str(uuid.uuid4())
