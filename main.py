@@ -1897,19 +1897,27 @@ loadSharedChat();
 
 class ChatRequest(BaseModel):
     message: str
+    question: Optional[str] = None
     user_email: Optional[str] = None
     session_id: Optional[str] = None
     reply_context: Optional[str] = None
+    staged_file_name: Optional[str] = None
     url: Optional[str] = None   # NEW: web page to read
 
 class ChatResponse(BaseModel):
     response: str
     session_id: str
     access_role: Optional[str] = None
+    status_message: Optional[str] = None
     pdf_url: Optional[str] = None
     image_url: Optional[str] = None
     image_id: Optional[str] = None
     log_id: Optional[str] = None
+
+
+class ChatStatusResponse(BaseModel):
+    status_message: str
+    action: str
 
 
 class ChatHistoryResponse(BaseModel):
@@ -1942,6 +1950,39 @@ class UrlReadRequest(BaseModel):
     question: Optional[str] = None
     user_email: Optional[str] = None
     session_id: Optional[str] = None
+
+
+def infer_chat_status(message: str, access_role: str, staged_file_name: Optional[str] = None) -> tuple[str, str]:
+    lower_msg = (message or "").lower()
+    lower_file = (staged_file_name or "").lower()
+
+    if staged_file_name:
+        return ("Processing document...", "document")
+
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")):
+        if access_role != "teacher":
+            return ("Checking lesson plan access...", "lesson-plan-blocked")
+        return ("Generating lesson plan...", "lesson-plan")
+
+    if "short notes" in lower_msg or "short note" in lower_msg or "summarize" in lower_msg:
+        return ("Generating short notes...", "short-notes")
+
+    if "pdf" in lower_msg:
+        return ("Generating PDF...", "pdf")
+
+    if any(keyword in lower_msg for keyword in ["image", "diagram", "draw", "visual"]):
+        return ("Generating image...", "image")
+
+    if "wikipedia" in lower_msg or "wiki" in lower_msg:
+        return ("Searching Wikipedia...", "wikipedia")
+
+    if looks_like_web_query(message):
+        return ("Searching the web...", "web")
+
+    if lower_file.endswith((".pdf", ".docx", ".txt")):
+        return ("Processing document...", "document")
+
+    return ("Thinking...", "general")
 
 
 @app.post("/read-url", response_model=ChatResponse)
@@ -2006,8 +2047,19 @@ async def read_url_endpoint(request: UrlReadRequest):
 
     return ChatResponse(
         response=answer, session_id=session_id, access_role=access_role,
+        status_message="Reading web page...",
         pdf_url=None, image_url=None, image_id=None, log_id=user_log_id,
     )
+
+
+@app.post("/chat-status", response_model=ChatStatusResponse)
+async def chat_status_endpoint(request: ChatRequest):
+    access_role = infer_access_role(request.user_email)
+    if (request.url or "").strip():
+        return ChatStatusResponse(status_message="Searching the web...", action="web")
+
+    status_message, action = infer_chat_status(request.message, access_role, request.staged_file_name)
+    return ChatStatusResponse(status_message=status_message, action=action)
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -2019,6 +2071,78 @@ async def chat_endpoint(request: ChatRequest):
 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
+
+    page_url = (request.url or "").strip()
+    page_question = (request.question or "").strip() or (request.message or "").strip()
+
+    if page_url:
+        page_text = fetch_page_text(page_url)
+        if page_text.startswith("__ERROR__"):
+            answer = page_text.replace("__ERROR__", "").strip()
+            return ChatResponse(
+                response=answer,
+                session_id=session_id,
+                access_role=access_role,
+                status_message="Searching the web...",
+                pdf_url=None,
+                image_url=None,
+                image_id=None,
+                log_id=str(uuid.uuid4()),
+            )
+
+        existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+        combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
+        SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
+        question = page_question or "Summarize this web page clearly for a student."
+
+        if LANGCHAIN_AVAILABLE and llm is not None:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system",
+                 "You are Nexa, an educational assistant. Read the web page content provided and "
+                 "answer the user's request accurately in clean Markdown, using only that content. "
+                 "Do not invent details. Audience guidance: {audience}"),
+                ("human", "User request: {question}\n\nWeb page content:\n{page}"),
+            ])
+            try:
+                answer = (prompt | llm | StrOutputParser()).invoke({
+                    "question": question,
+                    "page": page_text,
+                    "audience": build_role_instruction(access_role),
+                }).strip()
+            except Exception as exc:
+                print(f"URL read synthesis failed: {exc}")
+                answer = "I read the page but could not process it just now. Please try again."
+        else:
+            answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
+
+        record_chat_turn(session_id, "assistant", answer)
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=str(uuid.uuid4()),
+                session_id=session_id,
+                user_email=normalized_email,
+                user_name=user_name,
+                user_prompt=f"[Read URL] {page_url} — {question}",
+                nexa_response=answer,
+                pdf_url=None,
+                stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
+        return ChatResponse(
+            response=answer,
+            session_id=session_id,
+            access_role=access_role,
+            status_message="Searching the web...",
+            pdf_url=None,
+            image_url=None,
+            image_id=None,
+            log_id=str(uuid.uuid4()),
+        )
 
     # Create a single log_id for this user -> assistant turn so frontend can attach images/files.
     user_log_id = str(uuid.uuid4())
@@ -2041,6 +2165,7 @@ async def chat_endpoint(request: ChatRequest):
 
     # Block lesson-plan generation for non-teachers
     lower_msg = (request.message or "").lower()
+    status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
         answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
@@ -2063,6 +2188,7 @@ async def chat_endpoint(request: ChatRequest):
             response=answer,
             session_id=session_id,
             access_role=access_role,
+            status_message=status_message,
             pdf_url=None,
             image_url=None,
             image_id=None,
@@ -2207,7 +2333,7 @@ async def chat_endpoint(request: ChatRequest):
                     log_id=user_log_id,
                 )
 
-            answer = "Your image is generating..."
+            answer = "Generating image..."
 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_{ts}.png"
@@ -2248,6 +2374,7 @@ async def chat_endpoint(request: ChatRequest):
             response=answer,
             session_id=session_id,
             access_role=access_role,
+            status_message=status_message,
             pdf_url=pdf_url,
             image_url=image_url,
             image_id=image_id,

@@ -796,7 +796,7 @@
     <div id="chat-button" class="fixed z-50 cursor-pointer">
         <div class="flex flex-col items-end gap-2">
             <div id="hover-container" class="bg-white rounded-3xl px-5 py-3 shadow-xl flex items-center gap-3 opacity-0 scale-95 transition-all duration-300 origin-bottom-right">
-                <div class="text-gray-800 text-sm font-medium whitespace-nowrap">Hello! I'm Nexa. How can I help?</div>
+                <div id="welcome-message" class="text-gray-800 text-sm font-medium whitespace-nowrap"></div>
             </div>
             <div class="w-20 h-20">
                 <img id="nexa-logo" src="assets/nexa.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
@@ -912,6 +912,7 @@
 <script>
 // ==================== CONFIG ====================
 const API_URL = "/chat";
+const CHAT_STATUS_URL = "/chat-status";
 const UPLOAD_URL = "/upload";
 const LOG_API_URL = "/api/chat-log";
 const RATING_API_URL = "/api/chat-rating";
@@ -1025,6 +1026,16 @@ function inferAccessRoleFromEmail(email) {
 // ==================== MOODLE INTEGRATION - FORCE EMAIL ====================
 const urlParams = new URLSearchParams(window.location.search);
 let emailFromMoodle = urlParams.get('email');
+let lmsLoginName = urlParams.get('name')
+    || urlParams.get('username')
+    || urlParams.get('user_name')
+    || urlParams.get('display_name')
+    || urlParams.get('fullname')
+    || '';
+
+if (lmsLoginName) {
+    lmsLoginName = decodeURIComponent(lmsLoginName).trim();
+}
 
 if (emailFromMoodle) {
     emailFromMoodle = decodeURIComponent(emailFromMoodle);
@@ -1033,6 +1044,10 @@ if (emailFromMoodle) {
     // FORCE set email
     userEmailInput.value = emailFromMoodle;
     localStorage.setItem('nexa_user_email', emailFromMoodle);
+
+    if (lmsLoginName) {
+        localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+    }
     
     // Auto set session
     setSessionForEmail(emailFromMoodle);
@@ -1327,12 +1342,38 @@ function getDisplayNameFromEmail(email) {
     return localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'User';
 }
 
+function getCurrentDisplayName() {
+    const lmsName = (localStorage.getItem('nexa_lms_user_name') || '').trim();
+    if (lmsName) {
+        return lmsName;
+    }
+
+    const savedName = (localStorage.getItem('nexa_user_name') || '').trim();
+    if (savedName) {
+        return savedName;
+    }
+
+    const emailName = getDisplayNameFromEmail(userEmailInput.value);
+    return emailName || 'User';
+}
+
+function updateWelcomeMessage() {
+    const welcomeMessage = document.getElementById('welcome-message');
+    if (!welcomeMessage) return;
+    welcomeMessage.textContent = `Hello ${getCurrentDisplayName()} Nexa is here to help you`;
+}
+
 userNameInput.value = localStorage.getItem('nexa_user_name') || '';
 userNameInput.addEventListener('change', () => {
     localStorage.setItem('nexa_user_name', userNameInput.value.trim());
+    updateWelcomeMessage();
 });
 
 userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
+
+if (lmsLoginName && !localStorage.getItem('nexa_lms_user_name')) {
+    localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+}
 
 function setSessionForEmail(email) {
     const normalizedEmail = normalizeEmail(email);
@@ -1344,6 +1385,7 @@ function setSessionForEmail(email) {
     closeHistoryPanel();
     messagesContainer.innerHTML = '';
     updateAccessRoleBadge(normalizedEmail);
+    updateWelcomeMessage();
     if (sessionId) {
         loadChatHistory();
     }
@@ -1353,6 +1395,7 @@ userEmailInput.addEventListener('change', () => {
     const normalizedEmail = normalizeEmail(userEmailInput.value);
     localStorage.setItem('nexa_user_email', normalizedEmail);
     setSessionForEmail(normalizedEmail);
+    updateWelcomeMessage();
 });
 
 setSessionForEmail(userEmailInput.value);
@@ -1885,6 +1928,10 @@ async function sendMessage() {
     let text = userInput.value.trim();
     if (!text && !stagedFile) return;
     if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
+    const stagedFileName = stagedFile ? stagedFile.name : null;
+    const urlMatch = text.match(/https?:\/\/[^\s]+/i);
+    const pastedUrl = urlMatch ? urlMatch[0] : '';
+    const messageWithoutUrl = pastedUrl ? text.replace(pastedUrl, '').trim() : text;
 
     // Capture the quoted Nexa response separately (don't pollute the question text).
     let replyContext = null;
@@ -2022,12 +2069,35 @@ async function sendMessage() {
         }, 800);
     }
 
+    let loadingMessage = 'Thinking...';
+    try {
+        const statusRes = await fetch(CHAT_STATUS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: messageWithoutUrl || text,
+                question: messageWithoutUrl || '',
+                url: pastedUrl || null,
+                user_email: userEmail,
+                session_id: sessionId,
+                reply_context: replyContext,
+                staged_file_name: stagedFileName
+            })
+        });
+        const statusData = await statusRes.json();
+        if (statusRes.ok && statusData?.status_message) {
+            loadingMessage = statusData.status_message;
+        }
+    } catch (err) {
+        console.warn('Status preview failed', err);
+    }
+
     // typing indicator
     const typing = document.createElement("div");
     typing.id = "typing-msg";
     typing.innerHTML = `
         <div class="bot-message">
-            ⏳ Nexa is thinking / generating image...
+            ${loadingMessage}
         </div>
     `;
     messagesContainer.appendChild(typing);
@@ -2040,10 +2110,13 @@ async function sendMessage() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                message: text,
+                message: messageWithoutUrl || text,
+                question: messageWithoutUrl || '',
+                url: pastedUrl || null,
                 user_email: userEmail,
                 session_id: sessionId,
-                reply_context: replyContext
+                reply_context: replyContext,
+                staged_file_name: stagedFileName
             })
         });
 
