@@ -1283,12 +1283,7 @@ def extract_lesson_metadata(text: str) -> dict:
 
 
 def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
-    """Normalize lesson plan to a single creative Markdown template.
-
-    This replaces disparate lesson-plan outputs with a consistent, teacher-focused
-    structure that is classroom-ready and creative. If the model produced text,
-    it will be preserved under 'Model output' for reference.
-    """
+    """Normalize lesson plan responses into one friendly, consistent template."""
     if not _is_lesson_request(request_message):
         return answer
 
@@ -1304,6 +1299,9 @@ def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
     topic = meta.get("topic") or "TBD"
     duration_text = meta.get("duration") or "40 minutes"
     prereq = meta.get("prerequisite") or "TBD"
+
+    def cell(value: object) -> str:
+        return str(value if value is not None else "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip() or "TBD"
 
     # Determine total minutes if possible
     total_minutes = None
@@ -1325,56 +1323,57 @@ def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
             # adjust
             closure = 3
     else:
-        intro = 8
-        direct = 18
-        guided = 12
-        independent = 6
-        closure = 6
+        intro = 5
+        direct = 15
+        guided = 10
+        independent = 7
+        closure = 3
 
-    # Build creative canonical template
-    title = f"# {topic if topic != 'TBD' else 'Lesson Plan'}"
+    title = f"# {cell(topic) if topic != 'TBD' else 'Lesson Plan'}"
 
     template_parts = []
     template_parts.append(title)
-    template_parts.append("\n## Overview\nA concise paragraph describing the lesson, its purpose, and how it fits the wider topic.\n")
+    template_parts.append("\nA friendly, classroom-ready lesson plan designed to be easy to scan and teach from.\n")
 
-    # Lesson Details table
-    template_parts.append("## Lesson Details\n")
-    template_parts.append("| Grade / Level | Subject | Topic | Duration | Prerequisite Knowledge |\n")
-    template_parts.append("|---|---|---|---|---|\n")
-    template_parts.append(f"| {grade} | {subject} | {topic} | {duration_text} | {prereq} |\n")
+    # Quick snapshot table
+    template_parts.append("\n## Quick Snapshot\n")
+    template_parts.append("| Item | Details |\n")
+    template_parts.append("|---|---|\n")
+    template_parts.append(f"| Grade / Level | {cell(grade)} |\n")
+    template_parts.append(f"| Subject | {cell(subject)} |\n")
+    template_parts.append(f"| Topic | {cell(topic)} |\n")
+    template_parts.append(f"| Duration | {cell(duration_text)} |\n")
+    template_parts.append(f"| Prerequisite Knowledge | {cell(prereq)} |\n")
 
-    # Big Question and Learning Outcomes
-    template_parts.append("\n## Big Question\nA provocative question to frame the lesson and spark curiosity.\n")
-    template_parts.append("\n## Learning Outcomes\nBy the end of this lesson, students will be able to: \n- TBD (write 4–6 measurable outcomes)\n")
+    template_parts.append("\n## Lesson Overview\nA short explanation of what the lesson is about, why it matters, and how it connects to what students already know.\n")
+    template_parts.append("\n## What Students Will Learn\n- Understand the key idea behind the topic\n- Use important vocabulary correctly\n- Apply the idea in a guided activity or example\n- Show understanding in a short check for learning\n")
 
-    # Materials and Hook
-    template_parts.append("\n## Materials\n- Whiteboard, markers\n- Student worksheets\n- Any digital resources or handouts\n")
-    template_parts.append(f"\n## Hook / Engage ({intro} min)\nA short activity or question to capture interest. Teacher: ... Students: ...\n")
+    template_parts.append("\n## Materials\n- Whiteboard or slides\n- Markers or pen\n- Student workbook, handout, or notebook\n- Any demonstration items or digital resources\n")
 
-    # Instructional sequence
-    template_parts.append(f"\n## Direct Instruction ({direct} min)\nTeacher explains key concepts with examples and demonstration.\n")
-    template_parts.append(f"\n## Guided Practice ({guided} min)\nTeacher-led practice tasks with scaffolding. Include modeling and checking for understanding.\n")
-    template_parts.append(f"\n## Independent Practice ({independent} min)\nStudents work independently or in pairs to apply learning. Provide extension prompts for fast finishers.\n")
-    template_parts.append(f"\n## Closure / Consolidation ({closure} min)\nSummarize key ideas, formative check, and reflect.\n")
+    template_parts.append("\n## Lesson Flow\n")
+    template_parts.append("| Stage | Time | Teacher does | Students do |\n")
+    template_parts.append("|---|---:|---|---|\n")
+    template_parts.append(f"| Warm-up | {intro} min | Open with a question, image, or quick review to activate prior knowledge. | Share ideas, predict the topic, or recall what they already know. |\n")
+    template_parts.append(f"| Teach | {direct} min | Explain the main concept with clear examples and simple checks for understanding. | Listen, note key ideas, and answer short questions. |\n")
+    template_parts.append(f"| Guided Practice | {guided} min | Model one task and support students while they try it together. | Work with the teacher, ask questions, and complete the guided task. |\n")
+    template_parts.append(f"| Independent Practice | {independent} min | Give an application task and monitor progress. | Work independently or in pairs to show understanding. |\n")
+    template_parts.append(f"| Wrap-up | {closure} min | Summarize the lesson and end with a quick exit check. | Reflect on learning and complete the closing question. |\n")
 
-    # Assessments and Rubric
-    template_parts.append("\n## Formative Checks\n- Exit ticket question\n- Think-pair-share prompts\n")
-    template_parts.append("\n## Summative Assessment\nA clear task that shows mastery (e.g., short project, quiz or performance task).\n")
-    template_parts.append("\n### Assessment Rubric\n| Criteria | 3 - Excellent | 2 - Satisfactory | 1 - Developing |\n|---|---|---|---|\n| Understanding | Clear and accurate | Mostly accurate | Partial or incorrect |\n")
+    template_parts.append("\n## Assessment\n")
+    template_parts.append("- Formative: questioning, quick recap, or mini whiteboard check\n")
+    template_parts.append("- Summative: a short task, quiz, worksheet, or exit ticket that shows the main skill\n")
+    template_parts.append("- Success criteria: students can explain the idea, use the vocabulary, and complete the task with support\n")
 
-    # Differentiation
-    template_parts.append("\n## Differentiation\n- Support: sentence stems, visuals\n- Core: scaffolded tasks\n- Extension: challenge tasks and independent inquiry\n")
+    template_parts.append("\n## Support and Extension\n- Support: sentence starters, visuals, worked examples, or partner support\n- Core: scaffolded practice with clear steps\n- Extension: challenge questions, deeper reasoning, or an independent task\n")
 
-    template_parts.append("\n## Extension and Homework\nMeaningful tasks that extend learning or consolidate practice.\n")
-    template_parts.append("\n## Reflection Prompts\nQuestions for students to self-assess and for teacher to reflect on next steps.\n")
-    template_parts.append("\n## Teacher Notes\nPractical guidance: common misconceptions, pacing tips, adaptations and safety notes.\n")
-    template_parts.append("\n## Resources\n- Links, readings, videos, and printable worksheets.\n")
+    template_parts.append("\n## Homework / Reflection\n- One short practice task or reflection question to check understanding\n- Optional extension activity for students who finish early\n")
 
-    # Preserve model output (if any) for reference
+    template_parts.append("\n## Teacher Notes\n- Common misconceptions to watch for\n- Pacing or classroom management tips\n- Any materials, safety notes, or reminders\n")
+
     if answer.strip():
-        template_parts.append("\n---\n### Model-generated content (original)\n")
+        template_parts.append("\n## Original Draft\n<details>\n<summary>View the model draft used to create this lesson plan</summary>\n\n")
         template_parts.append(answer.strip() + "\n")
+        template_parts.append("\n</details>\n")
 
     # Final disclaimer (exact)
     template_parts.append("\n" + disclaimer + "\n")

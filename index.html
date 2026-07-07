@@ -29,14 +29,40 @@
             overflow-wrap: anywhere;
             word-break: break-word;
         }
-        .markdown-body h1 { font-size: 1.85rem; font-weight: 700; color: #0f172a; margin: 1.8rem 0 1rem; border-bottom: 3px solid #e2e8f0; padding-bottom: 0.6rem; }
-        .markdown-body h2 { font-size: 1.45rem; font-weight: 600; color: #334155; margin: 1.8rem 0 0.9rem; }
-        .markdown-body h3 { font-size: 1.25rem; font-weight: 600; color: #475569; margin: 1.5rem 0 0.7rem; }
+        .markdown-body h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0 0 1rem;
+            padding: 0 0 0.85rem;
+            border-bottom: 1px solid #dbeafe;
+            letter-spacing: -0.03em;
+        }
+        .markdown-body h2 {
+            font-size: 1.18rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin: 1.5rem 0 0.75rem;
+            padding: 0.7rem 0.9rem;
+            background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+        }
+        .markdown-body h3 { font-size: 1.08rem; font-weight: 700; color: #334155; margin: 1.2rem 0 0.6rem; }
         .markdown-body ul, .markdown-body ol { margin: 1rem 0; padding-left: 1.8rem; }
         .markdown-body li { margin: 0.45rem 0; }
-        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; background: white; }
-        .markdown-body th, .markdown-body td { border: 1px solid #cbd5e1; padding: 12px 14px; text-align: left; }
-        .markdown-body th { background-color: #f1f5f9; font-weight: 600; color: #1e40af; }
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.2rem 0;
+            background: #ffffff;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .markdown-body tr:nth-child(even) td { background: #f8fbff; }
+        .markdown-body th, .markdown-body td { border: 1px solid #dbeafe; padding: 12px 14px; text-align: left; vertical-align: top; }
+        .markdown-body th { background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); font-weight: 700; color: #1d4ed8; }
         .markdown-body a { overflow-wrap: anywhere; word-break: break-word; }
         .markdown-body pre {
             overflow-x: auto;
@@ -49,17 +75,53 @@
         .markdown-body code {
             white-space: pre-wrap;
             word-break: break-word;
+            background: #eef2ff;
+            color: #3730a3;
+            padding: 0.12rem 0.35rem;
+            border-radius: 6px;
         }
         .markdown-body img {
             max-width: 100%;
             height: auto;
         }
+        .markdown-body blockquote {
+            margin: 1rem 0;
+            padding: 0.9rem 1rem;
+            border-left: 4px solid #60a5fa;
+            background: #eff6ff;
+            color: #334155;
+            border-radius: 0 12px 12px 0;
+        }
+        .markdown-body hr {
+            border: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
+            margin: 1.5rem 0;
+        }
+        .markdown-body details {
+            margin: 1rem 0;
+            padding: 0.9rem 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+        }
+        .markdown-body summary {
+            cursor: pointer;
+            font-weight: 700;
+            color: #1d4ed8;
+            list-style: none;
+        }
+        .markdown-body summary::-webkit-details-marker {
+            display: none;
+        }
         .bot-message {
-            background-color: #f0f9ff;
-            border-radius: 22px 22px 22px 8px;
-            padding: 20px 24px;
+            background: linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%);
+            border: 1px solid #dbeafe;
+            border-radius: 24px 24px 24px 10px;
+            padding: 22px 24px;
             max-width: 95%;
             position: relative;
+            box-shadow: 0 16px 40px -28px rgba(15, 23, 42, 0.45);
         }
         .user-message {
             background-color: #1e2937;
