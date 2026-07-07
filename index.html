@@ -1087,6 +1087,9 @@ function inferAccessRoleFromEmail(email) {
 
 // ==================== MOODLE INTEGRATION - FORCE EMAIL ====================
 const urlParams = new URLSearchParams(window.location.search);
+const sharedTokenMatch = window.location.pathname.match(/^\/share\/([^/?#]+)/);
+const sharedChatToken = decodeURIComponent(sharedTokenMatch?.[1] || urlParams.get('share_token') || urlParams.get('shared') || '');
+const isSharedChatPage = Boolean(sharedChatToken);
 let emailFromMoodle = urlParams.get('email');
 let lmsLoginName = urlParams.get('name')
     || urlParams.get('username')
@@ -1448,8 +1451,49 @@ function setSessionForEmail(email) {
     messagesContainer.innerHTML = '';
     updateAccessRoleBadge(normalizedEmail);
     updateWelcomeMessage();
-    if (sessionId) {
+    if (sessionId && !isSharedChatPage) {
         loadChatHistory();
+    }
+}
+
+async function openSharedChatFromToken(shareToken) {
+    if (!shareToken) return;
+
+    chatWindow.classList.remove('hidden');
+    messagesContainer.innerHTML = '';
+    updateAccessRoleBadge(userEmailInput.value);
+    updateWelcomeMessage();
+
+    try {
+        const res = await fetch(`/api/shared-chat/${encodeURIComponent(shareToken)}`);
+        if (!res.ok) {
+            addMessage('This shared chat link is unavailable or expired.', false);
+            return;
+        }
+
+        const data = await res.json();
+        if (!data.session_id) {
+            addMessage('This shared chat link is missing a session reference.', false);
+            return;
+        }
+
+        sessionId = data.session_id;
+        chatHistoryLoaded = false;
+        chatSessionsLoaded = false;
+        activeHistorySessionId = null;
+        cachedHistorySessions = [];
+        localStorage.setItem('nexa_session_id', sessionId);
+
+        const normalizedEmail = normalizeEmail(userEmailInput.value);
+        if (normalizedEmail) {
+            localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
+        }
+
+        await loadChatHistory();
+        chatWindow.classList.remove('hidden');
+    } catch (error) {
+        console.error('Failed to load shared chat session', error);
+        addMessage('Failed to load the shared chat. Please refresh the page.', false);
     }
 }
 
@@ -1461,6 +1505,9 @@ userEmailInput.addEventListener('change', () => {
 });
 
 setSessionForEmail(userEmailInput.value);
+if (sharedChatToken) {
+    openSharedChatFromToken(sharedChatToken);
+}
 
 function getInternationalTimestamp() {
     return new Date().toISOString();
