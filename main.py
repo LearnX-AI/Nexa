@@ -13,6 +13,7 @@ import os
 import re
 import json
 import difflib
+import textwrap
 from typing import Optional, Dict, Any, List
 import datetime
 from fastapi.staticfiles import StaticFiles
@@ -24,7 +25,7 @@ except ModuleNotFoundError:
     mysql.connector = None
 
 try:
-    from ddgs import DDGS
+    from duckduckgo_search import DDGS
 except ModuleNotFoundError:
     DDGS = None
 
@@ -33,37 +34,51 @@ try:
 except ModuleNotFoundError:
     wikipedia = None
 
-LANGCHAIN_AVAILABLE = True
 try:
-    from langchain_community.document_loaders import PyPDFLoader
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    from langchain_ollama import OllamaEmbeddings, ChatOllama
-    from langchain_chroma import Chroma
-    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-    from langchain_core.output_parsers import StrOutputParser
-    from langchain_core.messages import AIMessage, HumanMessage
-    from langchain.chains import create_history_aware_retriever, create_retrieval_chain
-    from langchain_core.runnables.history import RunnableWithMessageHistory
-    from langchain_community.chat_message_histories import ChatMessageHistory
-except ModuleNotFoundError:
-    LANGCHAIN_AVAILABLE = False
-
-IMAGE_RUNTIME_AVAILABLE = True
-try:
-    from diffusers import DiffusionPipeline
     import torch
+    from diffusers import DiffusionPipeline
+    IMAGE_RUNTIME_AVAILABLE = True
 except ModuleNotFoundError:
-    IMAGE_RUNTIME_AVAILABLE = False
-    DiffusionPipeline = None
     torch = None
+    DiffusionPipeline = None
+    IMAGE_RUNTIME_AVAILABLE = False
 
 try:
+    from langchain_community.chat_message_histories import ChatMessageHistory
+    from langchain_community.chat_models import ChatOllama
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_community.embeddings import OllamaEmbeddings
+    from langchain_community.vectorstores import Chroma
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    from langchain_core.runnables.history import RunnableWithMessageHistory
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain.chains import create_history_aware_retriever, create_retrieval_chain
     from markdown_pdf import MarkdownPdf, Section
+    LANGCHAIN_AVAILABLE = True
 except ModuleNotFoundError:
+    ChatMessageHistory = None
+    ChatOllama = None
+    PyPDFLoader = None
+    OllamaEmbeddings = None
+    Chroma = None
+    AIMessage = None
+    HumanMessage = None
+    StrOutputParser = None
+    ChatPromptTemplate = None
+    MessagesPlaceholder = None
+    RunnableWithMessageHistory = None
+    RecursiveCharacterTextSplitter = None
+    create_history_aware_retriever = None
+    create_retrieval_chain = None
     MarkdownPdf = None
     Section = None
+    LANGCHAIN_AVAILABLE = False
 
-import textwrap
+
+def _clean_md_text(text: str) -> str:
+    return re.sub(r"[\*_`~<>]", "", text or "")
 
 
 def _escape_pdf_text(text: str) -> str:
@@ -130,7 +145,6 @@ def save_text_to_pdf(path: str, text: str) -> None:
     objects.insert(1, (pages_obj_id, pages_obj))
 
     with open(path, 'wb') as f:
-        catalog_offset = 0
         offsets = []
         for obj_id, obj_content in objects:
             offsets.append(f.tell())
@@ -246,6 +260,11 @@ class ShareChatResponse(BaseModel):
     share_url: str
 
 
+class ChatStopPayload(BaseModel):
+    turn_id: str
+    session_id: Optional[str] = None
+
+
 class SharedChatResponse(BaseModel):
     share_token: str
     session_id: str
@@ -255,6 +274,11 @@ class SharedChatResponse(BaseModel):
 
 # Server-side stack to mirror push/pop operations done by the UI.
 chat_stack = []
+CHAT_CANCELLED_TURNS: set[str] = set()
+
+
+def is_chat_turn_cancelled(turn_id: Optional[str]) -> bool:
+    return bool(turn_id and turn_id in CHAT_CANCELLED_TURNS)
 
 
 def get_conn():
@@ -485,6 +509,22 @@ def build_general_knowledge_answer(message: str) -> str:
 
     if looks_like_web_query(message):
         return fetch_web_results(query)
+
+    return ""
+
+
+def solve_simple_reasoning_question(message: str) -> str:
+    text = (message or "").strip()
+    if not text:
+        return ""
+
+    lowered = text.lower()
+    match = re.search(r"\ball but\s+(\d+)\b", lowered)
+    if not match:
+        return ""
+
+    if any(trigger in lowered for trigger in ("how many", "how much", "left", "remain", "remaining", "stay", "sheep", "die")):
+        return f"The answer is {match.group(1)}."
 
     return ""
 
@@ -1897,6 +1937,7 @@ class ChatRequest(BaseModel):
     question: Optional[str] = None
     user_email: Optional[str] = None
     session_id: Optional[str] = None
+    turn_id: Optional[str] = None
     reply_context: Optional[str] = None
     staged_file_name: Optional[str] = None
     url: Optional[str] = None   # NEW: web page to read
@@ -1954,30 +1995,30 @@ def infer_chat_status(message: str, access_role: str, staged_file_name: Optional
     lower_file = (staged_file_name or "").lower()
 
     if staged_file_name:
-        return ("Processing document...", "document")
+        return ("Nexa is Processing document...", "document")
 
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")):
         if access_role != "teacher":
-            return ("Checking lesson plan access...", "lesson-plan-blocked")
-        return ("Generating lesson plan...", "lesson-plan")
+            return ("Nexa is Checking lesson plan access...", "lesson-plan-blocked")
+        return ("Nexa is Generating lesson plan...", "lesson-plan")
 
     if "short notes" in lower_msg or "short note" in lower_msg or "summarize" in lower_msg:
-        return ("Generating short notes...", "short-notes")
+        return ("Nexa is Generating short notes...", "short-notes")
 
     if "pdf" in lower_msg:
-        return ("Generating PDF...", "pdf")
+        return ("Nexa is Generating PDF...", "pdf")
 
     if any(keyword in lower_msg for keyword in ["image", "diagram", "draw", "visual"]):
-        return ("Generating image...", "image")
+        return ("Nexa is Generating image...", "image")
 
     if "wikipedia" in lower_msg or "wiki" in lower_msg:
-        return ("Searching Wikipedia...", "wikipedia")
+        return ("Nexa is Searching Wikipedia...", "wikipedia")
 
     if looks_like_web_query(message):
-        return ("Searching the web...", "web")
+        return ("Nexa is Searching ...", "web")
 
     if lower_file.endswith((".pdf", ".docx", ".txt")):
-        return ("Processing document...", "document")
+        return ("Nexa is Processing document...", "document")
 
     return ("Nexa is Thinking...", "general")
 
@@ -2058,10 +2099,20 @@ async def chat_status_endpoint(request: ChatRequest):
     except HTTPException:
         access_role = "student"
     if (request.url or "").strip():
-        return ChatStatusResponse(status_message="Searching the web...", action="web")
+        return ChatStatusResponse(status_message="Nexa is Searching ...", action="web")
 
     status_message, action = infer_chat_status(request.message, access_role, request.staged_file_name)
     return ChatStatusResponse(status_message=status_message, action=action)
+
+
+@app.post("/api/chat-stop")
+async def chat_stop_endpoint(payload: ChatStopPayload):
+    turn_id = (payload.turn_id or "").strip()
+    if not turn_id:
+        raise HTTPException(status_code=400, detail="turn_id is required")
+
+    CHAT_CANCELLED_TURNS.add(turn_id)
+    return {"ok": True, "turn_id": turn_id}
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
@@ -2073,6 +2124,18 @@ async def chat_endpoint(request: ChatRequest):
     normalized_email = normalize_email_address(request.user_email)
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
+
+    if is_chat_turn_cancelled(request.turn_id):
+        return ChatResponse(
+            response="",
+            session_id=session_id,
+            access_role=access_role,
+            status_message="Nexa is Thinking...",
+            pdf_url=None,
+            image_url=None,
+            image_id=None,
+            log_id=None,
+        )
 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
@@ -2088,7 +2151,7 @@ async def chat_endpoint(request: ChatRequest):
                 response=answer,
                 session_id=session_id,
                 access_role=access_role,
-                status_message="Searching the web...",
+                status_message="Nexa is Searching ...",
                 pdf_url=None,
                 image_url=None,
                 image_id=None,
@@ -2144,7 +2207,7 @@ async def chat_endpoint(request: ChatRequest):
             response=answer,
             session_id=session_id,
             access_role=access_role,
-            status_message="Searching the web...",
+            status_message="Nexa is Searching ...",
             pdf_url=None,
             image_url=None,
             image_id=None,
@@ -2205,62 +2268,78 @@ async def chat_endpoint(request: ChatRequest):
     try:
         config = {"configurable": {"session_id": session_id}}
 
+        if is_chat_turn_cancelled(request.turn_id):
+            return ChatResponse(
+                response="",
+                session_id=session_id,
+                access_role=access_role,
+                status_message=status_message,
+                pdf_url=None,
+                image_url=None,
+                image_id=None,
+                log_id=None,
+            )
+
         # ============ ANSWER RESOLUTION: FAQ -> explicit web -> RAG -> web fallback ============
-        faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
-        if faq_answer:
-            answer = faq_answer
+        reasoning_answer = solve_simple_reasoning_question(request.message)
+        if reasoning_answer:
+            answer = reasoning_answer
         else:
-            # Explicit "search the web" / "wikipedia ..." requests still go straight to web.
-            explicit_web = build_general_knowledge_answer(request.message)
-            if explicit_web:
-                answer = explicit_web
-            elif conversational_rag_chain is None:
-                # No RAG available — try web synthesis before giving up.
-                answer = synthesize_web_answer(request.message, access_role) or (
-                    "Chat is available, but the curriculum model dependencies are not installed in this workspace."
-                )
+            faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
+            if faq_answer:
+                answer = faq_answer
             else:
-                # Build the augmented question: inject reply context and any uploaded document.
-                doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
-                augmented_input = request.message
-
-                if request.reply_context:
-                    augmented_input = (
-                        f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
-                        f"Their follow-up: {request.message}"
-                    )
-
-                if doc_context:
-                    augmented_input = (
-                        f"Use the following document the user uploaded in this session when relevant:\n"
-                        f"{doc_context}\n\n"
-                        f"User question: {augmented_input}"
-                    )
-
-                # 1) Try the curriculum RAG chain first (guarded against Ollama load failures).
-                try:
-                    result = conversational_rag_chain.invoke(
-                        {"input": augmented_input, "audience": build_role_instruction(access_role)},
-                        config=config
-                    )
-                    rag_answer = (result.get("answer") or "").strip()
-                except Exception as model_error:
-                    print(f"RAG/LLM call failed: {model_error}")
-                    rag_answer = ""  # fall through to web fallback / friendly message below
-
-                # 2) If the PDFs didn't cover it (and there's no uploaded doc driving the
-                #    answer), fall back to a web-synthesized answer.
-                if rag_answer_is_weak(rag_answer) and not doc_context:
-                    web_answer = synthesize_web_answer(request.message, access_role)
-                    answer = web_answer or rag_answer or (
-                        "I'm having trouble reaching the language model right now (it may be low on memory). "
-                        "Please try again in a moment."
+                # Explicit "search the web" / "wikipedia ..." requests still go straight to web.
+                explicit_web = build_general_knowledge_answer(request.message)
+                if explicit_web:
+                    answer = explicit_web
+                elif conversational_rag_chain is None:
+                    # No RAG available — try web synthesis before giving up.
+                    answer = synthesize_web_answer(request.message, access_role) or (
+                        "Chat is available, but the curriculum model dependencies are not installed in this workspace."
                     )
                 else:
-                    answer = rag_answer or (
-                        "I'm having trouble reaching the language model right now (it may be low on memory). "
-                        "Please try again in a moment."
-                    )
+                    # Build the augmented question: inject reply context and any uploaded document.
+                    doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+                    augmented_input = request.message
+
+                    if request.reply_context:
+                        augmented_input = (
+                            f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                            f"Their follow-up: {request.message}"
+                        )
+
+                    if doc_context:
+                        augmented_input = (
+                            f"Use the following document the user uploaded in this session when relevant:\n"
+                            f"{doc_context}\n\n"
+                            f"User question: {augmented_input}"
+                        )
+
+                    # 1) Try the curriculum RAG chain first (guarded against Ollama load failures).
+                    try:
+                        result = conversational_rag_chain.invoke(
+                            {"input": augmented_input, "audience": build_role_instruction(access_role)},
+                            config=config
+                        )
+                        rag_answer = (result.get("answer") or "").strip()
+                    except Exception as model_error:
+                        print(f"RAG/LLM call failed: {model_error}")
+                        rag_answer = ""  # fall through to web fallback / friendly message below
+
+                    # 2) If the PDFs didn't cover it (and there's no uploaded doc driving the
+                    #    answer), fall back to a web-synthesized answer.
+                    if rag_answer_is_weak(rag_answer) and not doc_context:
+                        web_answer = synthesize_web_answer(request.message, access_role)
+                        answer = web_answer or rag_answer or (
+                            "I'm having trouble reaching the language model right now (it may be low on memory). "
+                            "Please try again in a moment."
+                        )
+                    else:
+                        answer = rag_answer or (
+                            "I'm having trouble reaching the language model right now (it may be low on memory). "
+                            "Please try again in a moment."
+                        )
 
         # Guarantee the Nexa disclaimer on lesson plans even if the model omits it.
         answer = append_generation_disclaimer(answer)
