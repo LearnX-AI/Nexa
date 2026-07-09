@@ -23,14 +23,14 @@
         }
         .glowing-gold-logo:hover { transform: scale(1.08); }
         .markdown-body {
-            font-size: 15.8px;
+            font-size: 15px;
             line-height: 1.75;
             color: #1f2937;
             overflow-wrap: anywhere;
             word-break: break-word;
         }
         .markdown-body h1 {
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-weight: 800;
             color: #0f172a;
             margin: 0 0 1rem;
@@ -39,7 +39,7 @@
             letter-spacing: -0.03em;
         }
         .markdown-body h2 {
-            font-size: 1.18rem;
+            font-size: 1.08rem;
             font-weight: 700;
             color: #1e3a8a;
             margin: 1.5rem 0 0.75rem;
@@ -48,7 +48,7 @@
             border: 1px solid #dbeafe;
             border-radius: 14px;
         }
-        .markdown-body h3 { font-size: 1.08rem; font-weight: 700; color: #334155; margin: 1.2rem 0 0.6rem; }
+        .markdown-body h3 { font-size: 1rem; font-weight: 700; color: #334155; margin: 1.2rem 0 0.6rem; }
         .markdown-body ul, .markdown-body ol { margin: 1rem 0; padding-left: 1.8rem; }
         .markdown-body li { margin: 0.45rem 0; }
         .markdown-body table {
@@ -162,7 +162,7 @@
             display: flex;
             gap: 2px;
             margin-top: 6px;
-            opacity: 0;
+            opacity: 1;
             transition: opacity 0.15s ease;
         }
         .message-actions.show {
@@ -291,6 +291,80 @@
         .response-actions button.active-like,
         .response-actions button.active-dislike {
             transform: scale(1.08);
+        }
+        .source-chip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.9rem;
+            padding-top: 0.9rem;
+            border-top: 1px solid #dbeafe;
+        }
+        .source-chip-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0f766e;
+        }
+        .source-link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border: 1px solid #bae6fd;
+            background: #f0f9ff;
+            color: #0f766e;
+            border-radius: 9999px;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+        }
+        .source-link-btn:hover {
+            background: #e0f2fe;
+            border-color: #7dd3fc;
+            transform: translateY(-1px);
+        }
+        .composer-action-btn {
+            flex-shrink: 0;
+            min-width: 5.25rem;
+            height: 2.75rem;
+            border-radius: 0.875rem;
+            border: 1px solid transparent;
+            padding: 0 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+        }
+        .composer-action-btn:hover {
+            transform: translateY(-1px);
+        }
+        .composer-action-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .composer-stop-btn {
+            background: #fff7ed;
+            color: #9a3412;
+            border-color: #fed7aa;
+        }
+        .composer-stop-btn:hover {
+            background: #ffedd5;
+        }
+        .composer-edit-btn {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+        .composer-edit-btn:hover {
+            background: #dbeafe;
         }
         .logger-toolbar {
             margin-top: 8px;
@@ -988,6 +1062,14 @@
                         class="flex-shrink-0 w-10 h-10 bg-gray-900 hover:bg-black text-white rounded-xl flex items-center justify-center transition-all">
                     <i class="fa-solid fa-paper-plane text-sm"></i>
                 </button>
+                <button id="edit-prompt-btn" class="composer-action-btn composer-edit-btn hidden" type="button" title="Edit the prompt">
+                    <i class="fa-regular fa-pen-to-square"></i>
+                    <span>Edit</span>
+                </button>
+                <button id="stop-generation-btn" class="composer-action-btn composer-stop-btn hidden" type="button" title="Stop generation">
+                    <i class="fa-solid fa-stop"></i>
+                    <span>Stop</span>
+                </button>
             </div>
             <div class="logger-toolbar">
                 <span id="stack-size"></span>
@@ -1039,6 +1121,8 @@ expandBtn.addEventListener('click', () => {
 });
 const accessRoleBadge = document.getElementById('access-role-badge');
 const sendButton = document.getElementById('send-button');
+const stopGenerationBtn = document.getElementById('stop-generation-btn');
+const editPromptBtn = document.getElementById('edit-prompt-btn');
 const attachBtn = document.getElementById('attach-btn');
 const undoLogBtn = document.getElementById('undo-log-btn');
 const stackSizeLabel = document.getElementById('stack-size');
@@ -1054,6 +1138,7 @@ const historySearchInput = document.getElementById('history-search-input');
 const historySearchClearBtn = document.getElementById('history-search-clear-btn');
 const historySearchStatus = document.getElementById('history-search-status');
 const shareChatBtn = document.getElementById('share-chat-btn');
+const newChatBtn = document.getElementById('new-chat-btn');
 
 let sessionId = null;
 let userMessageCount = 0;
@@ -1065,6 +1150,10 @@ let cachedHistorySessions = [];
 let historySearchTimer = null;
 let historySearchRequestId = 0;
 let pendingReplyText = null;
+let activeChatAbortController = null;
+let activeChatTurnId = null;
+let activeChatPrompt = '';
+let chatIsGenerating = false;
 
 
 const chatLogStack = [];
@@ -1206,7 +1295,102 @@ function refreshHistoryIfVisible() {
     }
 }
 
+function updateComposerButtons() {
+    const readOnlyMode = isSharedChatPage;
+    const generateLocked = chatIsGenerating;
+    const composerLocked = readOnlyMode || generateLocked;
+
+    userInput.readOnly = composerLocked;
+    sendButton.disabled = composerLocked;
+    attachBtn.disabled = composerLocked;
+    document.getElementById('url-btn').disabled = composerLocked;
+    if (newChatBtn) {
+        newChatBtn.disabled = composerLocked;
+    }
+
+    stopGenerationBtn.classList.toggle('hidden', !generateLocked);
+    editPromptBtn.classList.toggle('hidden', !generateLocked);
+    sendButton.classList.toggle('hidden', generateLocked);
+
+    userInput.placeholder = readOnlyMode
+        ? 'Shared chats are read-only.'
+        : (generateLocked ? 'Nexa is thinking...' : 'Ask me anything about curriculum.');
+
+    userInput.classList.toggle('cursor-not-allowed', composerLocked);
+    sendButton.classList.toggle('opacity-50', composerLocked);
+    attachBtn.classList.toggle('opacity-50', composerLocked);
+    document.getElementById('url-btn').classList.toggle('opacity-50', composerLocked);
+    if (newChatBtn) {
+        newChatBtn.classList.toggle('opacity-50', composerLocked);
+    }
+}
+
+function beginChatGeneration(promptText) {
+    activeChatPrompt = promptText || '';
+    activeChatTurnId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : generateSessionId();
+    activeChatAbortController = new AbortController();
+    chatIsGenerating = true;
+    updateComposerButtons();
+    return {
+        turnId: activeChatTurnId,
+        signal: activeChatAbortController.signal,
+    };
+}
+
+async function stopActiveChatGeneration(restorePrompt = false) {
+    if (activeChatTurnId) {
+        try {
+            await fetch('/api/chat-stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ turn_id: activeChatTurnId, session_id: sessionId }),
+            });
+        } catch (error) {
+            console.warn('Stop API failed', error);
+        }
+    }
+
+    if (activeChatAbortController) {
+        activeChatAbortController.abort();
+    }
+
+    const promptToRestore = restorePrompt ? activeChatPrompt : '';
+    activeChatAbortController = null;
+    activeChatTurnId = null;
+    activeChatPrompt = '';
+    chatIsGenerating = false;
+    document.getElementById('typing-msg')?.remove();
+    updateComposerButtons();
+
+    if (restorePrompt) {
+        userInput.value = promptToRestore;
+        userInput.focus();
+    }
+}
+
+function markChatGenerationFinished() {
+    activeChatAbortController = null;
+    activeChatTurnId = null;
+    activeChatPrompt = '';
+    chatIsGenerating = false;
+    document.getElementById('typing-msg')?.remove();
+    updateComposerButtons();
+}
+
+editPromptBtn.addEventListener('click', async () => {
+    await stopActiveChatGeneration(true);
+});
+
+stopGenerationBtn.addEventListener('click', async () => {
+    await stopActiveChatGeneration(false);
+});
+
 function startNewChat() {
+    if (isSharedChatPage) {
+        showSharedChatNotice();
+        return;
+    }
+
     const email = normalizeEmail(userEmailInput.value);
     if (!email || !email.includes('@')) {
         addMessage('Please enter your email before starting a new chat.', false);
@@ -1484,6 +1668,51 @@ function updateWelcomeMessage() {
     welcomeMessage.textContent = `Hi ${firstName}, Nexa is here to help you`;
 }
 
+function showSharedChatNotice() {
+    const existingNotice = document.getElementById('shared-chat-notice');
+    if (existingNotice) return;
+
+    const notice = document.createElement('div');
+    notice.id = 'shared-chat-notice';
+    notice.className = 'mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 shadow-sm';
+    notice.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <div class="min-w-0">
+                <div class="text-sm font-semibold">Shared chat is read-only</div>
+                <p class="mt-1 text-sm leading-6 text-sky-700">You can review and copy this conversation, but replying is disabled.</p>
+            </div>
+        </div>
+    `;
+    messagesContainer.prepend(notice);
+}
+
+function setChatReadOnlyMode(isReadOnly) {
+    userInput.readOnly = isReadOnly;
+    userInput.placeholder = isReadOnly ? 'Shared chats are read-only.' : 'Ask me anything about curriculum.';
+    userInput.style.cursor = isReadOnly ? 'not-allowed' : '';
+    sendButton.disabled = isReadOnly;
+    attachBtn.disabled = isReadOnly;
+    undoLogBtn.disabled = isReadOnly;
+    historyToggleBtn.disabled = isReadOnly;
+    shareChatBtn.disabled = isReadOnly;
+    if (newChatBtn) {
+        newChatBtn.disabled = isReadOnly;
+    }
+
+    userInput.classList.toggle('cursor-not-allowed', isReadOnly);
+    sendButton.classList.toggle('opacity-50', isReadOnly);
+    attachBtn.classList.toggle('opacity-50', isReadOnly);
+    undoLogBtn.classList.toggle('opacity-50', isReadOnly);
+    historyToggleBtn.classList.toggle('opacity-50', isReadOnly);
+    shareChatBtn.classList.toggle('opacity-50', isReadOnly);
+    if (newChatBtn) {
+        newChatBtn.classList.toggle('opacity-50', isReadOnly);
+    }
+}
+
 userNameInput.value = localStorage.getItem('nexa_user_name') || '';
 userNameInput.addEventListener('change', () => {
     localStorage.setItem('nexa_user_name', userNameInput.value.trim());
@@ -1515,6 +1744,7 @@ function setSessionForEmail(email) {
 async function openSharedChatFromToken(shareToken) {
     if (!shareToken) return;
 
+    setChatReadOnlyMode(true);
     chatWindow.classList.remove('hidden');
     messagesContainer.innerHTML = '';
     updateAccessRoleBadge(userEmailInput.value);
@@ -1546,6 +1776,7 @@ async function openSharedChatFromToken(shareToken) {
         }
 
         await loadChatHistory();
+        showSharedChatNotice();
         chatWindow.classList.remove('hidden');
     } catch (error) {
         console.error('Failed to load shared chat session', error);
@@ -1561,6 +1792,7 @@ userEmailInput.addEventListener('change', () => {
 });
 
 setSessionForEmail(userEmailInput.value);
+setChatReadOnlyMode(isSharedChatPage);
 if (sharedChatToken) {
     openSharedChatFromToken(sharedChatToken);
 }
@@ -1784,8 +2016,24 @@ function renderMarkdown(text) {
     const banner = disclaimerIndex >= 0
         ? `<div class="disclaimer-banner"><div class="disclaimer-label"><i class="fa-solid fa-shield-halved"></i> Disclaimer</div><p>${escapeHtml(disclaimerText)}</p></div>`
         : '';
+    const withSourceButtons = parsed.replace(
+        /<p>(?:<strong>)?Source:(?:<\/strong>)?\s*(?:<a href="([^"]+)"[^>]*>[^<]*<\/a>|(https?:\/\/[^\s<]+))<\/p>/gi,
+        (_, anchorUrl, plainUrl) => {
+            const sourceUrl = anchorUrl || plainUrl || '';
+            if (!sourceUrl) return '';
+            return `
+                <div class="source-chip">
+                    <span class="source-chip-label">Source</span>
+                    <button type="button" class="source-link-btn" data-source-url="${escapeHtml(sourceUrl)}">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        Open source
+                    </button>
+                </div>
+            `;
+        }
+    );
     // Links live inside an iframe — force them to open in a new browser tab.
-    return parsed.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ') + banner;
+    return withSourceButtons.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ') + banner;
 }
 
 // ==================== ADD MESSAGE ====================
@@ -1939,6 +2187,7 @@ function attachMsgHover(msgEl) {
     let leaveTimer = null;
     const actions = msgEl.querySelector('.message-actions');
     if (!actions) return;
+    actions.classList.add('show');
     msgEl.addEventListener('mouseenter', () => {
         clearTimeout(leaveTimer);
         actions.classList.add('show');
@@ -2072,6 +2321,25 @@ function showCopyToast(msg) {
     }, 2200);
 }
 
+window.openSourceUrl = function(url) {
+    const sourceUrl = String(url || '').trim();
+    if (!sourceUrl) return;
+
+    const link = document.createElement('a');
+    link.href = sourceUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+document.addEventListener('click', event => {
+    const sourceButton = event.target.closest('.source-link-btn');
+    if (!sourceButton) return;
+    window.openSourceUrl(sourceButton.dataset.sourceUrl);
+});
+
 window.downloadFile = function(url, filename) {
     const a = document.createElement('a');
     a.href = url;
@@ -2142,6 +2410,16 @@ function generateSessionId() {
 }
 
 async function sendMessage() {
+    if (isSharedChatPage || userInput.readOnly) {
+        showSharedChatNotice();
+        return;
+    }
+
+    if (chatIsGenerating) {
+        addMessage('Nexa is still thinking. Stop or edit the current prompt first.', false);
+        return;
+    }
+
     let text = userInput.value.trim();
     if (!text && !stagedFile) return;
     if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
@@ -2271,6 +2549,8 @@ async function sendMessage() {
         clearStagedFile();
     }
 
+    const chatGeneration = beginChatGeneration(text);
+
     // Track user message count & trigger feedback window ONCE after 2 prompts
     userMessageCount++;
     if (userMessageCount === FEEDBACK_TRIGGER_COUNT) {
@@ -2298,14 +2578,20 @@ async function sendMessage() {
                 user_email: userEmail,
                 session_id: sessionId,
                 reply_context: replyContext,
-                staged_file_name: stagedFileName
-            })
+                staged_file_name: stagedFileName,
+                turn_id: chatGeneration.turnId
+            }),
+            signal: chatGeneration.signal
         });
         const statusData = await statusRes.json();
         if (statusRes.ok && statusData?.status_message) {
             loadingMessage = statusData.status_message;
         }
     } catch (err) {
+        if (err?.name === 'AbortError') {
+            markChatGenerationFinished();
+            return;
+        }
         console.warn('Status preview failed', err);
     }
 
@@ -2333,8 +2619,10 @@ async function sendMessage() {
                 user_email: userEmail,
                 session_id: sessionId,
                 reply_context: replyContext,
-                staged_file_name: stagedFileName
-            })
+                staged_file_name: stagedFileName,
+                turn_id: chatGeneration.turnId
+            }),
+            signal: chatGeneration.signal
         });
 
         const data = await res.json();
@@ -2409,12 +2697,21 @@ async function sendMessage() {
         }
 
         refreshHistoryIfVisible();
+        markChatGenerationFinished();
 
     } catch (err) {
+        if (err?.name === 'AbortError') {
+            markChatGenerationFinished();
+            return;
+        }
         document.getElementById("typing-msg")?.remove();
         console.error(err);
         addMessage(err?.message ? `⚠️ ${err.message}` : "⚠️ Sorry, I'm having trouble connecting. Please try again.", false);
         await updateLogResponse(logId, 'Connection error: response not received.');
+    } finally {
+        if (chatIsGenerating) {
+            markChatGenerationFinished();
+        }
     }
 }
 
