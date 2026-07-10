@@ -532,6 +532,33 @@ def solve_simple_reasoning_question(message: str) -> str:
 
     return ""
 
+
+def looks_like_image_generation_request(message: str) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+
+    image_patterns = (
+        r"\bimage\b", r"\bimages\b", r"\bimahe\b", r"\bpicture\b", r"\bpictures\b",
+        r"\bphoto\b", r"\bphotos\b", r"\billustration\b", r"\billustrations\b",
+        r"\bdiagram\b", r"\bdiagrams\b", r"\bdrawing\b", r"\bdrawings\b",
+        r"\bsketch\b", r"\bsketches\b", r"\bpainting\b", r"\bpaintings\b",
+        r"\bposter\b", r"\bposters\b", r"\bgraphic\b", r"\bgraphics\b",
+        r"\bvisual\b", r"\bvisuals\b", r"\bartwork\b", r"\bportra(it|its)\b",
+    )
+    generation_patterns = (
+        r"\b(generate|create|make|draw|design|produce|build)\b.*\b(image|picture|photo|illustration|diagram|drawing|sketch|painting|poster|graphic|visual|artwork|portrait)\b",
+        r"\b(generate|create|make|draw|design|produce|build)\b.*\b(rose|flower|tree|sun|cat|dog|mountain|landscape|scene)\b",
+    )
+
+    if any(re.search(pattern, text) for pattern in image_patterns):
+        return True
+
+    if any(re.search(pattern, text) for pattern in generation_patterns):
+        return True
+
+    return False
+
 RAG_WEAK_SIGNALS = (
     "i don't have", "i do not have", "not in the curriculum",
     "not mentioned", "cannot find", "can't find", "no information",
@@ -2383,7 +2410,7 @@ async def chat_endpoint(request: ChatRequest):
                     pdf_url = None
 
         # ================= IMAGE GENERATION =================
-        if any(k in request.message.lower() for k in ["image", "diagram", "draw", "visual"]):
+        if looks_like_image_generation_request(request.message):
 
             if not IMAGE_RUNTIME_AVAILABLE:
                 answer = "Your image request was received, but image generation is unavailable in this workspace."
