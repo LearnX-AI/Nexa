@@ -524,7 +524,11 @@ def solve_simple_reasoning_question(message: str) -> str:
         return ""
 
     if any(trigger in lowered for trigger in ("how many", "how much", "left", "remain", "remaining", "stay", "sheep", "die")):
-        return f"The answer is {match.group(1)}."
+        number_left = match.group(1)
+        return (
+            f"The answer is {number_left}. "
+            f"Because 'all but {number_left}' means every one except {number_left} is gone, so {number_left} are left."
+        )
 
     return ""
 
@@ -1333,14 +1337,15 @@ def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
     # Note: generation disclaimer removed from lesson plan output
 
     meta = extract_lesson_metadata(request_message)
-    grade = meta.get("grade") or "TBD"
-    subject = meta.get("subject") or "TBD"
-    topic = meta.get("topic") or "TBD"
+    default_value = "Not specified"
+    grade = meta.get("grade") or default_value
+    subject = meta.get("subject") or default_value
+    topic = meta.get("topic") or default_value
     duration_text = meta.get("duration") or "40 minutes"
-    prereq = meta.get("prerequisite") or "TBD"
+    prereq = meta.get("prerequisite") or default_value
 
     def cell(value: object) -> str:
-        return str(value if value is not None else "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip() or "TBD"
+        return str(value if value is not None else "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip() or default_value
 
     # Determine total minutes if possible
     total_minutes = None
@@ -1368,7 +1373,7 @@ def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
         independent = 7
         closure = 3
 
-    title = f"# {cell(topic) if topic != 'TBD' else 'Lesson Plan'}"
+    title = f"# {cell(topic) if topic != default_value else 'Lesson Plan'}"
 
     template_parts = []
     template_parts.append(title)
@@ -1885,14 +1890,16 @@ def get_shared_chat_data(share_token: str):
                 "content": nexa_response,
             }
 
-            if image_base64 and log_id and user_name:
-                assistant_message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
-
             if image_mime_type:
                 assistant_message["image_mime_type"] = image_mime_type
 
             if image_filename:
                 assistant_message["image_filename"] = image_filename
+
+            if image_filename:
+                assistant_message["image_url"] = f"/assets/{quote_plus(image_filename)}"
+            elif image_base64 and log_id and user_name:
+                assistant_message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
 
             messages.append(assistant_message)
 
@@ -2555,12 +2562,13 @@ def get_chat_history(session_id: str):
         pdf_url = (row.get("pdf_url") or "").strip()
         if nexa_response:
             message = {"role": "assistant", "content": nexa_response}
-            if image_base64 and log_id and user_name:
+            if image_mime_type:
+                message["image_mime_type"] = image_mime_type
+            if image_filename:
+                message["image_filename"] = image_filename
+                message["image_url"] = f"/assets/{quote_plus(image_filename)}"
+            elif image_base64 and log_id and user_name:
                 message["image_url"] = f"/api/chat-image/{log_id}?user_name={quote_plus(user_name)}"
-                if image_mime_type:
-                    message["image_mime_type"] = image_mime_type
-                if image_filename:
-                    message["image_filename"] = image_filename
             if pdf_url:
                 message["pdf_url"] = pdf_url
             messages.append(message)
