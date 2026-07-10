@@ -1334,19 +1334,19 @@ function beginChatGeneration(promptText) {
     };
 }
 
-async function stopActiveChatGeneration(restorePrompt = false) {
-    if (activeChatTurnId) {
-        try {
-            await fetch('/api/chat-stop', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ turn_id: activeChatTurnId, session_id: sessionId }),
-            });
-        } catch (error) {
-            console.warn('Stop API failed', error);
-        }
-    }
+function sendStopGenerationSignal() {
+    if (!activeChatTurnId) return;
 
+    fetch('/api/chat-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turn_id: activeChatTurnId, session_id: sessionId }),
+    }).catch(error => {
+        console.warn('Stop API failed', error);
+    });
+}
+
+async function stopActiveChatGeneration(restorePrompt = false) {
     if (activeChatAbortController) {
         activeChatAbortController.abort();
     }
@@ -1361,12 +1361,17 @@ async function stopActiveChatGeneration(restorePrompt = false) {
 
     if (restorePrompt) {
         userInput.value = promptToRestore;
-        userInput.focus();
+        requestAnimationFrame(() => {
+            userInput.focus();
+            userInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
         if (typeof userInput.setSelectionRange === 'function') {
             const cursorPosition = promptToRestore.length;
             userInput.setSelectionRange(cursorPosition, cursorPosition);
         }
     }
+
+    sendStopGenerationSignal();
 }
 
 function markChatGenerationFinished() {
