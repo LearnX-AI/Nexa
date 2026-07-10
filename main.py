@@ -335,7 +335,20 @@ def extract_text_from_upload(path: str, filename: str) -> str:
         print(f"Text extraction failed: {exc}")
     return ""
 
-def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optional[str], user_name: str, user_prompt: str, nexa_response: str, pdf_url: Optional[str] = None, stars: int = 0, timestamp: Optional[datetime.datetime] = None) -> bool:
+def persist_chat_log(
+    log_id: str,
+    session_id: Optional[str],
+    user_email: Optional[str],
+    user_name: str,
+    user_prompt: str,
+    nexa_response: str,
+    pdf_url: Optional[str] = None,
+    image_filename: Optional[str] = None,
+    image_mime_type: Optional[str] = None,
+    image_base64: Optional[str] = None,
+    stars: int = 0,
+    timestamp: Optional[datetime.datetime] = None,
+) -> bool:
     if mysql.connector is None:
         return False
 
@@ -347,8 +360,11 @@ def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optiona
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO nexa_chat_logs (log_id, session_id, user_email, user_name, user_prompt, nexa_response, pdf_url, timestamp_utc, stars)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO nexa_chat_logs (
+                log_id, session_id, user_email, user_name, user_prompt, nexa_response,
+                pdf_url, image_filename, image_mime_type, image_base64, timestamp_utc, stars
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 session_id = VALUES(session_id),
                 user_email = VALUES(user_email),
@@ -356,6 +372,9 @@ def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optiona
                 user_prompt = VALUES(user_prompt),
                 nexa_response = VALUES(nexa_response),
                 pdf_url = VALUES(pdf_url),
+                image_filename = VALUES(image_filename),
+                image_mime_type = VALUES(image_mime_type),
+                image_base64 = VALUES(image_base64),
                 timestamp_utc = VALUES(timestamp_utc),
                 stars = VALUES(stars)
             """,
@@ -367,6 +386,9 @@ def persist_chat_log(log_id: str, session_id: Optional[str], user_email: Optiona
                 user_prompt,
                 nexa_response,
                 pdf_url,
+                image_filename,
+                image_mime_type,
+                image_base64,
                 ts.strftime("%Y-%m-%d %H:%M:%S"),
                 stars,
             ),
@@ -2425,6 +2447,9 @@ async def chat_endpoint(request: ChatRequest):
                         user_prompt=(request.message or "").strip(),
                         nexa_response=(answer or "").strip(),
                         pdf_url=pdf_url,
+                        image_filename=None,
+                        image_mime_type=None,
+                        image_base64=None,
                         stars=0,
                         timestamp=datetime.datetime.now(datetime.timezone.utc),
                     )
@@ -2449,6 +2474,27 @@ async def chat_endpoint(request: ChatRequest):
             image_id = ts  # IMPORTANT for frontend polling
 
             prompt = f"{request.message}. educational diagram, clean labels, high quality, textbook style"
+
+            # Store the filename immediately so shared history can show the image URL
+            # even before the background base64 upload finishes.
+            try:
+                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                persist_chat_log(
+                    log_id=user_log_id,
+                    session_id=session_id,
+                    user_email=normalized_email,
+                    user_name=user_name,
+                    user_prompt=(request.message or "").strip(),
+                    nexa_response="Generating image...",
+                    pdf_url=pdf_url,
+                    image_filename=filename,
+                    image_mime_type="image/png",
+                    image_base64=None,
+                    stars=0,
+                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                )
+            except Exception:
+                pass
 
             # NON-BLOCKING BACKGROUND THREAD
             threading.Thread(
