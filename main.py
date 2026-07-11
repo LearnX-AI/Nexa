@@ -18,16 +18,17 @@ from typing import Optional, Dict, Any, List
 import datetime
 from fastapi.staticfiles import StaticFiles
 import threading
+import json
+import sympy
+from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+
 
 try:
     import mysql.connector
 except ModuleNotFoundError:
     mysql.connector = None
 
-try:
-    from duckduckgo_search import DDGS
-except ModuleNotFoundError:
-    DDGS = None
+from ddgs import DDGS
 
 try:
     import wikipedia
@@ -205,6 +206,7 @@ os.makedirs(IMAGE_OUTPUT_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 IMAGE_STATUS: Dict[str, str] = {}
+USER_MEMORY: Dict[str, Dict[str, str]] = {}
 
 SESSION_DOCUMENT_BUFFER: Dict[str, str] = {}
 
@@ -275,7 +277,80 @@ class SharedChatResponse(BaseModel):
 # Server-side stack to mirror push/pop operations done by the UI.
 chat_stack = []
 CHAT_CANCELLED_TURNS: set[str] = set()
+USER_MEMORY_FILE = os.path.join(os.path.dirname(__file__), "user_memory.json")
 
+
+def wrap_bare_latex(text: str) -> str:
+    """Ensure LaTeX the model emitted without $ delimiters gets wrapped so KaTeX renders it.
+    Applied to math answers before they are sent to the frontend."""
+    if not text:
+        return text
+
+    # \boxed{...} (may contain one level of nested braces) -> $$...$$ if not already wrapped
+    text = re.sub(
+        r'(?<!\$)(\\boxed\{(?:[^{}]|\{[^{}]*\})*\})(?!\$)',
+        r'$$\1$$',
+        text,
+    )
+
+    # \int ... dt / dx  -> $$...$$
+    text = re.sub(
+        r'(?<!\$)(\\int[^\n]*?\bd[a-z]\b)(?!\$)',
+        r'$$\1$$',
+        text,
+    )
+
+    # Inline tokens like V_{total}, e^{-0.2t}, 120t^2, \frac{a}{b} -> $...$
+    text = re.sub(
+        r'(?<!\$)([A-Za-z0-9]*(?:\\[a-zA-Z]+|[_^]\{[^}]*\}|[_^][A-Za-z0-9])[A-Za-z0-9{}^_\\\-\.]*)(?!\$)',
+        r'$\1$',
+        text,
+    )
+    return text
+
+def load_user_memory():
+    global USER_MEMORY
+    try:
+        with open(USER_MEMORY_FILE, "r", encoding="utf-8") as f:
+            USER_MEMORY = json.load(f)
+    except Exception:
+        USER_MEMORY = {}
+
+def save_user_memory():
+    try:
+        with open(USER_MEMORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(USER_MEMORY, f)
+    except Exception as e:
+        print("user memory save failed:", e)
+
+load_user_memory()
+
+
+import re
+
+def capture_user_fact(email: str, message: str):
+    """Detect and store definitions the user asserts, e.g. 'DOE stands for Department of Education'."""
+    if not email:
+        return
+    patterns = [
+        r'\b([A-Z]{2,6})\s+(?:stands for|means|is short for|refers to|is)\s+(.+)',
+        r'\b(.+?)\s+is\s+(?:called|known as)\s+(.+)',
+    ]
+    for pat in patterns:
+        m = re.search(pat, message, re.IGNORECASE)
+        if m:
+            term = m.group(1).strip().strip('."').upper()
+            definition = m.group(2).strip().strip('."')
+            if 1 < len(term) <= 10 and 2 < len(definition) <= 120:
+                USER_MEMORY.setdefault(email, {})[term] = definition
+                save_user_memory()
+                return
+
+def looks_like_math(message: str) -> bool:
+    m = (message or "").lower()
+    signals = ("solve", "integrate", "integral", "differentiate", "derivative",
+               "evaluate", "calculate", "simplify", "∫", "∑", "√")
+    return any(s in m for s in signals) or sum(c in m for c in "∫∑√^=") >= 2
 
 def is_chat_turn_cancelled(turn_id: Optional[str]) -> bool:
     return bool(turn_id and turn_id in CHAT_CANCELLED_TURNS)
@@ -404,6 +479,77 @@ def persist_chat_log(
         if conn is not None:
             conn.close()
 
+import re
+import sympy
+from sympy.parsing.sympy_parser import (
+    parse_expr, standard_transformations, implicit_multiplication_application
+)
+
+_SYMPY_TF = standard_transformations + (implicit_multiplication_application,)
+
+def solve_with_sympy(message: str):
+    """Compute an exact answer with SymPy. Returns (latex_result, plain) or None."""
+    # Normalize Unicode maths characters SymPy's parser can't read.
+    message = (message or "").replace("−", "-").replace("–", "-").replace("×", "*").replace("÷", "/")
+    x = sympy.Symbol('x')
+    msg = message.strip()
+
+    try:
+        # ---- Definite integral: "integrate <f> from <a> to <b>" or "[a,b] <f> dx" ----
+        defint = re.search(r'(?:integrate|integral of)\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+)', msg, re.IGNORECASE)
+        bounds = re.search(r'∫?\s*\[?\s*([\d\.\-/]+)\s*[,;]\s*([\d\.\-/]+)\s*\]?\s*(.+?)\s*dx', msg, re.IGNORECASE)
+        if defint or bounds:
+            if defint:
+                body, lo, hi = defint.group(1), defint.group(2), defint.group(3)
+            else:
+                lo, hi, body = bounds.group(1), bounds.group(2), bounds.group(3)
+            expr = parse_expr(body.replace("^", "**"), transformations=_SYMPY_TF)
+            lo_v = parse_expr(lo, transformations=_SYMPY_TF)
+            hi_v = parse_expr(hi, transformations=_SYMPY_TF)
+            exact = sympy.integrate(expr, (x, lo_v, hi_v))
+            approx = sympy.N(exact, 6)
+            return (f"$$\\int_{{{sympy.latex(lo_v)}}}^{{{sympy.latex(hi_v)}}} "
+                    f"{sympy.latex(expr)}\\,dx = {sympy.latex(exact)} \\approx {approx}$$",
+                    f"{exact} (approx {approx})")
+
+        # ---- Indefinite integral: "integrate <f>" ----
+        indef = re.search(r'(?:integrate|integral of)\s+(.+?)(?:\s+dx)?$', msg, re.IGNORECASE)
+        if indef:
+            expr = parse_expr(indef.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.integrate(expr, x)
+            return (f"$$\\int {sympy.latex(expr)}\\,dx = {sympy.latex(result)} + C$$", str(result))
+
+        # ---- Derivative: "differentiate <f>" / "derivative of <f>" ----
+        diff = re.search(r'(?:differentiate|derivative of)\s+(.+)', msg, re.IGNORECASE)
+        if diff:
+            expr = parse_expr(diff.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.diff(expr, x)
+            return (f"$$\\frac{{d}}{{dx}}\\left({sympy.latex(expr)}\\right) = {sympy.latex(result)}$$", str(result))
+
+        # ---- Equation solving: "solve <lhs> = <rhs>" ----
+        eq = re.search(r'solve\s+(.+)', msg, re.IGNORECASE)
+        if eq and "=" in eq.group(1):
+            left, right = eq.group(1).split("=", 1)
+            lhs = parse_expr(left.replace("^", "**"), transformations=_SYMPY_TF)
+            rhs = parse_expr(right.replace("^", "**"), transformations=_SYMPY_TF)
+            sols = sympy.solve(sympy.Eq(lhs, rhs), x)
+            if not sols:
+                return None
+            if len(sols) == 1:
+                return (f"$$x = {sympy.latex(sols[0])}$$", str(sols))
+            body = ",\\quad ".join(f"x = {sympy.latex(s)}" for s in sols)
+            return (f"$${body}$$", str(sols))
+
+        # ---- Simplify / evaluate: "simplify <expr>" ----
+        simp = re.search(r'(?:simplify|evaluate|calculate)\s+(.+)', msg, re.IGNORECASE)
+        if simp:
+            expr = parse_expr(simp.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.simplify(expr)
+            return (f"$${sympy.latex(expr)} = {sympy.latex(result)}$$", str(result))
+
+    except Exception as e:
+        print(f"[info] SymPy could not parse (falling back to LLM): {e}")
+    return None
 
 def to_utc_datetime(iso_str: str) -> datetime.datetime:
     try:
@@ -521,6 +667,39 @@ def fetch_wikipedia_summary(query: str) -> str:
             "Try a more specific title or ask Nexa for a short explanation instead."
         )
 
+import re  # at the top of the file if not already there
+
+def analyze_image_text_intent(message: str):
+    """Returns (intent, text): 'wants_text' | 'no_text' | 'ambiguous'."""
+    m = (message or "").strip()
+    low = m.lower()
+    if any(p in low for p in ("no text", "without text", "no words", "no writing",
+                              "text-free", "no labels")):
+        return ("no_text", "")
+    q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,80})["\u201d\u2019\']', m)
+    if q:
+        return ("wants_text", q.group(1).strip())
+    if any(p in low for p in ("with the text", "that says", "saying", "with the words",
+                              "captioned", "titled", "with the title", "label it")):
+        return ("wants_text", "")
+    ambiguous_types = ("banner", "poster", "flyer", "sign", "logo", "certificate",
+                       "card", "cover", "brochure", "advertisement", "advert",
+                       "infographic", "menu", "ticket", "invitation", "billboard")
+    if any(t in low for t in ambiguous_types):
+        return ("ambiguous", "")
+    return ("no_text", "")
+
+
+def build_image_generation_prompt(message: str, intent: str, text: str) -> str:
+    if intent == "wants_text":
+        if text:
+            return (f'{message}. Clean professional design. IMPORTANT: display the exact text '
+                    f'"{text}", spelled correctly, sharp and clearly readable. No other text, '
+                    f'no random letters. High resolution.')
+        return (f"{message}. Clean professional design with the requested wording spelled "
+                f"correctly and clearly readable. No random or extra text. High resolution.")
+    return (f"{message}. Clean, high-quality illustration with NO text, NO words, NO letters, "
+            f"no captions, no labels, no watermark. High resolution.")
 
 def build_general_knowledge_answer(message: str) -> str:
     query = build_web_results_query(message)
@@ -701,6 +880,7 @@ NEXA_FAQ_ANSWERS = {
 
 }
 
+SESSION_PENDING_IMAGE: Dict[str, str] = {}
 
 def normalize_faq_query(message: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", "", expand_common_contractions(message or "").strip().lower())
@@ -1618,40 +1798,34 @@ if IMAGE_RUNTIME_AVAILABLE:
         print("Image model unavailable:", exc)
         pipe = None
 
-def generate_image_task(prompt, path, image_id):
-
+def generate_image_task(prompt, path, image_id, allow_text=False):
     try:
-        if pipe is None or torch is None:
+        current_pipe = pipe                       # use the model loaded at startup
+        if current_pipe is None or torch is None:
             IMAGE_STATUS[image_id] = "failed"
             return
 
-        print(f"Starting generation for {image_id}")
+        if allow_text:
+            negative_prompt = "blurry, low quality, distorted, duplicate text, overlapping text, watermark"
+        else:
+            negative_prompt = (
+                "text, words, letters, captions, labels, writing, numbers, typography, "
+                "watermark, signature, gibberish text, random letters, signage, "
+                "blurry, low quality, distorted"
+            )
 
-        image = pipe(
+        image = current_pipe(
             prompt=prompt,
-            negative_prompt="blurry, low quality",
-            width=1024,
-            height=1024,
+            negative_prompt=negative_prompt,
+            width=1024, height=1024,
             num_inference_steps=50,
             true_cfg_scale=5.0,
             generator=torch.Generator(device="cuda").manual_seed(42)
         ).images[0]
-
         image.save(path)
-
-        print(f"Image saved: {path}")
-
-        torch.cuda.empty_cache()
-
-        # ✅ VERY IMPORTANT
         IMAGE_STATUS[image_id] = "ready"
-
-        print(f"Image status updated: {image_id} -> ready")
-
     except Exception as e:
-
         print("IMAGE THREAD ERROR:", e)
-
         IMAGE_STATUS[image_id] = "failed"
 
 # ====================== FASTAPI ======================
@@ -2155,388 +2329,69 @@ async def chat_stop_endpoint(payload: ChatStopPayload):
     CHAT_CANCELLED_TURNS.add(turn_id)
     return {"ok": True, "turn_id": turn_id}
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+def solve_with_sympy(message: str):
+    """Compute an exact answer with SymPy. Returns (latex_result, plain) or None."""
+    # Normalize Unicode maths characters SymPy's parser can't read.
+    message = (message or "").replace("−", "-").replace("–", "-").replace("×", "*").replace("÷", "/")
+    x = sympy.Symbol('x')
+    msg = message.strip()
 
     try:
-        access_role = infer_access_role(request.user_email)
-    except HTTPException:
-        access_role = "student"
-    normalized_email = normalize_email_address(request.user_email)
-    session_id = request.session_id or str(uuid.uuid4())
-    SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
-
-    if is_chat_turn_cancelled(request.turn_id):
-        return ChatResponse(
-            response="",
-            session_id=session_id,
-            access_role=access_role,
-            status_message="Nexa is Thinking...",
-            pdf_url=None,
-            image_url=None,
-            image_id=None,
-            log_id=None,
-        )
-
-    hydrate_session_history(session_id)
-    record_chat_turn(session_id, "user", request.message)
-
-    page_url = (request.url or "").strip()
-    page_question = (request.question or "").strip() or (request.message or "").strip()
-
-    if page_url:
-        page_text = fetch_page_text(page_url)
-        if page_text.startswith("__ERROR__"):
-            answer = page_text.replace("__ERROR__", "").strip()
-            return ChatResponse(
-                response=answer,
-                session_id=session_id,
-                access_role=access_role,
-                status_message="Nexa is Searching ...",
-                pdf_url=None,
-                image_url=None,
-                image_id=None,
-                log_id=str(uuid.uuid4()),
-            )
-
-        existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
-        combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
-        SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
-
-        question = page_question or "Summarize this web page clearly for a student."
-
-        if LANGCHAIN_AVAILABLE and llm is not None:
-            prompt = ChatPromptTemplate.from_messages([
-                ("system",
-                 "You are Nexa, an educational assistant. Read the web page content provided and "
-                 "answer the user's request accurately in clean Markdown, using only that content. "
-                 "Do not invent details. Audience guidance: {audience}"),
-                ("human", "User request: {question}\n\nWeb page content:\n{page}"),
-            ])
-            try:
-                answer = (prompt | llm | StrOutputParser()).invoke({
-                    "question": question,
-                    "page": page_text,
-                    "audience": build_role_instruction(access_role),
-                }).strip()
-            except Exception as exc:
-                print(f"URL read synthesis failed: {exc}")
-                answer = "I read the page but could not process it just now. Please try again."
-        else:
-            answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
-
-        # disclaimer removed — return model answer as-is
-        answer = answer
-
-        record_chat_turn(session_id, "assistant", answer)
-        try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-            persist_chat_log(
-                log_id=str(uuid.uuid4()),
-                session_id=session_id,
-                user_email=normalized_email,
-                user_name=user_name,
-                user_prompt=f"[Read URL] {page_url} — {question}",
-                nexa_response=answer,
-                pdf_url=None,
-                stars=0,
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-            )
-        except Exception:
-            pass
-
-        return ChatResponse(
-            response=answer,
-            session_id=session_id,
-            access_role=access_role,
-            status_message="Nexa is Searching ...",
-            pdf_url=None,
-            image_url=None,
-            image_id=None,
-            log_id=str(uuid.uuid4()),
-        )
-
-    # Create a single log_id for this user -> assistant turn so frontend can attach images/files.
-    user_log_id = str(uuid.uuid4())
-    try:
-        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-        persist_chat_log(
-            log_id=user_log_id,
-            session_id=session_id,
-            user_email=normalized_email,
-            user_name=user_name,
-            user_prompt=(request.message or "").strip(),
-            nexa_response="",
-            pdf_url=None,
-            stars=0,
-            timestamp=datetime.datetime.now(datetime.timezone.utc),
-        )
-    except Exception:
-        # If persistence fails (e.g., DB not available), continue without blocking the chat flow.
-        pass
-
-    # Block lesson-plan generation for non-teachers
-    lower_msg = (request.message or "").lower()
-    status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
-    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
-        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
-        record_chat_turn(session_id, "assistant", answer)
-        try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-            persist_chat_log(
-                log_id=user_log_id,
-                session_id=session_id,
-                user_email=normalized_email,
-                user_name=user_name,
-                user_prompt=(request.message or "").strip(),
-                nexa_response=(answer or "").strip(),
-                pdf_url=None,
-                stars=0,
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-            )
-        except Exception:
-            pass
-        return ChatResponse(
-            response=answer,
-            session_id=session_id,
-            access_role=access_role,
-            status_message=status_message,
-            pdf_url=None,
-            image_url=None,
-            image_id=None,
-            log_id=user_log_id,
-        )
-
-    try:
-        config = {"configurable": {"session_id": session_id}}
-
-        if is_chat_turn_cancelled(request.turn_id):
-            return ChatResponse(
-                response="",
-                session_id=session_id,
-                access_role=access_role,
-                status_message=status_message,
-                pdf_url=None,
-                image_url=None,
-                image_id=None,
-                log_id=None,
-            )
-
-        # ============ ANSWER RESOLUTION: FAQ -> explicit web -> RAG -> web fallback ============
-        reasoning_answer = solve_simple_reasoning_question(request.message)
-        if reasoning_answer:
-            answer = reasoning_answer
-        else:
-            faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
-            if faq_answer:
-                answer = faq_answer
+        # ---- Definite integral: "integrate <f> from <a> to <b>" or "[a,b] <f> dx" ----
+        defint = re.search(r'(?:integrate|integral of)\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+)', msg, re.IGNORECASE)
+        bounds = re.search(r'∫?\s*\[?\s*([\d\.\-/]+)\s*[,;]\s*([\d\.\-/]+)\s*\]?\s*(.+?)\s*dx', msg, re.IGNORECASE)
+        if defint or bounds:
+            if defint:
+                body, lo, hi = defint.group(1), defint.group(2), defint.group(3)
             else:
-                # Explicit "search the web" / "wikipedia ..." requests still go straight to web.
-                explicit_web = build_general_knowledge_answer(request.message)
-                if explicit_web:
-                    answer = explicit_web
-                elif conversational_rag_chain is None:
-                    # No RAG available — try web synthesis before giving up.
-                    answer = synthesize_web_answer(request.message, access_role) or (
-                        "Chat is available, but the curriculum model dependencies are not installed in this workspace."
-                    )
-                else:
-                    # Build the augmented question: inject reply context and any uploaded document.
-                    doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
-                    augmented_input = request.message
+                lo, hi, body = bounds.group(1), bounds.group(2), bounds.group(3)
+            expr = parse_expr(body.replace("^", "**"), transformations=_SYMPY_TF)
+            lo_v = parse_expr(lo, transformations=_SYMPY_TF)
+            hi_v = parse_expr(hi, transformations=_SYMPY_TF)
+            exact = sympy.integrate(expr, (x, lo_v, hi_v))
+            approx = sympy.N(exact, 6)
+            return (f"$$\\int_{{{sympy.latex(lo_v)}}}^{{{sympy.latex(hi_v)}}} "
+                    f"{sympy.latex(expr)}\\,dx = {sympy.latex(exact)} \\approx {approx}$$",
+                    f"{exact} (approx {approx})")
 
-                    if request.reply_context:
-                        augmented_input = (
-                            f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
-                            f"Their follow-up: {request.message}"
-                        )
+        # ---- Indefinite integral: "integrate <f>" ----
+        indef = re.search(r'(?:integrate|integral of)\s+(.+?)(?:\s+dx)?$', msg, re.IGNORECASE)
+        if indef:
+            expr = parse_expr(indef.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.integrate(expr, x)
+            return (f"$$\\int {sympy.latex(expr)}\\,dx = {sympy.latex(result)} + C$$", str(result))
 
-                    if doc_context:
-                        augmented_input = (
-                            f"Use the following document the user uploaded in this session when relevant:\n"
-                            f"{doc_context}\n\n"
-                            f"User question: {augmented_input}"
-                        )
+        # ---- Derivative: "differentiate <f>" / "derivative of <f>" ----
+        diff = re.search(r'(?:differentiate|derivative of)\s+(.+)', msg, re.IGNORECASE)
+        if diff:
+            expr = parse_expr(diff.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.diff(expr, x)
+            return (f"$$\\frac{{d}}{{dx}}\\left({sympy.latex(expr)}\\right) = {sympy.latex(result)}$$", str(result))
 
-                    # 1) Try the curriculum RAG chain first (guarded against Ollama load failures).
-                    try:
-                        result = conversational_rag_chain.invoke(
-                            {"input": augmented_input, "audience": build_role_instruction(access_role)},
-                            config=config
-                        )
-                        rag_answer = (result.get("answer") or "").strip()
-                    except Exception as model_error:
-                        print(f"RAG/LLM call failed: {model_error}")
-                        rag_answer = ""  # fall through to web fallback / friendly message below
+        # ---- Equation solving: "solve <lhs> = <rhs>" ----
+        eq = re.search(r'solve\s+(.+)', msg, re.IGNORECASE)
+        if eq and "=" in eq.group(1):
+            left, right = eq.group(1).split("=", 1)
+            lhs = parse_expr(left.replace("^", "**"), transformations=_SYMPY_TF)
+            rhs = parse_expr(right.replace("^", "**"), transformations=_SYMPY_TF)
+            sols = sympy.solve(sympy.Eq(lhs, rhs), x)
+            if not sols:
+                return None
+            if len(sols) == 1:
+                return (f"$$x = {sympy.latex(sols[0])}$$", str(sols))
+            body = ",\\quad ".join(f"x = {sympy.latex(s)}" for s in sols)
+            return (f"$${body}$$", str(sols))
 
-                    # 2) If the PDFs didn't cover it (and there's no uploaded doc driving the
-                    #    answer), fall back to a web-synthesized answer.
-                    if rag_answer_is_weak(rag_answer) and not doc_context:
-                        web_answer = synthesize_web_answer(request.message, access_role)
-                        answer = web_answer or rag_answer or (
-                            "I'm having trouble reaching the language model right now (it may be low on memory). "
-                            "Please try again in a moment."
-                        )
-                    else:
-                        answer = rag_answer or (
-                            "I'm having trouble reaching the language model right now (it may be low on memory). "
-                            "Please try again in a moment."
-                        )
-
-        # Disclaimer disabled — leave answer unchanged.
-        answer = answer
-
-        # Normalize lesson plan structure for teacher requests
-        try:
-            if _is_lesson_request(lower_msg) and access_role == "teacher":
-                answer = normalize_lesson_plan_format(answer, request.message)
-        except Exception:
-            # Non-fatal: leave original answer if normalization fails
-            pass
-
-        pdf_url = None
-        image_url = None
-        image_id = None
-
-        # ================= PDF GENERATION =================
-        if "pdf" in request.message.lower():
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"lesson_{ts}.pdf"
-            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
-
-            safe_answer = answer if isinstance(answer, str) else str(answer or "")
-
-            # markdown-pdf builds a TOC that requires the doc to start at H1.
-            # Ensure there is a leading H1 so it never throws "hierarchy level must be 1".
-            stripped = safe_answer.lstrip()
-            if not stripped.startswith("# "):
-                safe_answer = "# Nexa AI Document\n\n" + safe_answer
-
-            try:
-                if MarkdownPdf is not None and Section is not None:
-                    # toc_level=0 disables the table of contents and its hierarchy check.
-                    pdf = MarkdownPdf(toc_level=0)
-                    pdf.add_section(Section(safe_answer))
-                    pdf.save(path)
-                    pdf_url = f"/assets/{filename}"
-                else:
-                    save_text_to_pdf(path, safe_answer)
-                    pdf_url = f"/assets/{filename}"
-            except Exception as pdf_error:
-                print(f"PDF generation failed: {pdf_error}")
-                try:
-                    save_text_to_pdf(path, safe_answer)
-                    pdf_url = f"/assets/{filename}"
-                except Exception as fallback_error:
-                    print(f"Fallback PDF generation failed: {fallback_error}")
-                    pdf_url = None
-
-        # ================= IMAGE GENERATION =================
-        if looks_like_image_generation_request(request.message):
-
-            if not IMAGE_RUNTIME_AVAILABLE:
-                answer = "Your image request was received, but image generation is unavailable in this workspace."
-                record_chat_turn(session_id, "assistant", answer)
-                try:
-                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-                    persist_chat_log(
-                        log_id=user_log_id,
-                        session_id=session_id,
-                        user_email=normalized_email,
-                        user_name=user_name,
-                        user_prompt=(request.message or "").strip(),
-                        nexa_response=(answer or "").strip(),
-                        pdf_url=pdf_url,
-                        image_filename=None,
-                        image_mime_type=None,
-                        image_base64=None,
-                        stars=0,
-                        timestamp=datetime.datetime.now(datetime.timezone.utc),
-                    )
-                except Exception:
-                    pass
-                return ChatResponse(
-                    response=answer,
-                    session_id=session_id,
-                    access_role=access_role,
-                    pdf_url=pdf_url,
-                    image_url=None,
-                    image_id=None,
-                    log_id=user_log_id,
-                )
-
-            answer = "Generating image..."
-
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"image_{ts}.png"
-            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
-
-            image_id = ts  # IMPORTANT for frontend polling
-
-            prompt = f"{request.message}. educational diagram, clean labels, high quality, textbook style"
-
-            # Store the filename immediately so shared history can show the image URL
-            # even before the background base64 upload finishes.
-            try:
-                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-                persist_chat_log(
-                    log_id=user_log_id,
-                    session_id=session_id,
-                    user_email=normalized_email,
-                    user_name=user_name,
-                    user_prompt=(request.message or "").strip(),
-                    nexa_response="Generating image...",
-                    pdf_url=pdf_url,
-                    image_filename=filename,
-                    image_mime_type="image/png",
-                    image_base64=None,
-                    stars=0,
-                    timestamp=datetime.datetime.now(datetime.timezone.utc),
-                )
-            except Exception:
-                pass
-
-            # NON-BLOCKING BACKGROUND THREAD
-            threading.Thread(
-                target=generate_image_task,
-                args=(prompt, path, image_id)
-            ).start()
-
-            image_url = f"/assets/{filename}"
-
-        record_chat_turn(session_id, "assistant", answer)
-
-        # Server-side persistence: update the earlier user log entry with the assistant response
-        try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-            persist_chat_log(
-                log_id=user_log_id,
-                session_id=session_id,
-                user_email=normalized_email,
-                user_name=user_name,
-                user_prompt=(request.message or "").strip(),
-                nexa_response=(answer or "").strip(),
-                pdf_url=pdf_url,
-                stars=0,
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
-            )
-        except Exception:
-            pass
-
-        return ChatResponse(
-            response=answer,
-            session_id=session_id,
-            access_role=access_role,
-            status_message=status_message,
-            pdf_url=pdf_url,
-            image_url=image_url,
-            image_id=image_id,
-            log_id=user_log_id,
-        )
+        # ---- Simplify / evaluate: "simplify <expr>" ----
+        simp = re.search(r'(?:simplify|evaluate|calculate)\s+(.+)', msg, re.IGNORECASE)
+        if simp:
+            expr = parse_expr(simp.group(1).replace("^", "**"), transformations=_SYMPY_TF)
+            result = sympy.simplify(expr)
+            return (f"$${sympy.latex(expr)} = {sympy.latex(result)}$$", str(result))
 
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail="Server error")
+        print(f"[info] SymPy could not parse (falling back to LLM): {e}")
+    return None
 
 def gather_web_context(query: str, limit: int = 5) -> str:
     """Collect plain-text context from Wikipedia + DuckDuckGo for LLM synthesis.
@@ -2682,6 +2537,381 @@ async def image_status(image_id: str):
     return {
         "status": status
     }
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+
+    try:
+        access_role = infer_access_role(request.user_email)
+    except HTTPException:
+        access_role = "student"
+    normalized_email = normalize_email_address(request.user_email)
+    session_id = request.session_id or str(uuid.uuid4())
+    SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
+
+    if is_chat_turn_cancelled(request.turn_id):
+        return ChatResponse(
+            response="", session_id=session_id, access_role=access_role,
+            status_message="Nexa is Thinking...", pdf_url=None,
+            image_url=None, image_id=None, log_id=None,
+        )
+
+    hydrate_session_history(session_id)
+    record_chat_turn(session_id, "user", request.message)
+
+    capture_user_fact(normalized_email, request.message)
+
+    page_url = (request.url or "").strip()
+    page_question = (request.question or "").strip() or (request.message or "").strip()
+
+    # ================= URL READING =================
+    if page_url:
+        page_text = fetch_page_text(page_url)
+        if page_text.startswith("__ERROR__"):
+            answer = page_text.replace("__ERROR__", "").strip()
+            return ChatResponse(
+                response=answer, session_id=session_id, access_role=access_role,
+                status_message="Nexa is Searching ...", pdf_url=None,
+                image_url=None, image_id=None, log_id=str(uuid.uuid4()),
+            )
+
+        existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+        combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
+        SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
+        question = page_question or "Summarize this web page clearly for a student."
+
+        if LANGCHAIN_AVAILABLE and llm is not None:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system",
+                 "You are Nexa, an educational assistant. Read the web page content provided and "
+                 "answer the user's request accurately in clean Markdown, using only that content. "
+                 "Do not invent details. Audience guidance: {audience}"),
+                ("human", "User request: {question}\n\nWeb page content:\n{page}"),
+            ])
+            try:
+                answer = (prompt | llm | StrOutputParser()).invoke({
+                    "question": question, "page": page_text,
+                    "audience": build_role_instruction(access_role),
+                }).strip()
+            except Exception as exc:
+                print(f"URL read synthesis failed: {exc}")
+                answer = "I read the page but could not process it just now. Please try again."
+        else:
+            answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
+
+        record_chat_turn(session_id, "assistant", answer)
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=str(uuid.uuid4()), session_id=session_id, user_email=normalized_email,
+                user_name=user_name, user_prompt=f"[Read URL] {page_url} — {question}",
+                nexa_response=answer, pdf_url=None, stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
+        return ChatResponse(
+            response=answer, session_id=session_id, access_role=access_role,
+            status_message="Nexa is Searching ...", pdf_url=None,
+            image_url=None, image_id=None, log_id=str(uuid.uuid4()),
+        )
+
+    user_log_id = str(uuid.uuid4())
+    try:
+        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+        persist_chat_log(
+            log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+            user_name=user_name, user_prompt=(request.message or "").strip(),
+            nexa_response="", pdf_url=None, stars=0,
+            timestamp=datetime.datetime.now(datetime.timezone.utc),
+        )
+    except Exception:
+        pass
+
+    lower_msg = (request.message or "").lower()
+    status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
+        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
+        record_chat_turn(session_id, "assistant", answer)
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                user_name=user_name, user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(), pdf_url=None, stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+        return ChatResponse(
+            response=answer, session_id=session_id, access_role=access_role,
+            status_message=status_message, pdf_url=None,
+            image_url=None, image_id=None, log_id=user_log_id,
+        )
+
+    try:
+        config = {"configurable": {"session_id": session_id}}
+
+        if is_chat_turn_cancelled(request.turn_id):
+            return ChatResponse(
+                response="", session_id=session_id, access_role=access_role,
+                status_message=status_message, pdf_url=None,
+                image_url=None, image_id=None, log_id=None,
+            )
+
+        pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
+
+        if pending_image_request:
+            answer = ""
+        else:
+            reasoning_answer = solve_simple_reasoning_question(request.message)
+            if reasoning_answer:
+                answer = reasoning_answer
+
+            elif looks_like_math(request.message):
+                if LANGCHAIN_AVAILABLE and llm is not None:
+                    try:
+                        math_prompt = ChatPromptTemplate.from_messages([
+                            ("system",
+                             "You are a precise mathematics tutor. Solve the problem ONE step at a time. "
+                             "Do NOT produce a lesson plan or teaching objectives.\n"
+                             "FORMATTING — follow EXACTLY, this is critical:\n"
+                             "- Start with '## Problem' restating the question.\n"
+                             "- Then '## Solution'. Number each step '### Step 1', '### Step 2', one action per step.\n"
+                             "- Under each step: a short sentence, then the maths on its own line.\n"
+                             "- CRITICAL: EVERY piece of mathematics MUST be wrapped in dollar signs. "
+                             "Inline maths in single dollars like $x = 5$ or $\\cos(x)$. Displayed equations "
+                             "in double dollars on their own line like $$\\int_0^5 x^2\\,dx$$.\n"
+                             "- NEVER write a bare LaTeX command (\\cos, \\frac, \\int) outside dollar signs.\n"
+                             "- NEVER write maths as plain ASCII like x^2 or e^(-t); always LaTeX inside dollars.\n"
+                             "- End with '## Final Answer' and the result in $$...$$.\n"
+                             "Audience: {audience}"),
+                            ("human", "{problem}"),
+                        ])
+                        answer = (math_prompt | llm | StrOutputParser()).invoke({
+                            "problem": request.message,
+                            "audience": build_role_instruction(access_role),
+                        }).strip()
+                    except Exception as exc:
+                        print(f"Math solve failed: {exc}")
+                        answer = None
+                else:
+                    answer = None
+            else:
+                answer = None
+
+            if answer is None:
+                faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
+                if faq_answer:
+                    answer = faq_answer
+                else:
+                    explicit_web = build_general_knowledge_answer(request.message)
+                    if explicit_web:
+                        answer = explicit_web
+                    elif conversational_rag_chain is None:
+                        answer = synthesize_web_answer(request.message, access_role) or (
+                            "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+                        )
+                    else:
+                        doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+                        augmented_input = request.message
+
+                        user_facts = USER_MEMORY.get(normalized_email, {})
+                        if user_facts:
+                            facts_str = "; ".join(f"{k} = {v}" for k, v in user_facts.items())
+                            augmented_input = (
+                                f"Known facts for this user (use when relevant): {facts_str}\n\n"
+                                f"{augmented_input}"
+                            )
+
+                        if request.reply_context:
+                            augmented_input = (
+                                f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                                f"Their follow-up: {augmented_input}"
+                            )
+
+                        if doc_context:
+                            augmented_input = (
+                                f"Use the following document the user uploaded in this session when relevant:\n"
+                                f"{doc_context}\n\n"
+                                f"User question: {augmented_input}"
+                            )
+
+                        try:
+                            result = conversational_rag_chain.invoke(
+                                {"input": augmented_input, "audience": build_role_instruction(access_role)},
+                                config=config
+                            )
+                            rag_answer = (result.get("answer") or "").strip()
+                        except Exception as model_error:
+                            print(f"RAG/LLM call failed: {model_error}")
+                            rag_answer = ""
+
+                        if rag_answer_is_weak(rag_answer) and not doc_context:
+                            web_answer = synthesize_web_answer(request.message, access_role)
+                            answer = web_answer or rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
+                        else:
+                            answer = rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
+
+        try:
+            if _is_lesson_request(lower_msg) and access_role == "teacher":
+                answer = normalize_lesson_plan_format(answer, request.message)
+        except Exception:
+            pass
+
+        pdf_url = None
+        image_url = None
+        image_id = None
+
+        # ================= PDF GENERATION =================
+        if "pdf" in request.message.lower():
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"lesson_{ts}.pdf"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            safe_answer = answer if isinstance(answer, str) else str(answer or "")
+            stripped = safe_answer.lstrip()
+            if not stripped.startswith("# "):
+                safe_answer = "# Nexa AI Document\n\n" + safe_answer
+            try:
+                if MarkdownPdf is not None and Section is not None:
+                    pdf = MarkdownPdf(toc_level=0)
+                    pdf.add_section(Section(safe_answer))
+                    pdf.save(path)
+                    pdf_url = f"/assets/{filename}"
+                else:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+            except Exception as pdf_error:
+                print(f"PDF generation failed: {pdf_error}")
+                try:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+                except Exception as fallback_error:
+                    print(f"Fallback PDF generation failed: {fallback_error}")
+                    pdf_url = None
+
+        # ================= IMAGE GENERATION =================
+        is_image_request = looks_like_image_generation_request(request.message) or bool(pending_image_request)
+
+        if is_image_request:
+
+            if not IMAGE_RUNTIME_AVAILABLE:
+                SESSION_PENDING_IMAGE.pop(session_id, None)
+                answer = "Your image request was received, but image generation is unavailable in this workspace."
+                record_chat_turn(session_id, "assistant", answer)
+                try:
+                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                    persist_chat_log(
+                        log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                        user_name=user_name, user_prompt=(request.message or "").strip(),
+                        nexa_response=(answer or "").strip(), pdf_url=pdf_url, stars=0,
+                        timestamp=datetime.datetime.now(datetime.timezone.utc),
+                    )
+                except Exception:
+                    pass
+                return ChatResponse(
+                    response=answer, session_id=session_id, access_role=access_role,
+                    pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                )
+
+            if pending_image_request:
+                SESSION_PENDING_IMAGE.pop(session_id, None)
+                message_for_image = pending_image_request
+                reply = request.message.lower().strip()
+                if reply in ("no", "none", "nope") or any(
+                    w in reply for w in ("no text", "without", "no words", "don't", "dont")
+                ):
+                    intent, text = "no_text", ""
+                else:
+                    q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,80})["\u201d\u2019\']', request.message)
+                    if q:
+                        intent, text = "wants_text", q.group(1).strip()
+                    else:
+                        intent, text = "wants_text", request.message.strip()
+            else:
+                intent, text = analyze_image_text_intent(request.message)
+                message_for_image = request.message
+
+                if intent == "ambiguous":
+                    SESSION_PENDING_IMAGE[session_id] = request.message
+                    answer = (
+                        "I can create that for you. Quick question first: should the image "
+                        "include any text or wording?\n\n"
+                        "- If **yes**, reply with the exact words to show (for example: \"Welcome On Board\").\n"
+                        "- If **no**, reply \"no text\" and I'll keep it clean with no writing."
+                    )
+                    record_chat_turn(session_id, "assistant", answer)
+                    try:
+                        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                        persist_chat_log(
+                            log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                            user_name=user_name, user_prompt=(request.message or "").strip(),
+                            nexa_response=answer, pdf_url=pdf_url, stars=0,
+                            timestamp=datetime.datetime.now(datetime.timezone.utc),
+                        )
+                    except Exception:
+                        pass
+                    return ChatResponse(
+                        response=answer, session_id=session_id, access_role=access_role,
+                        pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                    )
+
+            final_prompt = build_image_generation_prompt(message_for_image, intent, text)
+            answer = "Generating image..."
+
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"image_{ts}.png"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            image_id = ts
+
+            try:
+                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                persist_chat_log(
+                    log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                    user_name=user_name, user_prompt=(request.message or "").strip(),
+                    nexa_response="Generating image...", pdf_url=pdf_url,
+                    image_filename=filename, image_mime_type="image/png", image_base64=None,
+                    stars=0, timestamp=datetime.datetime.now(datetime.timezone.utc),
+                )
+            except Exception:
+                pass
+
+            threading.Thread(
+                target=generate_image_task,
+                args=(final_prompt, path, image_id, intent == "wants_text")
+            ).start()
+            image_url = f"/assets/{filename}"
+
+        record_chat_turn(session_id, "assistant", answer)
+
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                user_name=user_name, user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(), pdf_url=pdf_url, stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
+        return ChatResponse(
+            response=answer, session_id=session_id, access_role=access_role,
+            status_message=status_message, pdf_url=pdf_url,
+            image_url=image_url, image_id=image_id, log_id=user_log_id,
+        )
+
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Server error")
 
 
 @app.get("/health")

@@ -80,6 +80,20 @@
             padding: 0.12rem 0.35rem;
             border-radius: 6px;
         }
+	.markdown-body h2 {
+    font-size: 15px; font-weight: 700; color: #1e293b;
+    margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 2px solid #e0e7ff;
+}
+.markdown-body blockquote {
+    border-left: 3px solid #6366f1; background: #eef2ff;
+    padding: 6px 12px; margin: 8px 0; border-radius: 6px;
+    color: #3730a3; font-size: 13px;
+}
+.markdown-body strong { color: #4338ca; }
+.markdown-body .katex-display {
+    margin: 10px 0; padding: 6px 0; overflow-x: auto;
+}		
+
         .markdown-body img {
             max-width: 100%;
             height: auto;
@@ -403,6 +417,49 @@
     justify-content: center;
     padding: 14px;
 }
+/* Step headings stand out as numbered blocks */
+.markdown-body h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #4338ca;
+    margin: 16px 0 6px;
+    padding: 6px 12px;
+    background: linear-gradient(90deg, #eef2ff, transparent);
+    border-left: 4px solid #6366f1;
+    border-radius: 6px;
+}
+/* Major sections (Problem, Solution, Final Answer) */
+.markdown-body h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 18px 0 8px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #c7d2fe;
+}
+/* Give each displayed equation breathing room and a subtle backdrop */
+.markdown-body .katex-display {
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+/* The explanation sentence under each step */
+.markdown-body h3 + p {
+    margin: 4px 0 8px;
+    color: #475569;
+    font-size: 13.5px;
+}
+.markdown-body strong { color: #4338ca; }
+/* Final answer emphasis */
+.markdown-body h2:last-of-type + .katex-display,
+.markdown-body h2:last-of-type ~ .katex-display {
+    background: #f0fdf4;
+    border-color: #86efac;
+}
+
 .history-panel.hidden { display: none !important; }
 
 .history-modal {
@@ -1019,7 +1076,12 @@
 </div>
         <!-- Messages Area -->
         <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
-        <!-- Input Area -->
+	<div id="math-keypad" style="display:none; padding:8px; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:8px; background:#f8fafc;">
+    <div style="display:grid; grid-template-columns:repeat(8,1fr); gap:4px;">
+        <!-- buttons injected by JS -->
+    </div>
+</div>        
+<!-- Input Area -->
         <div id="input-area" class="px-3 py-3 border-t bg-white">
             <div class="mb-2 flex items-center gap-2">
                 <input id="user-email" type="email" style="display:none;"
@@ -1047,6 +1109,9 @@
 		<button id="url-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-sky-600 hover:bg-gray-100 rounded-xl transition-all" title="Read a web page">
                     <i class="fa-solid fa-globe text-lg"></i>
                 </button>
+		<button id="math-mode-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded-xl transition-all" title="Mathematics mode">
+    <i class="fa-solid fa-square-root-variable text-lg"></i>
+</button>
                 <div class="input-copy-wrapper">
                     <input id="user-input" type="text"
                            class="w-full border border-gray-300 focus:border-blue-500 rounded-2xl px-4 py-3 focus:outline-none text-sm"
@@ -1102,6 +1167,41 @@ const userNameInput = document.getElementById('user-name');
 const expandBtn  = document.getElementById('expand-chat');
 const expandIcon = document.getElementById('expand-icon');
 let chatExpanded = false;
+
+
+const mathSymbols = [
+    ['√','\\sqrt{}'], ['∫','\\int'], ['∑','\\sum'], ['π','\\pi'],
+    ['≤','\\leq'], ['≥','\\geq'], ['≠','\\neq'], ['∞','\\infty'],
+    ['x²','^2'], ['xⁿ','^{}'], ['÷','/'], ['×','*'],
+    ['(',' ('], [')',') '], ['½','\\frac{}{}'], ['θ','\\theta'],
+];
+
+function buildMathKeypad() {
+    const grid = document.querySelector('#math-keypad div');
+    grid.innerHTML = '';
+    mathSymbols.forEach(([label, insert]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText = 'padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; font-size:15px;';
+        b.onclick = () => insertAtCursor(userInput, insert);
+        grid.appendChild(b);
+    });
+}
+buildMathKeypad();
+
+function insertAtCursor(input, text) {
+    const start = input.selectionStart, end = input.selectionEnd;
+    input.value = input.value.slice(0, start) + text + input.value.slice(end);
+    input.focus();
+    input.selectionStart = input.selectionEnd = start + text.length;
+}
+
+document.getElementById('math-mode-btn').addEventListener('click', () => {
+    const kp = document.getElementById('math-keypad');
+    kp.style.display = kp.style.display === 'none' ? 'block' : 'none';
+});
+
 
 expandBtn.addEventListener('click', () => {
     chatExpanded = !chatExpanded;
@@ -2018,26 +2118,36 @@ async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }
 }
 
 function renderMarkdown(text) {
-    const safeText = typeof text === 'string' ? text : '';
-    const parsed = marked.parse(safeText, { breaks: true, gfm: true });
-    const withSourceButtons = parsed.replace(
-        /<p>(?:<strong>)?Source:(?:<\/strong>)?\s*(?:<a href="([^"]+)"[^>]*>[^<]*<\/a>|(https?:\/\/[^\s<]+))<\/p>/gi,
-        (_, anchorUrl, plainUrl) => {
-            const sourceUrl = anchorUrl || plainUrl || '';
-            if (!sourceUrl) return '';
-            return `
-                <div class="source-chip">
-                    <span class="source-chip-label">Source</span>
-                    <button type="button" class="source-link-btn" data-source-url="${escapeHtml(sourceUrl)}">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        Open source
-                    </button>
-                </div>
-            `;
+    let src = typeof text === 'string' ? text : '';
+
+    const mathStore = [];
+    const stash = (raw, display) => {
+        const token = `\u0000MATH${mathStore.length}\u0000`;
+        const fixed = raw.replace(/([^\\])\\(\r?\n)/g, '$1\\\\$2');
+        mathStore.push({ token, raw: fixed, display });
+        return token;
+    };
+
+    // Only extract EXPLICITLY delimited math. No bare-LaTeX guessing.
+    src = src.replace(/\\begin\{(align\*?|equation\*?|aligned|gather\*?)\}[\s\S]*?\\end\{\1\}/g, m => stash(m, true));
+    src = src.replace(/\$\$([\s\S]+?)\$\$/g, (_, i) => stash(i, true));
+    src = src.replace(/\\\[([\s\S]+?)\\\]/g, (_, i) => stash(i, true));
+    src = src.replace(/\\\(([\s\S]+?)\\\)/g, (_, i) => stash(i, false));
+    src = src.replace(/(?<!\\)\$([^$\n]+?)\$/g, (_, i) => stash(i, false));
+
+    let html = marked.parse(src, { breaks: true, gfm: true });
+
+    for (const { token, raw, display } of mathStore) {
+        let rendered;
+        try {
+            rendered = katex.renderToString(raw, { displayMode: display, throwOnError: false });
+        } catch (e) {
+            rendered = `<code>${raw}</code>`;
         }
-    );
-    // Links live inside an iframe — force them to open in a new browser tab.
-    return withSourceButtons.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ');
+        html = html.split(token).join(rendered);
+    }
+
+    return html.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ');
 }
 
 // ==================== ADD MESSAGE ====================
