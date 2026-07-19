@@ -2245,7 +2245,9 @@ function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, 
     const safeText = typeof text === 'string' ? text : (text == null ? '' : String(text));
     const disclaimerState = isUser ? null : getResponseDisclaimerState(safeText);
     const div = document.createElement('div');
-    div.className = `flex ${isUser ? 'justify-end' : 'justify-start'} group`;
+    div.className = isUser
+        ? 'flex justify-end group'
+        : 'flex flex-col items-start group';
     if (isUser) {
         div.innerHTML = `
             <div class="user-message" ${pairId ? `data-pair-id="${pairId}"` : ''}>
