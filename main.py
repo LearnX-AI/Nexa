@@ -2855,6 +2855,8 @@ async def chat_endpoint(request: ChatRequest):
         except Exception:
             pass
 
+        answer = append_generation_disclaimer(answer)
+
         pdf_url = None
         image_url = None
         image_id = None
