@@ -2729,8 +2729,6 @@ async def chat_endpoint(request: ChatRequest):
                             "Please try again in a moment."
                         )
 
-        answer = append_generation_disclaimer(answer)
-
         try:
             if _is_lesson_request(lower_msg) and access_role == "teacher":
                 answer = normalize_lesson_plan_format(answer, request.message)
@@ -2858,6 +2856,8 @@ async def chat_endpoint(request: ChatRequest):
                 args=(final_prompt, path, image_id, intent == "wants_text")
             ).start()
             image_url = f"/assets/{filename}"
+
+        answer = append_generation_disclaimer(answer)
 
         record_chat_turn(session_id, "assistant", answer)
 
