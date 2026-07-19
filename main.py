@@ -1722,7 +1722,9 @@ def append_generation_disclaimer(answer: str) -> str:
     safe_answer = safe_answer.rstrip()
     if not safe_answer:
         return disclaimer
-    return disclaimer + "\n\n---\n\n" + safe_answer
+    # Place the disclaimer after the model answer so the visible response
+    # appears first in the frontend before the separate disclaimer banner.
+    return safe_answer + "\n\n---\n\n" + disclaimer
 
 # ====================== LOAD PDFs ======================
 docs = []
