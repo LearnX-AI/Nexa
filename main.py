@@ -1661,7 +1661,7 @@ def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
 
     template_parts = []
     template_parts.append(title)
-    template_parts.append("\nA friendly, classroom-ready lesson plan designed to be easy to scan and teach from.\n")
+    # Removed an unnecessary single-line paragraph that duplicated the header.
 
     # Quick snapshot table
     template_parts.append("\n## Quick Snapshot\n")
