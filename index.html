@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Nexa - AI Curriculum Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
+	<!-- KaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -1246,6 +1250,8 @@ expandBtn.addEventListener('click', () => {
         expandBtn.title = 'Expand width';
     }
 });
+
+
 const accessRoleBadge = document.getElementById('access-role-badge');
 const sendButton = document.getElementById('send-button');
 const stopGenerationBtn = document.getElementById('stop-generation-btn');
@@ -1285,6 +1291,17 @@ let chatIsGenerating = false;
 
 const chatLogStack = [];
 const pendingLogRetryStack = [];
+
+
+document.getElementById('chat-button').addEventListener('click', () => {
+    chatWindow.classList.remove('hidden');   // open the window
+
+    // Only start a fresh chat if the conversation is empty (avoid wiping an active chat).
+    const hasMessages = messagesContainer && messagesContainer.children.length > 0;
+    if (!hasMessages) {
+        startNewChat();
+    }
+});
 
 function normalizeEmail(email) {
     return (email || '').trim().toLowerCase();
@@ -1332,119 +1349,41 @@ const urlParams = new URLSearchParams(window.location.search);
 const sharedTokenMatch = window.location.pathname.match(/^\/share\/([^/?#]+)/);
 const sharedChatToken = decodeURIComponent(sharedTokenMatch?.[1] || urlParams.get('share_token') || urlParams.get('shared') || '');
 const isSharedChatPage = Boolean(sharedChatToken);
+
 let emailFromMoodle = urlParams.get('email');
 let lmsLoginName = urlParams.get('name')
     || urlParams.get('firstname')
     || urlParams.get('first_name')
     || urlParams.get('given_name')
-    || urlParams.get('username')
-    || urlParams.get('user_name')
-    || urlParams.get('display_name')
     || urlParams.get('fullname')
+    || urlParams.get('display_name')
     || '';
-
 if (lmsLoginName) {
     lmsLoginName = decodeURIComponent(lmsLoginName).trim();
 }
 
-function detectLmsDisplayNameFromPage() {
-    const selectors = [
-        '.page-header-headings h1',
-        '.page-header-headings',
-        '[data-region="mainpage"] h1',
-        '.page-context-header h1',
-        '.page-header h1',
-        '.profile h1',
-        '.profile .fullname',
-        '.user-profile h1',
-        '.profilepage h1',
-        '.page-user-profile h1',
-        'main h1',
-        'h1',
-    ];
-
-    for (const selector of selectors) {
-        const element = document.querySelector(selector);
-        const text = (element?.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!text) continue;
-
-        const cleanedText = text
-            .replace(/^(welcome|user details|reports|login activity)\b[:\-]?\s*/i, '')
-            .trim();
-
-        if (cleanedText && cleanedText.length <= 80) {
-            return cleanedText;
-        }
-    }
-
-    return '';
-}
-
-function runLmsNameDetection() {
-    // Try available sources in priority order: explicit URL params, detected page text
-    let detected = lmsLoginName || detectLmsDisplayNameFromPage();
-    if (detected) {
-        detected = String(detected).trim();
-        if (detected) {
-            lmsLoginName = detected;
-            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
-        }
-    }
-
-    // Schedule a couple of retries for dynamic pages that render profile headings after load
-    setTimeout(() => {
-        const later = detectLmsDisplayNameFromPage();
-        if (later && later.trim() && later.trim() !== lmsLoginName) {
-            lmsLoginName = later.trim();
-            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
-        }
-    }, 800);
-
-    setTimeout(() => {
-        const later = detectLmsDisplayNameFromPage();
-        if (later && later.trim() && later.trim() !== lmsLoginName) {
-            lmsLoginName = later.trim();
-            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
-        }
-    }, 1800);
-
-    // Observe DOM changes briefly in case the LMS injects the username asynchronously
-    try {
-        const observer = new MutationObserver((mutations, obs) => {
-            const found = detectLmsDisplayNameFromPage();
-            if (found && found.trim() && found.trim() !== lmsLoginName) {
-                lmsLoginName = found.trim();
-                localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-                try { updateWelcomeMessage(); } catch (e) { /* noop */ }
-                obs.disconnect();
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        // stop observing after a short while
-        setTimeout(() => observer.disconnect(), 3000);
-    } catch (e) {
-        // ignore environments that restrict MutationObserver
-    }
-}
-
-// Run detection immediately on load
-runLmsNameDetection();
-
 if (emailFromMoodle) {
     emailFromMoodle = decodeURIComponent(emailFromMoodle);
-    console.log("🔐 Moodle email received:", emailFromMoodle);
-    
-    // FORCE set email
-    userEmailInput.value = emailFromMoodle;
-    localStorage.setItem('nexa_user_email', emailFromMoodle);
+    const normalizedMoodleEmail = normalizeEmail(emailFromMoodle);
+    console.log("🔐 Moodle email received:", normalizedMoodleEmail);
 
-    // Auto set session
+    userEmailInput.value = emailFromMoodle;
+    localStorage.setItem('nexa_user_email', normalizedMoodleEmail);
+
+    // Clear stale global name keys so a previous user's name can't leak.
+    localStorage.removeItem('nexa_lms_user_name');
+    localStorage.removeItem('nexa_user_name');
+
+    // Store THIS user's name keyed to their email only.
+    const nameKey = `nexa_lms_user_name:${normalizedMoodleEmail}`;
+    if (lmsLoginName) {
+        localStorage.setItem(nameKey, lmsLoginName);
+    } else {
+        localStorage.removeItem(nameKey);
+    }
+
     setSessionForEmail(emailFromMoodle);
-    
-    // Auto open chat window
+
     setTimeout(() => {
         chatWindow.classList.remove('hidden');
         console.log("✅ Nexa chat auto-opened for Moodle user");
@@ -3341,6 +3280,32 @@ chatButton.addEventListener('mouseleave', () => {
     doneBtn.addEventListener('click', closeModal);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 })();
+</script>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "$", right: "$", display: false},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ],
+            throwOnError: false
+        });
+    });
+
+    // Also re-render after new messages are added
+    const originalAddMessage = window.addMessage;
+    if (originalAddMessage) {
+        window.addMessage = function(...args) {
+            originalAddMessage(...args);
+            setTimeout(() => {
+                renderMathInElement(document.body, { delimiters: [...] }); // same options
+            }, 100);
+        };
+    }
 </script>
 </body>
 </html>

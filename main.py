@@ -1061,6 +1061,61 @@ def expand_common_contractions(text: str) -> str:
 
     return normalized
 
+def llm_to_sympy(message: str):
+    """Ask the LLM ONLY to translate the problem into SymPy code, then execute it
+    ourselves for an exact answer. The model never does the arithmetic."""
+    if not (LANGCHAIN_AVAILABLE and llm is not None):
+        return None
+
+    translate_prompt = ChatPromptTemplate.from_messages([
+        ("system",
+         "You convert a maths problem into a single line of Python SymPy code that computes "
+         "the answer. Output ONLY the code, no explanation, no markdown, no backticks.\n"
+         "Rules:\n"
+         "- Use SymPy names directly (Symbol, integrate, solve, diff, cos, sin, exp, sqrt, Eq, pi, etc).\n"
+         "- Define symbols with Symbol('x') or Symbol('t').\n"
+         "- The final line MUST assign the answer to a variable named RESULT.\n"
+         "- For a definite integral of f from a to b: RESULT = integrate(f, (x, a, b))\n"
+         "- For solving an equation: RESULT = solve(Eq(lhs, rhs), x)\n"
+         "Example problem: 'integral of 40*t*exp(-0.05*t) from 0 to 30'\n"
+         "Example output: t = Symbol('t'); RESULT = integrate(40*t*exp(-0.05*t), (t, 0, 30))"),
+        ("human", "{problem}"),
+    ])
+
+    try:
+        code = (translate_prompt | llm | StrOutputParser()).invoke({"problem": message}).strip()
+        code = code.replace("```python", "").replace("```", "").strip()
+
+        # Namespace: all SymPy names plus a safe subset of builtins the code may need.
+        ns = {name: getattr(sympy, name) for name in dir(sympy) if not name.startswith("_")}
+        ns["Symbol"] = sympy.Symbol
+        safe_builtins = {
+            "abs": abs, "range": range, "min": min, "max": max, "sum": sum,
+            "int": int, "float": float, "len": len, "round": round,
+            "list": list, "tuple": tuple, "print": print, "pow": pow,
+        }
+        ns["__builtins__"] = safe_builtins
+
+        exec(code, ns)
+
+        result = ns.get("RESULT")
+        if result is None:
+            return None
+
+        exact = result if isinstance(result, list) else sympy.simplify(result)
+        approx = None
+        try:
+            approx = sympy.N(exact, 6)
+        except Exception:
+            pass
+
+        latex = sympy.latex(exact)
+        plain = f"{exact}" + (f" ≈ {approx}" if approx is not None else "")
+        return (f"$${latex}$$", plain)
+    except Exception as e:
+        print(f"[info] LLM->SymPy translation failed: {e}")
+        return None
+
 
 def query_is_about_nexa(message: str) -> bool:
     """FAQ entries are all about the assistant itself. Only treat a message as a
@@ -2646,7 +2701,7 @@ async def chat_endpoint(request: ChatRequest):
     lower_msg = (request.message or "").lower()
     status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
-        answer = append_generation_disclaimer("Only teachers can create full lesson plans. Please sign in with a teacher EduNex account.")
+        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
         try:
             user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
@@ -2684,34 +2739,54 @@ async def chat_endpoint(request: ChatRequest):
                 answer = reasoning_answer
 
             elif looks_like_math(request.message):
-                if LANGCHAIN_AVAILABLE and llm is not None:
-                    try:
-                        math_prompt = ChatPromptTemplate.from_messages([
-                            ("system",
-                             "You are a precise mathematics tutor. Solve the problem ONE step at a time. "
-                             "Do NOT produce a lesson plan or teaching objectives.\n"
-                             "FORMATTING — follow EXACTLY, this is critical:\n"
-                             "- Start with '## Problem' restating the question.\n"
-                             "- Then '## Solution'. Number each step '### Step 1', '### Step 2', one action per step.\n"
-                             "- Under each step: a short sentence, then the maths on its own line.\n"
-                             "- CRITICAL: EVERY piece of mathematics MUST be wrapped in dollar signs. "
-                             "Inline maths in single dollars like $x = 5$ or $\\cos(x)$. Displayed equations "
-                             "in double dollars on their own line like $$\\int_0^5 x^2\\,dx$$.\n"
-                             "- NEVER write a bare LaTeX command (\\cos, \\frac, \\int) outside dollar signs.\n"
-                             "- NEVER write maths as plain ASCII like x^2 or e^(-t); always LaTeX inside dollars.\n"
-                             "- End with '## Final Answer' and the result in $$...$$.\n"
-                             "Audience: {audience}"),
-                            ("human", "{problem}"),
-                        ])
-                        answer = (math_prompt | llm | StrOutputParser()).invoke({
-                            "problem": request.message,
-                            "audience": build_role_instruction(access_role),
-                        }).strip()
-                    except Exception as exc:
-                        print(f"Math solve failed: {exc}")
-                        answer = None
+                computed = solve_with_sympy(request.message) or llm_to_sympy(request.message)
+                if computed:
+                    latex_result, plain = computed
+                    if LANGCHAIN_AVAILABLE and llm is not None:
+                        try:
+                            explain = ChatPromptTemplate.from_messages([
+                                ("system",
+                                 "You are a maths tutor. The verified correct answer is provided; it was "
+                                 "computed by a maths engine and is CORRECT. Explain how to reach it, step "
+                                 "by step. Do NOT recalculate or change the final answer. Do NOT produce a "
+                                 "lesson plan.\n"
+                                 "Wrap every mathematical expression in dollar signs ($...$ inline, $$...$$ "
+                                 "displayed). Use '## Problem', numbered '### Step 1', '### Step 2', then "
+                                 "'## Final Answer'. Audience: {audience}"),
+                                ("human", "Problem: {problem}\n\nVerified answer: {result}"),
+                            ])
+                            body = (explain | llm | StrOutputParser()).invoke({
+                                "problem": request.message, "result": plain,
+                                "audience": build_role_instruction(access_role),
+                            }).strip()
+                            answer = f"{body}\n\n## Final Answer\n{latex_result}"
+                        except Exception as exc:
+                            print(f"Math explain failed: {exc}")
+                            answer = f"## Answer\n{latex_result}"
+                    else:
+                        answer = f"## Answer\n{latex_result}"
                 else:
-                    answer = None
+                    if LANGCHAIN_AVAILABLE and llm is not None:
+                        try:
+                            math_prompt = ChatPromptTemplate.from_messages([
+                                ("system",
+                                 "You are a careful maths tutor. Solve step by step, wrapping ALL maths in "
+                                 "dollar signs ($...$ inline, $$...$$ displayed). Do NOT produce a lesson plan. "
+                                 "Use '## Problem', numbered '### Step 1', '### Step 2', then '## Final Answer'. "
+                                 "After the final answer add exactly this line: "
+                                 "'> Please double-check this result with a calculator.'\n"
+                                 "Audience: {audience}"),
+                                ("human", "{problem}"),
+                            ])
+                            answer = (math_prompt | llm | StrOutputParser()).invoke({
+                                "problem": request.message,
+                                "audience": build_role_instruction(access_role),
+                            }).strip()
+                        except Exception as exc:
+                            print(f"Math format failed: {exc}")
+                            answer = None
+                    else:
+                        answer = None
             else:
                 answer = None
 
@@ -2728,12 +2803,51 @@ async def chat_endpoint(request: ChatRequest):
                             "Chat is available, but the curriculum model dependencies are not installed in this workspace."
                         )
                     else:
-                        answer = rag_answer or (
-                            "I'm having trouble reaching the language model right now (it may be low on memory). "
-                            "Please try again in a moment."
-                        )
+                        doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+                        augmented_input = request.message
 
-        answer = append_generation_disclaimer(answer)
+                        user_facts = USER_MEMORY.get(normalized_email, {})
+                        if user_facts:
+                            facts_str = "; ".join(f"{k} = {v}" for k, v in user_facts.items())
+                            augmented_input = (
+                                f"Known facts for this user (use when relevant): {facts_str}\n\n"
+                                f"{augmented_input}"
+                            )
+
+                        if request.reply_context:
+                            augmented_input = (
+                                f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                                f"Their follow-up: {augmented_input}"
+                            )
+
+                        if doc_context:
+                            augmented_input = (
+                                f"Use the following document the user uploaded in this session when relevant:\n"
+                                f"{doc_context}\n\n"
+                                f"User question: {augmented_input}"
+                            )
+
+                        try:
+                            result = conversational_rag_chain.invoke(
+                                {"input": augmented_input, "audience": build_role_instruction(access_role)},
+                                config=config
+                            )
+                            rag_answer = (result.get("answer") or "").strip()
+                        except Exception as model_error:
+                            print(f"RAG/LLM call failed: {model_error}")
+                            rag_answer = ""
+
+                        if rag_answer_is_weak(rag_answer) and not doc_context:
+                            web_answer = synthesize_web_answer(request.message, access_role)
+                            answer = web_answer or rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
+                        else:
+                            answer = rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
 
         try:
             if _is_lesson_request(lower_msg) and access_role == "teacher":
@@ -2778,7 +2892,8 @@ async def chat_endpoint(request: ChatRequest):
         if is_image_request:
 
             if not IMAGE_RUNTIME_AVAILABLE:
-                answer = append_generation_disclaimer("Your image request was received, but image generation is unavailable in this workspace.")
+                SESSION_PENDING_IMAGE.pop(session_id, None)
+                answer = "Your image request was received, but image generation is unavailable in this workspace."
                 record_chat_turn(session_id, "assistant", answer)
                 try:
                     user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
@@ -2885,7 +3000,6 @@ async def chat_endpoint(request: ChatRequest):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
-
 
 @app.get("/health")
 def health():
