@@ -2205,6 +2205,11 @@ function getResponseDisclaimerState(text) {
     }
 
     bodyText = bodyText.replace(/^\s*---\s*/, '').replace(/\n\n---\s*$/, '').trim();
+    // Strip any leftover 'DISCLAIMER:' token (upper or mixed case) that may remain
+    // between the separator and the disclaimer body (backend uses 'DISCLAIMER:'),
+    // which would otherwise leave a small 'DISCLAIMER:' label inside the bot bubble.
+    bodyText = bodyText.replace(/\bDISCLAIMER:\s*$/i, '').replace(/\bDisclaimer:\s*$/i, '').trim();
+
     return { bodyText, hasDisclaimer, disclaimerText: disclaimerBodyText };
 }
 
