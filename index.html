@@ -1350,6 +1350,11 @@ function detectLmsDisplayNameFromPage() {
         '[data-region="mainpage"] h1',
         '.page-context-header h1',
         '.page-header h1',
+        '.profile h1',
+        '.profile .fullname',
+        '.user-profile h1',
+        '.profilepage h1',
+        '.page-user-profile h1',
         'main h1',
         'h1',
     ];
@@ -1371,15 +1376,58 @@ function detectLmsDisplayNameFromPage() {
     return '';
 }
 
-const pageLmsName = detectLmsDisplayNameFromPage();
+function runLmsNameDetection() {
+    // Try available sources in priority order: explicit URL params, detected page text
+    let detected = lmsLoginName || detectLmsDisplayNameFromPage();
+    if (detected) {
+        detected = String(detected).trim();
+        if (detected) {
+            lmsLoginName = detected;
+            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
+        }
+    }
 
-if (pageLmsName) {
-    lmsLoginName = pageLmsName;
+    // Schedule a couple of retries for dynamic pages that render profile headings after load
+    setTimeout(() => {
+        const later = detectLmsDisplayNameFromPage();
+        if (later && later.trim() && later.trim() !== lmsLoginName) {
+            lmsLoginName = later.trim();
+            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
+        }
+    }, 800);
+
+    setTimeout(() => {
+        const later = detectLmsDisplayNameFromPage();
+        if (later && later.trim() && later.trim() !== lmsLoginName) {
+            lmsLoginName = later.trim();
+            localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+            try { updateWelcomeMessage(); } catch (e) { /* noop */ }
+        }
+    }, 1800);
+
+    // Observe DOM changes briefly in case the LMS injects the username asynchronously
+    try {
+        const observer = new MutationObserver((mutations, obs) => {
+            const found = detectLmsDisplayNameFromPage();
+            if (found && found.trim() && found.trim() !== lmsLoginName) {
+                lmsLoginName = found.trim();
+                localStorage.setItem('nexa_lms_user_name', lmsLoginName);
+                try { updateWelcomeMessage(); } catch (e) { /* noop */ }
+                obs.disconnect();
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        // stop observing after a short while
+        setTimeout(() => observer.disconnect(), 3000);
+    } catch (e) {
+        // ignore environments that restrict MutationObserver
+    }
 }
 
-if (lmsLoginName) {
-    localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-}
+// Run detection immediately on load
+runLmsNameDetection();
 
 if (emailFromMoodle) {
     emailFromMoodle = decodeURIComponent(emailFromMoodle);
