@@ -2762,25 +2762,25 @@ async def chat_endpoint(request: ChatRequest):
                         try:
                             explain = ChatPromptTemplate.from_messages([
                                 ("system",
-                                 "You are a maths tutor. The verified correct answer is provided; it was "
-                                 "computed by a maths engine and is CORRECT. Explain how to reach it, step "
-                                 "by step. Do NOT recalculate or change the final answer. Do NOT produce a "
-                                 "lesson plan.\n"
-                                 "Wrap every mathematical expression in dollar signs ($...$ inline, $$...$$ "
-                                 "displayed). Use '## Problem', numbered '### Step 1', '### Step 2', then "
-                                 "'## Final Answer'. Audience: {audience}"),
-                                ("human", "Problem: {problem}\n\nVerified answer: {result}"),
+                                 "You are a strict mathematics tutor. A mathematics engine has computed the VERIFIED CORRECT answer below. "
+                                 "Your ONLY job: briefly explain which mathematical technique or rule applies (e.g., 'integral of x^n is x^(n+1)/(n+1)', 'product rule: (uv)' = u'v + uv''), "
+                                 "then trace through how the engine applied it to reach the answer. "
+                                 "Do NOT recalculate. Do NOT use alternative methods. Do NOT invent steps. Do NOT produce a lesson plan. "
+                                 "Keep explanation concise (2-3 short paragraphs max). "
+                                 "Wrap mathematical expressions in dollar signs ($...$ for inline, $$...$$ for display). "
+                                 "Audience: {audience}"),
+                                ("human", "Problem: {problem}\n\nVerified answer: {result}\n\nExplain only."),
                             ])
                             body = (explain | llm | StrOutputParser()).invoke({
                                 "problem": request.message, "result": plain,
                                 "audience": build_role_instruction(access_role),
                             }).strip()
-                            answer = f"{body}\n\n## Final Answer\n{latex_result}"
+                            answer = f"{body}\n\n---\n\n## Final Answer\n\n{latex_result}"
                         except Exception as exc:
                             print(f"Math explain failed: {exc}")
-                            answer = f"## Answer\n{latex_result}"
+                            answer = f"## Final Answer\n\n{latex_result}"
                     else:
-                        answer = f"## Answer\n{latex_result}"
+                        answer = f"## Final Answer\n\n{latex_result}"
                 else:
                     if LANGCHAIN_AVAILABLE and llm is not None:
                         try:
