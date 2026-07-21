@@ -701,6 +701,148 @@ def analyze_image_text_intent(message: str):
     return ("no_text", "")
 
 
+def _start_image_prompt(session_id: str, original_message: str) -> str:
+    """Initialize a staged image prompt and ask the first clarifying question."""
+    SESSION_PENDING_IMAGE[session_id] = {
+        "stage": "ask_text",
+        "message": original_message,
+        "responses": {}
+    }
+    return append_generation_disclaimer(
+        "I can create that for you. Quick questions to make a better image:\n\n"
+        "1) Should the image include any text or wording?\n"
+        "- Reply with the exact words in quotes (for example: \"Welcome On Board\")\n"
+        "- Or reply `no text` to keep the image free of words."
+    )
+
+
+def _next_image_question(stage: str, collected: dict) -> str:
+    """Return the next question text based on the current stage."""
+    if stage == "ask_text":
+        return (
+            "2) What visual style do you prefer? (photorealistic, cartoon, flat, watercolor, vector, sketch)"
+        )
+    if stage == "ask_style":
+        return "3) Preferred aspect ratio? Reply `square`, `portrait` (taller), or `landscape` (wider)."
+    if stage == "ask_aspect":
+        return "4) Any particular colors or mood? (e.g., bright, pastel, monochrome, warm, cool)."
+    if stage == "ask_color":
+        return "5) Should the image include people or characters? Reply `yes` or `no` and (optional) short description."
+    if stage == "ask_people":
+        summary = []
+        if collected.get("text") is not None:
+            summary.append(f"Text: {collected.get('text') or 'none'}")
+        if collected.get("style"):
+            summary.append(f"Style: {collected.get('style')}")
+        if collected.get("aspect"):
+            summary.append(f"Aspect: {collected.get('aspect')}")
+        if collected.get("colors"):
+            summary.append(f"Colors: {collected.get('colors')}")
+        if collected.get("people") is not None:
+            summary.append(f"People: {collected.get('people')}")
+        summary_text = "; ".join(summary)
+        return (
+            "6) Please confirm and reply `generate` to create the image, or `cancel` to abort.\n"
+            f"Current choices: {summary_text}"
+        )
+    return ""
+
+
+def _process_pending_image_reply(session_id: str, reply: str):
+    """Process a user's reply during staged image prompting.
+    Returns (next_answer_text, ready_flag, final_prompt, include_text_flag)
+    """
+    pending = SESSION_PENDING_IMAGE.get(session_id)
+    if not pending:
+        return (None, False, None, False)
+
+    stage = pending.get("stage")
+    collected = pending.setdefault("responses", {})
+    r = (reply or "").strip()
+    low = r.lower()
+
+    # Stage handlers
+    if stage == "ask_text":
+        # Interpret text reply
+        if low in ("no", "no text", "none", "nope") or any(w in low for w in ("no text", "without text", "no words")):
+            collected["text"] = ""
+        else:
+            q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,200})["\u201d\u2019\']', r)
+            if q:
+                collected["text"] = q.group(1).strip()
+            else:
+                collected["text"] = r
+        pending["stage"] = "ask_style"
+        return (_next_image_question("ask_text", collected), False, None, False)
+
+    if stage == "ask_style":
+        collected["style"] = (r or "").strip()
+        pending["stage"] = "ask_aspect"
+        return (_next_image_question("ask_style", collected), False, None, False)
+
+    if stage == "ask_aspect":
+        collected["aspect"] = (r or "").strip()
+        pending["stage"] = "ask_color"
+        return (_next_image_question("ask_aspect", collected), False, None, False)
+
+    if stage == "ask_color":
+        collected["colors"] = (r or "").strip()
+        pending["stage"] = "ask_people"
+        return (_next_image_question("ask_color", collected), False, None, False)
+
+    if stage == "ask_people":
+        if low in ("yes", "y", "yeah", "yep") or "yes" in low:
+            collected["people"] = r
+        else:
+            collected["people"] = "no"
+        # Next: confirmation
+        pending["stage"] = "confirm"
+        return (_next_image_question("ask_people", collected), False, None, False)
+
+    if stage == "confirm" or stage == "ask_people_confirm":
+        if low in ("generate", "yes", "ok", "go", "create"):
+            # Build final prompt and flag ready
+            original = pending.get("message") or ""
+            final = build_image_generation_prompt_from_responses(original, collected)
+            SESSION_PENDING_IMAGE.pop(session_id, None)
+            include_text = bool(collected.get("text"))
+            return (None, True, final, include_text)
+        else:
+            # cancel or anything else -> abort
+            SESSION_PENDING_IMAGE.pop(session_id, None)
+            return (append_generation_disclaimer("Image generation cancelled."), False, None, False)
+
+    # Fallback: clear
+    SESSION_PENDING_IMAGE.pop(session_id, None)
+    return (append_generation_disclaimer("Image generation cancelled due to unclear reply."), False, None, False)
+
+
+def build_image_generation_prompt_from_responses(original: str, responses: dict) -> str:
+    parts = [original.strip()]
+    style = responses.get("style")
+    aspect = responses.get("aspect")
+    colors = responses.get("colors")
+    people = responses.get("people")
+    text = responses.get("text")
+
+    if style:
+        parts.append(f"Style: {style}.")
+    if aspect:
+        parts.append(f"Aspect ratio: {aspect}.")
+    if colors:
+        parts.append(f"Color palette/mood: {colors}.")
+    if people and people.lower() != "no":
+        parts.append(f"Include people/characters: {people}.")
+    if text is not None:
+        if text == "":
+            parts.append("Do NOT include any text, labels, or captions.")
+        else:
+            parts.append(f'IMPORTANT: include the exact text "{text}" spelled correctly and clearly readable.')
+
+    parts.append("High quality, high resolution, no watermark.")
+    return " ".join(p for p in parts if p)
+
+
 def build_image_generation_prompt(message: str, intent: str, text: str) -> str:
     if intent == "wants_text":
         if text:
@@ -2928,7 +3070,41 @@ async def chat_endpoint(request: ChatRequest):
                     pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
                 )
 
-            if pending_image_request:
+            # If there's a pending staged flow (dict), process the user's reply
+            if isinstance(pending_image_request, dict):
+                next_text, ready, final_prompt, include_text_flag = _process_pending_image_reply(session_id, request.message)
+                if ready and final_prompt:
+                    final_prompt_to_use = final_prompt
+                    intent_flag = include_text_flag
+                elif next_text:
+                    answer = append_generation_disclaimer(next_text)
+                    record_chat_turn(session_id, "assistant", answer)
+                    try:
+                        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                        persist_chat_log(
+                            log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                            user_name=user_name, user_prompt=(request.message or "").strip(),
+                            nexa_response=answer, pdf_url=pdf_url, stars=0,
+                            timestamp=datetime.datetime.now(datetime.timezone.utc),
+                        )
+                    except Exception:
+                        pass
+                    return ChatResponse(
+                        response=answer, session_id=session_id, access_role=access_role,
+                        pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                    )
+                else:
+                    # not ready and no next text -> abort
+                    answer = append_generation_disclaimer("Image generation cancelled.")
+                    SESSION_PENDING_IMAGE.pop(session_id, None)
+                    record_chat_turn(session_id, "assistant", answer)
+                    return ChatResponse(
+                        response=answer, session_id=session_id, access_role=access_role,
+                        pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                    )
+
+            elif pending_image_request:
+                # backward-compatible single-question flow (legacy string)
                 SESSION_PENDING_IMAGE.pop(session_id, None)
                 message_for_image = pending_image_request
                 reply = request.message.lower().strip()
@@ -2942,18 +3118,14 @@ async def chat_endpoint(request: ChatRequest):
                         intent, text = "wants_text", q.group(1).strip()
                     else:
                         intent, text = "wants_text", request.message.strip()
+                final_prompt_to_use = build_image_generation_prompt(message_for_image, intent, text)
+                intent_flag = (intent == "wants_text")
             else:
                 intent, text = analyze_image_text_intent(request.message)
                 message_for_image = request.message
 
                 if intent == "ambiguous":
-                    SESSION_PENDING_IMAGE[session_id] = request.message
-                    answer = append_generation_disclaimer(
-                        "I can create that for you. Quick question first: should the image "
-                        "include any text or wording?\n\n"
-                        "- If **yes**, reply with the exact words to show (for example: \"Welcome On Board\").\n"
-                        "- If **no**, reply \"no text\" and I'll keep it clean with no writing."
-                    )
+                    answer = _start_image_prompt(session_id, request.message)
                     record_chat_turn(session_id, "assistant", answer)
                     try:
                         user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
@@ -2970,31 +3142,37 @@ async def chat_endpoint(request: ChatRequest):
                         pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
                     )
 
-            final_prompt = build_image_generation_prompt(message_for_image, intent, text)
-            answer = append_generation_disclaimer("Generating image...")
+                # not ambiguous -> build prompt immediately
+                final_prompt_to_use = build_image_generation_prompt(message_for_image, intent, text)
+                intent_flag = (intent == "wants_text")
 
-            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"image_{ts}.png"
-            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
-            image_id = ts
+            # If we reach here and final_prompt_to_use is set, generate image
+            if 'final_prompt_to_use' in locals() and final_prompt_to_use:
+                final_prompt = final_prompt_to_use
+                answer = append_generation_disclaimer("Generating image...")
 
-            try:
-                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
-                persist_chat_log(
-                    log_id=user_log_id, session_id=session_id, user_email=normalized_email,
-                    user_name=user_name, user_prompt=(request.message or "").strip(),
-                    nexa_response="Generating image...", pdf_url=pdf_url,
-                    image_filename=filename, image_mime_type="image/png", image_base64=None,
-                    stars=0, timestamp=datetime.datetime.now(datetime.timezone.utc),
-                )
-            except Exception:
-                pass
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"image_{ts}.png"
+                path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+                image_id = ts
 
-            threading.Thread(
-                target=generate_image_task,
-                args=(final_prompt, path, image_id, intent == "wants_text")
-            ).start()
-            image_url = f"/assets/{filename}"
+                try:
+                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                    persist_chat_log(
+                        log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                        user_name=user_name, user_prompt=(request.message or "").strip(),
+                        nexa_response="Generating image...", pdf_url=pdf_url,
+                        image_filename=filename, image_mime_type="image/png", image_base64=None,
+                        stars=0, timestamp=datetime.datetime.now(datetime.timezone.utc),
+                    )
+                except Exception:
+                    pass
+
+                threading.Thread(
+                    target=generate_image_task,
+                    args=(final_prompt, path, image_id, bool(intent_flag))
+                ).start()
+                image_url = f"/assets/{filename}"
 
         record_chat_turn(session_id, "assistant", answer)
 
