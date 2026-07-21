@@ -350,7 +350,21 @@ def looks_like_math(message: str) -> bool:
     m = (message or "").lower()
     signals = ("solve", "integrate", "integral", "differentiate", "derivative",
                "evaluate", "calculate", "simplify", "∫", "∑", "√")
-    return any(s in m for s in signals) or sum(c in m for c in "∫∑√^=") >= 2
+    arithmetic_pattern = re.search(r"\b\d+(?:\s*[+\-*/^=]\s*\d+)+(?:\s*\b|$)", m)
+    return any(s in m for s in signals) or arithmetic_pattern is not None or sum(c in m for c in "∫∑√^=") >= 2
+
+
+def looks_like_reasoning_question(message: str) -> bool:
+    lowered = (message or "").strip().lower()
+    if not lowered:
+        return False
+
+    reasoning_signals = (
+        "analyze", "analyse", "analysis", "reason", "reasoning", "explain",
+        "compare", "contrast", "deduce", "infer", "prove", "why does",
+        "why is", "how does", "how do", "what happens if", "step by step",
+    )
+    return any(signal in lowered for signal in reasoning_signals)
 
 def is_chat_turn_cancelled(turn_id: Optional[str]) -> bool:
     return bool(turn_id and turn_id in CHAT_CANCELLED_TURNS)
@@ -577,13 +591,10 @@ def looks_like_web_query(message: str) -> bool:
         "google",
         "wikipedia",
         "wiki",
-        "who is",
-        "what is",
-        "define",
         "latest",
         "news",
-        "find",
         "lookup",
+        "look up",
     )
 
     return any(keyword in lowered for keyword in web_keywords)
@@ -702,6 +713,9 @@ def build_image_generation_prompt(message: str, intent: str, text: str) -> str:
             f"no captions, no labels, no watermark. High resolution.")
 
 def build_general_knowledge_answer(message: str) -> str:
+    if looks_like_math(message) or looks_like_reasoning_question(message):
+        return ""
+
     query = build_web_results_query(message)
     lowered = (message or "").lower()
 
