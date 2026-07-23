@@ -210,6 +210,12 @@ USER_MEMORY: Dict[str, Dict[str, str]] = {}
 
 SESSION_DOCUMENT_BUFFER: Dict[str, str] = {}
 
+
+IMAGE_RUNTIME_AVAILABLE = True
+IMAGE_FEATURE_ENABLED = True
+
+IMAGE_DGX_URL = "http://100.92.95.83:9000"
+
 DB_CONFIG = {
     "host": os.getenv("NEXA_DB_HOST", "127.0.0.1"),
     "port": int(os.getenv("NEXA_DB_PORT", "3306")),
@@ -279,6 +285,34 @@ chat_stack = []
 CHAT_CANCELLED_TURNS: set[str] = set()
 USER_MEMORY_FILE = os.path.join(os.path.dirname(__file__), "user_memory.json")
 
+def quick_reply(message: str, user_name: str = ""):
+    """Instant answers for greetings and trivial messages — no LLM call."""
+    m = (message or "").lower().strip().rstrip("!.?")
+    name = (user_name or "").strip()
+    first = name.split()[0] if name else ""
+
+    # Name questions — answered instantly when we know the name
+    if first and m in {"do you know my name", "what is my name", "whats my name",
+                       "what's my name", "who am i", "do you remember my name",
+                       "do you know who i am"}:
+        return f"Yes — you're {first}. How can I help you today?"
+
+    greetings = {"hi", "hello", "hey", "yo", "hi nexa", "hello nexa", "good morning",
+                 "good afternoon", "good evening", "morning", "afternoon", "greetings"}
+    thanks = {"thanks", "thank you", "thankyou", "cheers", "tenkyu", "ta", "thx"}
+    acks = {"ok", "okay", "cool", "nice", "good", "great", "alright", "sure", "got it"}
+    byes = {"bye", "goodbye", "see you", "later", "gotta go"}
+
+    if m in greetings:
+        return (f"Hello {first}! I'm Nexa. What would you like to learn about today?"
+                if first else "Hello! I'm Nexa. What would you like to learn about today?")
+    if m in thanks:
+        return "You're welcome! Ask me anything else."
+    if m in acks:
+        return "👍 What would you like to explore next?"
+    if m in byes:
+        return "Goodbye! Come back anytime you need help with your studies."
+    return None
 
 def wrap_bare_latex(text: str) -> str:
     """Ensure LaTeX the model emitted without $ delimiters gets wrapped so KaTeX renders it.
@@ -1729,16 +1763,7 @@ GENERATION_DISCLAIMER = (
 
 
 def append_generation_disclaimer(answer: str) -> str:
-    disclaimer = GENERATION_DISCLAIMER
-    safe_answer = answer if isinstance(answer, str) else str(answer or "")
-    if disclaimer in safe_answer:
-        return safe_answer
-    safe_answer = safe_answer.rstrip()
-    if not safe_answer:
-        return disclaimer
-    # Place the disclaimer after the model answer so the visible response
-    # appears first in the frontend before the separate disclaimer banner.
-    return safe_answer + "\n\n---\n\n" + disclaimer
+    return answer if isinstance(answer, str) else str(answer or "")
 
 # ====================== LOAD PDFs ======================
 docs = []
@@ -1869,49 +1894,33 @@ if LANGCHAIN_AVAILABLE and rag_chain is not None:
     )
 
 # ====================== IMAGE MODEL ======================
-pipe = None
-if IMAGE_RUNTIME_AVAILABLE:
-    print("Loading Qwen Image...")
-    try:
-        pipe = DiffusionPipeline.from_pretrained(
-            "Qwen/Qwen-Image-2512",
-            torch_dtype=torch.bfloat16
-        ).to("cuda")
-        print("Image model loaded")
-    except Exception as exc:
-        print("Image model unavailable:", exc)
-        pipe = None
+pipe = None  # image gen runs remotely on the Ilaibu DGX — never load Qwen on Canada
+print("Image generation: remote mode (Ilaibu DGX).")
+
+
+import requests as _rq
+import time
 
 def generate_image_task(prompt, path, image_id, allow_text=False):
     try:
-        current_pipe = pipe                       # use the model loaded at startup
-        if current_pipe is None or torch is None:
-            IMAGE_STATUS[image_id] = "failed"
-            return
-
-        if allow_text:
-            negative_prompt = "blurry, low quality, distorted, duplicate text, overlapping text, watermark"
-        else:
-            negative_prompt = (
-                "text, words, letters, captions, labels, writing, numbers, typography, "
-                "watermark, signature, gibberish text, random letters, signage, "
-                "blurry, low quality, distorted"
-            )
-
-        image = current_pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=1024, height=1024,
-            num_inference_steps=50,
-            true_cfg_scale=5.0,
-            generator=torch.Generator(device="cuda").manual_seed(42)
-        ).images[0]
-        image.save(path)
-        IMAGE_STATUS[image_id] = "ready"
-    except Exception as e:
-        print("IMAGE THREAD ERROR:", e)
+        r = _rq.post(f"{IMAGE_DGX_URL}/generate",
+                     json={"prompt": prompt, "allow_text": allow_text}, timeout=30)
+        job_id = r.json()["job_id"]
+        for _ in range(300):
+            s = _rq.get(f"{IMAGE_DGX_URL}/status/{job_id}", timeout=10).json()
+            if s["status"] == "ready":
+                img = _rq.get(f"{IMAGE_DGX_URL}/image/{job_id}", timeout=60)
+                with open(path, "wb") as f:
+                    f.write(img.content)
+                IMAGE_STATUS[image_id] = "ready"
+                return
+            if s["status"] == "failed":
+                IMAGE_STATUS[image_id] = "failed"; return
+            time.sleep(1)
         IMAGE_STATUS[image_id] = "failed"
-
+    except Exception as e:
+        print("IMAGE THREAD ERROR (remote DGX):", e)
+        IMAGE_STATUS[image_id] = "failed"
 # ====================== FASTAPI ======================
 app = FastAPI()
 
@@ -2234,11 +2243,12 @@ class ChatRequest(BaseModel):
     message: str
     question: Optional[str] = None
     user_email: Optional[str] = None
+    user_name: Optional[str] = None          # ← add
     session_id: Optional[str] = None
     turn_id: Optional[str] = None
     reply_context: Optional[str] = None
     staged_file_name: Optional[str] = None
-    url: Optional[str] = None   # NEW: web page to read
+    url: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -2632,6 +2642,8 @@ async def chat_endpoint(request: ChatRequest):
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
 
+    student_name = (request.user_name or "").strip()
+
     if is_chat_turn_cancelled(request.turn_id):
         return ChatResponse(
             response="", session_id=session_id, access_role=access_role,
@@ -2641,7 +2653,6 @@ async def chat_endpoint(request: ChatRequest):
 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
-
     capture_user_fact(normalized_email, request.message)
 
     page_url = (request.url or "").strip()
@@ -2683,10 +2694,9 @@ async def chat_endpoint(request: ChatRequest):
         else:
             answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
 
-        answer = append_generation_disclaimer(answer)
         record_chat_turn(session_id, "assistant", answer)
         try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            user_name = student_name or normalized_email or TEST_USER_NAME
             persist_chat_log(
                 log_id=str(uuid.uuid4()), session_id=session_id, user_email=normalized_email,
                 user_name=user_name, user_prompt=f"[Read URL] {page_url} — {question}",
@@ -2704,7 +2714,7 @@ async def chat_endpoint(request: ChatRequest):
 
     user_log_id = str(uuid.uuid4())
     try:
-        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+        user_name = student_name or normalized_email or TEST_USER_NAME
         persist_chat_log(
             log_id=user_log_id, session_id=session_id, user_email=normalized_email,
             user_name=user_name, user_prompt=(request.message or "").strip(),
@@ -2716,15 +2726,38 @@ async def chat_endpoint(request: ChatRequest):
 
     lower_msg = (request.message or "").lower()
     status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
+    pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
+
+    # ---- FAST PATH: greetings / thanks / name questions — instant, no LLM ----
+    if not pending_image_request:
+        qr = quick_reply(request.message, student_name)
+        if qr:
+            record_chat_turn(session_id, "assistant", qr)
+            try:
+                user_name = student_name or normalized_email or TEST_USER_NAME
+                persist_chat_log(
+                    log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                    user_name=user_name, user_prompt=(request.message or "").strip(),
+                    nexa_response=qr, pdf_url=None, stars=0,
+                    timestamp=datetime.datetime.now(datetime.timezone.utc),
+                )
+            except Exception:
+                pass
+            return ChatResponse(
+                response=qr, session_id=session_id, access_role=access_role,
+                status_message=None, pdf_url=None, image_url=None,
+                image_id=None, log_id=user_log_id,
+            )
+
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
         answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
         try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            user_name = student_name or normalized_email or TEST_USER_NAME
             persist_chat_log(
                 log_id=user_log_id, session_id=session_id, user_email=normalized_email,
                 user_name=user_name, user_prompt=(request.message or "").strip(),
-                nexa_response=(answer or "").strip(), pdf_url=None, stars=0,
+                nexa_response=answer, pdf_url=None, stars=0,
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
         except Exception:
@@ -2744,8 +2777,6 @@ async def chat_endpoint(request: ChatRequest):
                 status_message=status_message, pdf_url=None,
                 image_url=None, image_id=None, log_id=None,
             )
-
-        pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
 
         if pending_image_request:
             answer = ""
@@ -2789,8 +2820,6 @@ async def chat_endpoint(request: ChatRequest):
                                  "You are a careful maths tutor. Solve step by step, wrapping ALL maths in "
                                  "dollar signs ($...$ inline, $$...$$ displayed). Do NOT produce a lesson plan. "
                                  "Use '## Problem', numbered '### Step 1', '### Step 2', then '## Final Answer'. "
-                                 "After the final answer add exactly this line: "
-                                 "'> Please double-check this result with a calculator.'\n"
                                  "Audience: {audience}"),
                                 ("human", "{problem}"),
                             ])
@@ -2816,31 +2845,39 @@ async def chat_endpoint(request: ChatRequest):
                         answer = explicit_web
                     elif conversational_rag_chain is None:
                         answer = synthesize_web_answer(request.message, access_role) or (
-                            "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+                            "Chat is available, but the curriculum model dependencies are not installed."
                         )
                     else:
                         doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
                         augmented_input = request.message
 
+                        # Tell the model who it is talking to
+                        if student_name:
+                            augmented_input = (
+                                f"The person you are talking to is named {student_name}. "
+                                f"Use their name naturally when appropriate.\n\n{augmented_input}"
+                            )
+
                         user_facts = USER_MEMORY.get(normalized_email, {})
                         if user_facts:
                             facts_str = "; ".join(f"{k} = {v}" for k, v in user_facts.items())
                             augmented_input = (
-                                f"Known facts for this user (use when relevant): {facts_str}\n\n"
-                                f"{augmented_input}"
+                                f"Known facts for this user (use when relevant): {facts_str}\n\n{augmented_input}"
                             )
 
                         if request.reply_context:
                             augmented_input = (
-                                f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                                f"The user is replying specifically to your previous message: "
+                                f"\"{request.reply_context}\"\n"
+                                f"Answer their follow-up in the context of THAT message only. "
+                                f"Do not mix in earlier unrelated topics.\n\n"
                                 f"Their follow-up: {augmented_input}"
                             )
 
                         if doc_context:
                             augmented_input = (
                                 f"Use the following document the user uploaded in this session when relevant:\n"
-                                f"{doc_context}\n\n"
-                                f"User question: {augmented_input}"
+                                f"{doc_context}\n\nUser question: {augmented_input}"
                             )
 
                         try:
@@ -2856,13 +2893,11 @@ async def chat_endpoint(request: ChatRequest):
                         if rag_answer_is_weak(rag_answer) and not doc_context:
                             web_answer = synthesize_web_answer(request.message, access_role)
                             answer = web_answer or rag_answer or (
-                                "I'm having trouble reaching the language model right now (it may be low on memory). "
-                                "Please try again in a moment."
+                                "I'm having trouble reaching the language model right now. Please try again."
                             )
                         else:
                             answer = rag_answer or (
-                                "I'm having trouble reaching the language model right now (it may be low on memory). "
-                                "Please try again in a moment."
+                                "I'm having trouble reaching the language model right now. Please try again."
                             )
 
         try:
@@ -2870,8 +2905,6 @@ async def chat_endpoint(request: ChatRequest):
                 answer = normalize_lesson_plan_format(answer, request.message)
         except Exception:
             pass
-
-        answer = append_generation_disclaimer(answer)
 
         pdf_url = None
         image_url = None
@@ -2883,8 +2916,7 @@ async def chat_endpoint(request: ChatRequest):
             filename = f"lesson_{ts}.pdf"
             path = os.path.join(IMAGE_OUTPUT_DIR, filename)
             safe_answer = answer if isinstance(answer, str) else str(answer or "")
-            stripped = safe_answer.lstrip()
-            if not stripped.startswith("# "):
+            if not safe_answer.lstrip().startswith("# "):
                 safe_answer = "# Nexa AI Document\n\n" + safe_answer
             try:
                 if MarkdownPdf is not None and Section is not None:
@@ -2904,28 +2936,29 @@ async def chat_endpoint(request: ChatRequest):
                     print(f"Fallback PDF generation failed: {fallback_error}")
                     pdf_url = None
 
-        # ================= IMAGE GENERATION =================
+        # ============ IMAGE GENERATION (remote — Ilaibu DGX) ============
         is_image_request = looks_like_image_generation_request(request.message) or bool(pending_image_request)
 
         if is_image_request:
 
-            if not IMAGE_RUNTIME_AVAILABLE:
+            if not (IMAGE_RUNTIME_AVAILABLE and IMAGE_FEATURE_ENABLED):
                 SESSION_PENDING_IMAGE.pop(session_id, None)
-                answer = "Your image request was received, but image generation is unavailable in this workspace."
+                answer = "Your image request was received, but image generation is unavailable right now."
                 record_chat_turn(session_id, "assistant", answer)
                 try:
-                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                    user_name = student_name or normalized_email or TEST_USER_NAME
                     persist_chat_log(
                         log_id=user_log_id, session_id=session_id, user_email=normalized_email,
                         user_name=user_name, user_prompt=(request.message or "").strip(),
-                        nexa_response=(answer or "").strip(), pdf_url=pdf_url, stars=0,
+                        nexa_response=answer, pdf_url=pdf_url, stars=0,
                         timestamp=datetime.datetime.now(datetime.timezone.utc),
                     )
                 except Exception:
                     pass
                 return ChatResponse(
                     response=answer, session_id=session_id, access_role=access_role,
-                    pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                    status_message=status_message, pdf_url=pdf_url,
+                    image_url=None, image_id=None, log_id=user_log_id,
                 )
 
             if pending_image_request:
@@ -2938,25 +2971,22 @@ async def chat_endpoint(request: ChatRequest):
                     intent, text = "no_text", ""
                 else:
                     q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,80})["\u201d\u2019\']', request.message)
-                    if q:
-                        intent, text = "wants_text", q.group(1).strip()
-                    else:
-                        intent, text = "wants_text", request.message.strip()
+                    intent, text = ("wants_text", q.group(1).strip()) if q else ("wants_text", request.message.strip())
             else:
                 intent, text = analyze_image_text_intent(request.message)
                 message_for_image = request.message
 
                 if intent == "ambiguous":
                     SESSION_PENDING_IMAGE[session_id] = request.message
-                    answer = append_generation_disclaimer(
+                    answer = (
                         "I can create that for you. Quick question first: should the image "
                         "include any text or wording?\n\n"
-                        "- If **yes**, reply with the exact words to show (for example: \"Welcome On Board\").\n"
-                        "- If **no**, reply \"no text\" and I'll keep it clean with no writing."
+                        "- If **yes**, reply with the exact words to show.\n"
+                        "- If **no**, reply \"no text\" and I'll keep it clean."
                     )
                     record_chat_turn(session_id, "assistant", answer)
                     try:
-                        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                        user_name = student_name or normalized_email or TEST_USER_NAME
                         persist_chat_log(
                             log_id=user_log_id, session_id=session_id, user_email=normalized_email,
                             user_name=user_name, user_prompt=(request.message or "").strip(),
@@ -2967,11 +2997,12 @@ async def chat_endpoint(request: ChatRequest):
                         pass
                     return ChatResponse(
                         response=answer, session_id=session_id, access_role=access_role,
-                        pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                        status_message=status_message, pdf_url=pdf_url,
+                        image_url=None, image_id=None, log_id=user_log_id,
                     )
 
             final_prompt = build_image_generation_prompt(message_for_image, intent, text)
-            answer = append_generation_disclaimer("Generating image...")
+            answer = "Generating image..."
 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_{ts}.png"
@@ -2979,7 +3010,7 @@ async def chat_endpoint(request: ChatRequest):
             image_id = ts
 
             try:
-                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                user_name = student_name or normalized_email or TEST_USER_NAME
                 persist_chat_log(
                     log_id=user_log_id, session_id=session_id, user_email=normalized_email,
                     user_name=user_name, user_prompt=(request.message or "").strip(),
@@ -2990,6 +3021,7 @@ async def chat_endpoint(request: ChatRequest):
             except Exception:
                 pass
 
+            # generate_image_task POSTs to IMAGE_DGX_URL (Ilaibu), polls, downloads the PNG here
             threading.Thread(
                 target=generate_image_task,
                 args=(final_prompt, path, image_id, intent == "wants_text")
@@ -2999,7 +3031,7 @@ async def chat_endpoint(request: ChatRequest):
         record_chat_turn(session_id, "assistant", answer)
 
         try:
-            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            user_name = student_name or normalized_email or TEST_USER_NAME
             persist_chat_log(
                 log_id=user_log_id, session_id=session_id, user_email=normalized_email,
                 user_name=user_name, user_prompt=(request.message or "").strip(),
