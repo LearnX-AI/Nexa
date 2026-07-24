@@ -2781,16 +2781,17 @@ async function sendMessage() {
         const statusRes = await fetch(CHAT_STATUS_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: messageWithoutUrl || text,
-                question: messageWithoutUrl || '',
-                url: pastedUrl || null,
-                user_email: userEmail,
-                session_id: sessionId,
-                reply_context: replyContext,
-                staged_file_name: stagedFileName,
-                turn_id: chatGeneration.turnId
-            }),
+		body: JSON.stringify({
+    message: messageWithoutUrl || text,
+    question: messageWithoutUrl || '',
+    url: pastedUrl || null,
+    user_email: userEmail,               // ← ADD THIS
+    user_name: getCurrentDisplayName(),
+    session_id: sessionId,
+    reply_context: replyContext,
+    staged_file_name: stagedFileName,
+    turn_id: chatGeneration.turnId
+}),
             signal: chatGeneration.signal
         });
         const statusData = await statusRes.json();
@@ -2826,6 +2827,7 @@ async function sendMessage() {
                 message: messageWithoutUrl || text,
                 question: messageWithoutUrl || '',
                 url: pastedUrl || null,
+                user_email: userEmail,
                 user_name: getCurrentDisplayName(),
                 session_id: sessionId,
                 reply_context: replyContext,

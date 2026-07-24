@@ -285,6 +285,169 @@ chat_stack = []
 CHAT_CANCELLED_TURNS: set[str] = set()
 USER_MEMORY_FILE = os.path.join(os.path.dirname(__file__), "user_memory.json")
 
+def strip_output_format_noise(text: str) -> str:
+    """Remove 'in PDF format', 'as a pdf', etc.
+ 
+    Without this, 'lesson plan on X in PDF format' extracts a subject of
+    'PDF format??' instead of X.
+    """
+    cleaned = text or ""
+    cleaned = re.sub(
+        r"\b(in|as|to|into)\s+(a\s+|the\s+)?pdf(\s+(format|file|document|version))?\b",
+        " ", cleaned, flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\bpdf\b", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(please|can you|could you|generate|create|make|write|prepare)\b",
+                     " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip(" ?.!,")
+
+
+MODEL_REFUSAL_SIGNALS = (
+    "i can't help", "i cannot help", "i can not help",
+    "copyrighted material", "copyright",
+    "i'm not able to", "i am not able to",
+    "i'm unable to", "i am unable to",
+    "i won't be able", "against my guidelines",
+    "is there anything else i can assist",
+)
+ 
+
+def looks_like_model_refusal(text: str) -> bool:
+    body = (text or "").strip().lower()
+    if not body:
+        return True
+    if len(body) < 200 and any(s in body for s in MODEL_REFUSAL_SIGNALS):
+        return True
+    return any(s in body[:400] for s in MODEL_REFUSAL_SIGNALS)
+ 
+
+def stamp_pdf_footer(path: str, footer_text: Optional[str] = None) -> bool:
+    """Draw a separator rule, the disclaimer, and 'Page N of M' on each page.
+ 
+    Runs after the PDF is written. Returns False (leaving the PDF intact)
+    if PyMuPDF is unavailable or anything fails.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ModuleNotFoundError:
+        print("[info] PyMuPDF not available - skipping PDF footer")
+        return False
+ 
+    text = (footer_text or GENERATION_DISCLAIMER).strip()
+    if text.upper().startswith("DISCLAIMER:"):
+        text = text.split(":", 1)[1].strip()
+ 
+    tmp_path = f"{path}.tmp"
+ 
+    try:
+        doc = fitz.open(path)
+        total_pages = doc.page_count
+ 
+        for index, page in enumerate(doc, start=1):
+            rect = page.rect
+            margin = 36.0
+            baseline = rect.height - 52.0     # top of the footer band
+ 
+            # Separator rule
+            page.draw_line(
+                fitz.Point(margin, baseline),
+                fitz.Point(rect.width - margin, baseline),
+                color=(0.78, 0.82, 0.88),
+                width=0.7,
+            )
+ 
+            # Disclaimer text - wraps across up to three short lines
+            disclaimer_box = fitz.Rect(
+                margin, baseline + 5,
+                rect.width - margin - 70, rect.height - 14,
+            )
+            page.insert_textbox(
+                disclaimer_box, text,
+                fontsize=6.2, fontname="helv",
+                color=(0.42, 0.46, 0.52),
+                align=fitz.TEXT_ALIGN_LEFT,
+            )
+ 
+            # Page number, right-aligned on the first footer line
+            page_box = fitz.Rect(
+                rect.width - margin - 68, baseline + 5,
+                rect.width - margin, baseline + 20,
+            )
+            page.insert_textbox(
+                page_box, f"Page {index} of {total_pages}",
+                fontsize=7.0, fontname="helv",
+                color=(0.30, 0.35, 0.42),
+                align=fitz.TEXT_ALIGN_RIGHT,
+            )
+ 
+        doc.save(tmp_path, garbage=3, deflate=True)
+        doc.close()
+        os.replace(tmp_path, path)
+        return True
+ 
+    except Exception as exc:
+        print(f"PDF footer stamping failed: {exc}")
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        return False
+ 
+ 
+# ---------------------------------------------------------------------
+# MAIN ENTRY POINT - build a PDF from a Markdown answer
+# ---------------------------------------------------------------------
+def build_answer_pdf(answer: str, filename_prefix: str = "lesson") -> Optional[str]:
+    """Render a model answer to a styled, footered PDF.
+ 
+    Returns the public /assets/... URL, or None if generation failed.
+    """
+    body = strip_llm_chatter(answer if isinstance(answer, str) else str(answer or ""))
+    if not body:
+        return None
+ 
+    # Derive a real document title from the H1, or add one.
+    doc_title = "Nexa AI Document"
+    title_match = re.search(r"^#\s+(.+)$", body, flags=re.MULTILINE)
+    if title_match:
+        doc_title = title_match.group(1).strip()
+    else:
+        body = f"# {doc_title}\n\n{body}"
+ 
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{filename_prefix}_{ts}.pdf"
+    path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+ 
+    try:
+        if MarkdownPdf is not None and Section is not None:
+            pdf = MarkdownPdf(toc_level=2)
+            pdf.meta["title"] = doc_title
+            pdf.meta["author"] = "NEXA AI"
+            pdf.meta["subject"] = "EduNeX generated document"
+            pdf.add_section(
+                Section(body, toc=True, borders=(36, 36, -36, -64)),
+                user_css=PDF_LESSON_CSS,
+            )
+            pdf.save(path)
+        else:
+            save_text_to_pdf(path, body)
+ 
+        stamp_pdf_footer(path)
+        return f"/assets/{filename}"
+ 
+    except Exception as pdf_error:
+        print(f"PDF generation failed: {pdf_error}")
+        try:
+            save_text_to_pdf(path, body)
+            stamp_pdf_footer(path)
+            return f"/assets/{filename}"
+        except Exception as fallback_error:
+            print(f"Fallback PDF generation failed: {fallback_error}")
+            return None
+
+
 def quick_reply(message: str, user_name: str = ""):
     """Instant answers for greetings and trivial messages — no LLM call."""
     m = (message or "").lower().strip().rstrip("!.?")
@@ -1626,135 +1789,95 @@ def extract_lesson_metadata(text: str) -> dict:
     meta: dict = {}
     if not text:
         return meta
-
+ 
+    cleaned = strip_output_format_noise(text)
+ 
     # Grade
-    m = re.search(r"grade\s*(\d{1,2})", text, flags=re.IGNORECASE)
+    m = re.search(r"\bgrade\s*(\d{1,2})\b", cleaned, flags=re.IGNORECASE)
     if m:
         meta["grade"] = f"Grade {m.group(1)}"
-
+ 
     # Duration
-    m = re.search(r"(\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr))", text, flags=re.IGNORECASE)
+    m = re.search(r"(\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr))",
+                  cleaned, flags=re.IGNORECASE)
     if m:
         meta["duration"] = m.group(1)
-
-    # Topic / Subject
-    m = re.search(r"(?:lesson plan|create a lesson|make a lesson)\s*(?:on|about)\s+([^,\.\n]+)", text, flags=re.IGNORECASE)
+ 
+    # Topic - now accepts 'related to', 'based on', 'covering', 'for', etc.
+    m = re.search(
+        r"(?:lesson plan|teaching plan|lesson)\s*"
+        r"(?:that is\s+|which is\s+)?"
+        r"(?:related to|relating to|based on|regarding|covering|concerning|about|on|for|in)\s+"
+        r"(.+?)$",
+        cleaned, flags=re.IGNORECASE,
+    )
     if m:
-        topic = m.group(1).strip()
-        topic = re.split(r"\s+for\b", topic, flags=re.IGNORECASE)[0].strip()
-        meta["topic"] = topic
-        if len(topic.split()) <= 3:
+        topic = m.group(1).strip(" ?.!,")
+        # Trim trailing qualifiers: 'for grade 11', 'for 40 minutes'
+        topic = re.split(r"\s+for\s+(?:grade|year|\d)", topic, flags=re.IGNORECASE)[0]
+        topic = re.sub(r"\s*\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr)\s*$",
+                       "", topic, flags=re.IGNORECASE).strip(" ?.!,")
+        if topic and 2 < len(topic) <= 80:
+            meta["topic"] = topic
             meta["subject"] = topic
-    else:
-        m = re.search(r"in\s+([^,\.\n]+)\s*(?:for|grade|$)", text, flags=re.IGNORECASE)
-        if m:
-            meta["subject"] = m.group(1).strip()
-
+ 
     # Prerequisite
-    m = re.search(r"prereq(?:uisite)?s?:?\s*([^,\.\n]+)", text, flags=re.IGNORECASE)
+    m = re.search(r"prereq(?:uisite)?s?:?\s*([^,\.\n]+)", cleaned, flags=re.IGNORECASE)
     if m:
         meta["prerequisite"] = m.group(1).strip()
-
+ 
     return meta
 
 
 def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
-    """Normalize lesson plan responses into one friendly, consistent template."""
+    """Prepend a Lesson Details table to a model-generated lesson plan.
+ 
+    The model's own content is preserved in full. Rows with no known value
+    are omitted rather than rendered as 'Not specified'.
+    """
     if not _is_lesson_request(request_message):
         return answer
-
-    if not isinstance(answer, str):
-        answer = str(answer or "")
-
-    # Note: generation disclaimer removed from lesson plan output
-
+ 
+    body = (answer if isinstance(answer, str) else str(answer or "")).strip()
+    if not body:
+        return body
+ 
     meta = extract_lesson_metadata(request_message)
-    default_value = "Not specified"
-    grade = meta.get("grade") or default_value
-    subject = meta.get("subject") or default_value
-    topic = meta.get("topic") or default_value
-    duration_text = meta.get("duration") or "40 minutes"
-    prereq = meta.get("prerequisite") or default_value
-
-    def cell(value: object) -> str:
-        return str(value if value is not None else "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip() or default_value
-
-    # Determine total minutes if possible
-    total_minutes = None
-    m = re.search(r"(\d+)", duration_text)
-    if m:
-        try:
-            total_minutes = int(m.group(1))
-        except Exception:
-            total_minutes = None
-
-    # Fallback timings (minutes) distribution
-    if total_minutes and total_minutes >= 10:
-        intro = max(3, round(total_minutes * 0.12))
-        direct = max(8, round(total_minutes * 0.30))
-        guided = max(8, round(total_minutes * 0.30))
-        independent = max(5, round(total_minutes * 0.18))
-        closure = total_minutes - (intro + direct + guided + independent)
-        if closure < 3:
-            # adjust
-            closure = 3
-    else:
-        intro = 5
-        direct = 15
-        guided = 10
-        independent = 7
-        closure = 3
-
-    title = f"# {cell(topic) if topic != default_value else 'Lesson Plan'}"
-
-    template_parts = []
-    template_parts.append(title)
-    # Removed an unnecessary single-line paragraph that duplicated the header.
-
-    # Quick snapshot table
-    template_parts.append("\n## Quick Snapshot\n")
-    template_parts.append("| Item | Details |\n")
-    template_parts.append("|---|---|\n")
-    template_parts.append(f"| Grade / Level | {cell(grade)} |\n")
-    template_parts.append(f"| Subject | {cell(subject)} |\n")
-    template_parts.append(f"| Topic | {cell(topic)} |\n")
-    template_parts.append(f"| Duration | {cell(duration_text)} |\n")
-    template_parts.append(f"| Prerequisite Knowledge | {cell(prereq)} |\n")
-
-    template_parts.append("\n## Lesson Overview\nA short explanation of what the lesson is about, why it matters, and how it connects to what students already know.\n")
-    template_parts.append("\n## What Students Will Learn\n- Understand the key idea behind the topic\n- Use important vocabulary correctly\n- Apply the idea in a guided activity or example\n- Show understanding in a short check for learning\n")
-
-    template_parts.append("\n## Materials\n- Whiteboard or slides\n- Markers or pen\n- Student workbook, handout, or notebook\n- Any demonstration items or digital resources\n")
-
-    template_parts.append("\n## Lesson Flow\n")
-    template_parts.append("| Stage | Time | Teacher does | Students do |\n")
-    template_parts.append("|---|---:|---|---|\n")
-    template_parts.append(f"| Warm-up | {intro} min | Open with a question, image, or quick review to activate prior knowledge. | Share ideas, predict the topic, or recall what they already know. |\n")
-    template_parts.append(f"| Teach | {direct} min | Explain the main concept with clear examples and simple checks for understanding. | Listen, note key ideas, and answer short questions. |\n")
-    template_parts.append(f"| Guided Practice | {guided} min | Model one task and support students while they try it together. | Work with the teacher, ask questions, and complete the guided task. |\n")
-    template_parts.append(f"| Independent Practice | {independent} min | Give an application task and monitor progress. | Work independently or in pairs to show understanding. |\n")
-    template_parts.append(f"| Wrap-up | {closure} min | Summarize the lesson and end with a quick exit check. | Reflect on learning and complete the closing question. |\n")
-
-    template_parts.append("\n## Assessment\n")
-    template_parts.append("- Formative: questioning, quick recap, or mini whiteboard check\n")
-    template_parts.append("- Summative: a short task, quiz, worksheet, or exit ticket that shows the main skill\n")
-    template_parts.append("- Success criteria: students can explain the idea, use the vocabulary, and complete the task with support\n")
-
-    template_parts.append("\n## Support and Extension\n- Support: sentence starters, visuals, worked examples, or partner support\n- Core: scaffolded practice with clear steps\n- Extension: challenge questions, deeper reasoning, or an independent task\n")
-
-    template_parts.append("\n## Homework / Reflection\n- One short practice task or reflection question to check understanding\n- Optional extension activity for students who finish early\n")
-
-    template_parts.append("\n## Teacher Notes\n- Common misconceptions to watch for\n- Pacing or classroom management tips\n- Any materials, safety notes, or reminders\n")
-
-    if answer.strip():
-        template_parts.append("\n## Original Draft\n<details>\n<summary>View the model draft used to create this lesson plan</summary>\n\n")
-        template_parts.append(answer.strip() + "\n")
-        template_parts.append("\n</details>\n")
-
-    # Note: removed generation disclaimer per UI requirement
-
-    out = "\n".join(p.strip() for p in template_parts if p is not None)
-    return out
+ 
+    def cell(value: str) -> str:
+        return str(value or "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip()
+ 
+    rows = []
+    for label, key in (
+        ("Grade / Level", "grade"),
+        ("Subject", "subject"),
+        ("Topic", "topic"),
+        ("Duration", "duration"),
+        ("Prerequisite Knowledge", "prerequisite"),
+    ):
+        value = meta.get(key)
+        if value:
+            rows.append(f"| {label} | {cell(value)} |")
+ 
+    # Nothing extractable - return the model's plan untouched.
+    if not rows:
+        return body
+ 
+    table = (
+        "## Lesson Details\n\n"
+        "| Item | Details |\n"
+        "|---|---|\n"
+        + "\n".join(rows)
+        + "\n"
+    )
+ 
+    # Insert the table directly beneath the model's H1 title if it wrote one.
+    lines = body.split("\n")
+    if lines and lines[0].lstrip().startswith("# "):
+        rest = "\n".join(lines[1:]).lstrip("\n")
+        return f"{lines[0]}\n\n{table}\n{rest}"
+ 
+    return f"{table}\n{body}"
 
 
 GENERATION_DISCLAIMER = (
@@ -2631,33 +2754,40 @@ async def image_status(image_id: str):
         "status": status
     }
 
+
+ 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-
+ 
+    # ============ (a) ROLE RESOLUTION - FIXED ============
     try:
         access_role = infer_access_role(request.user_email)
+        normalized_email = normalize_email_address(request.user_email)
     except HTTPException:
-        access_role = "student"
-    normalized_email = normalize_email_address(request.user_email)
+        prior = SESSION_ACCESS_PROFILE.get(request.session_id or "", {})
+        access_role = prior.get("role", "student")
+        normalized_email = prior.get("email", "")
+    # =====================================================
+ 
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
-
+ 
     student_name = (request.user_name or "").strip()
-
+ 
     if is_chat_turn_cancelled(request.turn_id):
         return ChatResponse(
             response="", session_id=session_id, access_role=access_role,
             status_message="Nexa is Thinking...", pdf_url=None,
             image_url=None, image_id=None, log_id=None,
         )
-
+ 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
     capture_user_fact(normalized_email, request.message)
-
+ 
     page_url = (request.url or "").strip()
     page_question = (request.question or "").strip() or (request.message or "").strip()
-
+ 
     # ================= URL READING =================
     if page_url:
         page_text = fetch_page_text(page_url)
@@ -2668,13 +2798,13 @@ async def chat_endpoint(request: ChatRequest):
                 status_message="Nexa is Searching ...", pdf_url=None,
                 image_url=None, image_id=None, log_id=str(uuid.uuid4()),
             )
-
+ 
         existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
         combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
         SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
-
+ 
         question = page_question or "Summarize this web page clearly for a student."
-
+ 
         if LANGCHAIN_AVAILABLE and llm is not None:
             prompt = ChatPromptTemplate.from_messages([
                 ("system",
@@ -2693,7 +2823,7 @@ async def chat_endpoint(request: ChatRequest):
                 answer = "I read the page but could not process it just now. Please try again."
         else:
             answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
-
+ 
         record_chat_turn(session_id, "assistant", answer)
         try:
             user_name = student_name or normalized_email or TEST_USER_NAME
@@ -2705,13 +2835,13 @@ async def chat_endpoint(request: ChatRequest):
             )
         except Exception:
             pass
-
+ 
         return ChatResponse(
             response=answer, session_id=session_id, access_role=access_role,
             status_message="Nexa is Searching ...", pdf_url=None,
             image_url=None, image_id=None, log_id=str(uuid.uuid4()),
         )
-
+ 
     user_log_id = str(uuid.uuid4())
     try:
         user_name = student_name or normalized_email or TEST_USER_NAME
@@ -2723,12 +2853,12 @@ async def chat_endpoint(request: ChatRequest):
         )
     except Exception:
         pass
-
+ 
     lower_msg = (request.message or "").lower()
     status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
     pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
-
-    # ---- FAST PATH: greetings / thanks / name questions — instant, no LLM ----
+ 
+    # ---- FAST PATH: greetings / thanks / name questions - instant, no LLM ----
     if not pending_image_request:
         qr = quick_reply(request.message, student_name)
         if qr:
@@ -2748,7 +2878,8 @@ async def chat_endpoint(request: ChatRequest):
                 status_message=None, pdf_url=None, image_url=None,
                 image_id=None, log_id=user_log_id,
             )
-
+ 
+    # ---- TEACHER GATE for lesson plans ----
     if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
         answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
         record_chat_turn(session_id, "assistant", answer)
@@ -2767,24 +2898,24 @@ async def chat_endpoint(request: ChatRequest):
             status_message=status_message, pdf_url=None,
             image_url=None, image_id=None, log_id=user_log_id,
         )
-
+ 
     try:
         config = {"configurable": {"session_id": session_id}}
-
+ 
         if is_chat_turn_cancelled(request.turn_id):
             return ChatResponse(
                 response="", session_id=session_id, access_role=access_role,
                 status_message=status_message, pdf_url=None,
                 image_url=None, image_id=None, log_id=None,
             )
-
+ 
         if pending_image_request:
             answer = ""
         else:
             reasoning_answer = solve_simple_reasoning_question(request.message)
             if reasoning_answer:
                 answer = reasoning_answer
-
+ 
             elif looks_like_math(request.message):
                 computed = solve_with_sympy(request.message) or llm_to_sympy(request.message)
                 if computed:
@@ -2834,7 +2965,7 @@ async def chat_endpoint(request: ChatRequest):
                         answer = None
             else:
                 answer = None
-
+ 
             if answer is None:
                 faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
                 if faq_answer:
@@ -2850,21 +2981,20 @@ async def chat_endpoint(request: ChatRequest):
                     else:
                         doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
                         augmented_input = request.message
-
-                        # Tell the model who it is talking to
+ 
                         if student_name:
                             augmented_input = (
                                 f"The person you are talking to is named {student_name}. "
                                 f"Use their name naturally when appropriate.\n\n{augmented_input}"
                             )
-
+ 
                         user_facts = USER_MEMORY.get(normalized_email, {})
                         if user_facts:
                             facts_str = "; ".join(f"{k} = {v}" for k, v in user_facts.items())
                             augmented_input = (
                                 f"Known facts for this user (use when relevant): {facts_str}\n\n{augmented_input}"
                             )
-
+ 
                         if request.reply_context:
                             augmented_input = (
                                 f"The user is replying specifically to your previous message: "
@@ -2873,13 +3003,13 @@ async def chat_endpoint(request: ChatRequest):
                                 f"Do not mix in earlier unrelated topics.\n\n"
                                 f"Their follow-up: {augmented_input}"
                             )
-
+ 
                         if doc_context:
                             augmented_input = (
                                 f"Use the following document the user uploaded in this session when relevant:\n"
                                 f"{doc_context}\n\nUser question: {augmented_input}"
                             )
-
+ 
                         try:
                             result = conversational_rag_chain.invoke(
                                 {"input": augmented_input, "audience": build_role_instruction(access_role)},
@@ -2889,7 +3019,7 @@ async def chat_endpoint(request: ChatRequest):
                         except Exception as model_error:
                             print(f"RAG/LLM call failed: {model_error}")
                             rag_answer = ""
-
+ 
                         if rag_answer_is_weak(rag_answer) and not doc_context:
                             web_answer = synthesize_web_answer(request.message, access_role)
                             answer = web_answer or rag_answer or (
@@ -2899,48 +3029,72 @@ async def chat_endpoint(request: ChatRequest):
                             answer = rag_answer or (
                                 "I'm having trouble reaching the language model right now. Please try again."
                             )
-
+ 
+        # ============ (b) LESSON PLAN POST-PROCESSING - FIXED ============
         try:
             if _is_lesson_request(lower_msg) and access_role == "teacher":
+                if looks_like_model_refusal(answer):
+                    print("[info] Lesson plan refused via RAG - retrying without retriever")
+                    retry = generate_lesson_plan_direct(request.message, access_role)
+                    if retry and not looks_like_model_refusal(retry):
+                        answer = retry
                 answer = normalize_lesson_plan_format(answer, request.message)
-        except Exception:
-            pass
-
+        except Exception as exc:
+            print(f"Lesson plan post-processing failed: {exc}")
+        # =================================================================
+ 
         pdf_url = None
         image_url = None
         image_id = None
-
-        # ================= PDF GENERATION =================
+ 
+        # ================= (c) PDF GENERATION =================
         if "pdf" in request.message.lower():
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"lesson_{ts}.pdf"
             path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+ 
             safe_answer = answer if isinstance(answer, str) else str(answer or "")
-            if not safe_answer.lstrip().startswith("# "):
-                safe_answer = "# Nexa AI Document\n\n" + safe_answer
+            safe_answer = strip_llm_chatter(safe_answer)
+ 
+            doc_title = "Nexa AI Document"
+            title_match = re.search(r"^#\s+(.+)$", safe_answer, flags=re.MULTILINE)
+            if title_match:
+                doc_title = title_match.group(1).strip()
+            else:
+                safe_answer = f"# {doc_title}\n\n" + safe_answer
+ 
             try:
                 if MarkdownPdf is not None and Section is not None:
-                    pdf = MarkdownPdf(toc_level=0)
-                    pdf.add_section(Section(safe_answer))
+                    pdf = MarkdownPdf(toc_level=2)
+                    pdf.meta["title"] = doc_title
+                    pdf.meta["author"] = "NEXA AI"
+                    pdf.add_section(
+                        Section(safe_answer, toc=True, borders=(36, 36, -36, -64)),
+                        user_css=PDF_LESSON_CSS,
+                    )
                     pdf.save(path)
+                    stamp_pdf_footer(path)
                     pdf_url = f"/assets/{filename}"
                 else:
                     save_text_to_pdf(path, safe_answer)
+                    stamp_pdf_footer(path)
                     pdf_url = f"/assets/{filename}"
             except Exception as pdf_error:
                 print(f"PDF generation failed: {pdf_error}")
                 try:
                     save_text_to_pdf(path, safe_answer)
+                    stamp_pdf_footer(path)
                     pdf_url = f"/assets/{filename}"
                 except Exception as fallback_error:
                     print(f"Fallback PDF generation failed: {fallback_error}")
                     pdf_url = None
-
-        # ============ IMAGE GENERATION (remote — Ilaibu DGX) ============
+        # ======================================================
+ 
+        # ============ IMAGE GENERATION (remote - Ilaibu DGX) ============
         is_image_request = looks_like_image_generation_request(request.message) or bool(pending_image_request)
-
+ 
         if is_image_request:
-
+ 
             if not (IMAGE_RUNTIME_AVAILABLE and IMAGE_FEATURE_ENABLED):
                 SESSION_PENDING_IMAGE.pop(session_id, None)
                 answer = "Your image request was received, but image generation is unavailable right now."
@@ -2960,7 +3114,7 @@ async def chat_endpoint(request: ChatRequest):
                     status_message=status_message, pdf_url=pdf_url,
                     image_url=None, image_id=None, log_id=user_log_id,
                 )
-
+ 
             if pending_image_request:
                 SESSION_PENDING_IMAGE.pop(session_id, None)
                 message_for_image = pending_image_request
@@ -2975,7 +3129,7 @@ async def chat_endpoint(request: ChatRequest):
             else:
                 intent, text = analyze_image_text_intent(request.message)
                 message_for_image = request.message
-
+ 
                 if intent == "ambiguous":
                     SESSION_PENDING_IMAGE[session_id] = request.message
                     answer = (
@@ -3000,15 +3154,15 @@ async def chat_endpoint(request: ChatRequest):
                         status_message=status_message, pdf_url=pdf_url,
                         image_url=None, image_id=None, log_id=user_log_id,
                     )
-
+ 
             final_prompt = build_image_generation_prompt(message_for_image, intent, text)
             answer = "Generating image..."
-
+ 
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"image_{ts}.png"
             path = os.path.join(IMAGE_OUTPUT_DIR, filename)
             image_id = ts
-
+ 
             try:
                 user_name = student_name or normalized_email or TEST_USER_NAME
                 persist_chat_log(
@@ -3020,16 +3174,15 @@ async def chat_endpoint(request: ChatRequest):
                 )
             except Exception:
                 pass
-
-            # generate_image_task POSTs to IMAGE_DGX_URL (Ilaibu), polls, downloads the PNG here
+ 
             threading.Thread(
                 target=generate_image_task,
                 args=(final_prompt, path, image_id, intent == "wants_text")
             ).start()
             image_url = f"/assets/{filename}"
-
+ 
         record_chat_turn(session_id, "assistant", answer)
-
+ 
         try:
             user_name = student_name or normalized_email or TEST_USER_NAME
             persist_chat_log(
@@ -3040,13 +3193,13 @@ async def chat_endpoint(request: ChatRequest):
             )
         except Exception:
             pass
-
+ 
         return ChatResponse(
             response=answer, session_id=session_id, access_role=access_role,
             status_message=status_message, pdf_url=pdf_url,
             image_url=image_url, image_id=image_id, log_id=user_log_id,
         )
-
+ 
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Server error")
