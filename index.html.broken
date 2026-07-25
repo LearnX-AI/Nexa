@@ -1,0 +1,3360 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Nexa - AI Curriculum Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+	<!-- KaTeX -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @tailwind base;
+        @tailwind components;
+        @tailwind utilities;
+        .glowing-gold-logo {
+            filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.6));
+            animation: gold-glow 3s ease-in-out infinite;
+            transition: transform 0.3s ease;
+        }
+        @keyframes gold-glow {
+            0%, 100% { filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.6)); }
+            50% { filter: drop-shadow(0 0 14px #fde047) drop-shadow(0 0 24px #facc15) drop-shadow(0 0 38px rgba(250, 204, 21, 0.85)); }
+        }
+        .glowing-gold-logo:hover { transform: scale(1.08); }
+        .markdown-body {
+            font-size: 15px;
+            line-height: 1.75;
+            color: #1f2937;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .markdown-body h1 {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 0 0 1rem;
+            padding: 0 0 0.85rem;
+            border-bottom: 1px solid #dbeafe;
+            letter-spacing: -0.03em;
+        }
+        .markdown-body h2 {
+            font-size: 1.08rem;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin: 1.5rem 0 0.75rem;
+            padding: 0.7rem 0.9rem;
+            background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+        }
+        .markdown-body h3 { font-size: 1rem; font-weight: 700; color: #334155; margin: 1.2rem 0 0.6rem; }
+        .markdown-body ul, .markdown-body ol { margin: 1rem 0; padding-left: 1.8rem; }
+        .markdown-body li { margin: 0.45rem 0; }
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.2rem 0;
+            background: #ffffff;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .markdown-body tr:nth-child(even) td { background: #f8fbff; }
+        .markdown-body th, .markdown-body td { border: 1px solid #dbeafe; padding: 12px 14px; text-align: left; vertical-align: top; }
+        .markdown-body th { background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); font-weight: 700; color: #1d4ed8; }
+        .markdown-body a { overflow-wrap: anywhere; word-break: break-word; }
+        .markdown-body pre {
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 14px 16px;
+        }
+        .markdown-body code {
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #eef2ff;
+            color: #3730a3;
+            padding: 0.12rem 0.35rem;
+            border-radius: 6px;
+        }
+	.markdown-body h2 {
+    font-size: 15px; font-weight: 700; color: #1e293b;
+    margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 2px solid #e0e7ff;
+}
+.markdown-body blockquote {
+    border-left: 3px solid #6366f1; background: #eef2ff;
+    padding: 6px 12px; margin: 8px 0; border-radius: 6px;
+    color: #3730a3; font-size: 13px;
+}
+.markdown-body strong { color: #4338ca; }
+.markdown-body .katex-display {
+    margin: 10px 0; padding: 6px 0; overflow-x: auto;
+}		
+
+        .markdown-body img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-body blockquote {
+            margin: 1rem 0;
+            padding: 0.9rem 1rem;
+            border-left: 4px solid #60a5fa;
+            background: #eff6ff;
+            color: #334155;
+            border-radius: 0 12px 12px 0;
+        }
+        .markdown-body hr {
+            border: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
+            margin: 1.5rem 0;
+        }
+        .markdown-body details {
+            margin: 1rem 0;
+            padding: 0.9rem 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+        }
+        .markdown-body summary {
+            cursor: pointer;
+            font-weight: 700;
+            color: #1d4ed8;
+            list-style: none;
+        }
+        .markdown-body summary::-webkit-details-marker {
+            display: none;
+        }
+        .disclaimer-banner {
+            margin-top: 1rem;
+            padding: 1rem 1.05rem;
+            border: 1px solid #f5d48a;
+            border-left: 4px solid #f59e0b;
+            border-radius: 20px;
+            background: linear-gradient(180deg, #fffdf5 0%, #fff8e6 100%);
+            color: #7c2d12;
+            box-shadow: 0 16px 40px -30px rgba(146, 64, 14, 0.32);
+        }
+        .disclaimer-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.28rem 0.6rem;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.12);
+            font-size: 0.72rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #b45309;
+            margin-bottom: 0.45rem;
+        }
+        .disclaimer-banner p {
+            margin: 0;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: #8a3415;
+        }
+        /* Full-page shared chat layout */
+        body.shared-full {
+            background: #f8fafc;
+        }
+        body.shared-full #chat-button { display: none !important; }
+        body.shared-full #chat-window {
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
+            left: auto !important;
+            bottom: auto !important;
+            margin: 36px auto !important;
+            width: calc(100% - 120px) !important;
+            max-width: 1100px !important;
+            height: auto !important;
+            border-radius: 14px !important;
+            box-shadow: none !important;
+            z-index: auto !important;
+        }
+        body.shared-full #chat-window .bg-slate-50 { display: none !important; }
+        body.shared-full #input-area { display: none !important; }
+        body.shared-full #chat-window > .history-panel { display: none !important; }
+        body.shared-full #chat-window .history-modal { display: none !important; }
+        .bot-message {
+            background: linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%);
+            border: 1px solid #dbeafe;
+            border-radius: 24px 24px 24px 10px;
+            padding: 22px 24px;
+            max-width: 95%;
+            position: relative;
+            box-shadow: 0 16px 40px -28px rgba(15, 23, 42, 0.45);
+        }
+        .user-message {
+            background-color: #1e2937;
+            color: white;
+            border-radius: 22px 22px 8px 22px;
+            padding: 16px 22px;
+            max-width: 85%;
+            position: relative;
+        }
+        /* ===== ChatGPT-STYLE MESSAGE ACTIONS ===== */
+        .message-actions {
+            display: flex;
+            gap: 2px;
+            margin-top: 6px;
+            opacity: 1;
+            transition: opacity 0.15s ease;
+        }
+        .message-actions.show {
+            opacity: 1;
+        }
+        /* Bot message buttons – dark icon on light bg */
+        .bot-message .msg-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bot-message .msg-action-btn:hover {
+            color: #1e2937;
+            background: rgba(0,0,0,0.07);
+        }
+        /* User message buttons – light icon on dark bg */
+        .user-message .msg-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px 7px;
+            border-radius: 8px;
+            color: rgba(255,255,255,0.50);
+            font-size: 13px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .user-message .msg-action-btn:hover {
+            color: #ffffff;
+            background: rgba(255,255,255,0.18);
+        }
+        .msg-action-btn.copied {
+            color: #4ade80 !important;
+        }
+        /* User message actions right-aligned */
+        .user-message .message-actions {
+            justify-content: flex-end;
+        }
+
+        /* ===== INPUT COPY BUTTON ===== */
+        .input-copy-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+        #input-copy-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 13px;
+            padding: 5px 6px;
+            border-radius: 8px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s, color 0.15s, background 0.15s;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+        }
+        .input-copy-wrapper:hover #input-copy-btn,
+        #user-input:focus ~ #input-copy-btn {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #input-copy-btn:hover {
+            color: #374151;
+            background: #f3f4f6;
+        }
+        #input-copy-btn.copied {
+            color: #16a34a !important;
+        }
+        /* Adjust input right-padding when copy btn visible */
+        .input-copy-wrapper #user-input {
+            padding-right: 2.4rem;
+        }
+        .response-actions {
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #64748b;
+            font-size: 12px;
+            opacity: 1;
+        }
+        .response-actions button {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 15px;
+            line-height: 1;
+            padding: 4px 6px;
+            border-radius: 8px;
+            transition: color 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+        }
+        .response-actions button:hover {
+            background: #f1f5f9;
+            color: #334155;
+        }
+        .response-actions button.active-like {
+            color: #16a34a;
+        }
+        .response-actions button.active-dislike {
+            color: #dc2626;
+        }
+        .response-actions button.copied {
+            color: #16a34a;
+        }
+        .response-actions button.active-like,
+        .response-actions button.active-dislike {
+            transform: scale(1.08);
+        }
+        .source-chip {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.9rem;
+            padding-top: 0.9rem;
+            border-top: 1px solid #dbeafe;
+        }
+        .source-chip-label {
+            font-size: 0.72rem;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0f766e;
+        }
+        .source-link-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            border: 1px solid #bae6fd;
+            background: #f0f9ff;
+            color: #0f766e;
+            border-radius: 9999px;
+            padding: 0.45rem 0.8rem;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+        }
+        .source-link-btn:hover {
+            background: #e0f2fe;
+            border-color: #7dd3fc;
+            transform: translateY(-1px);
+        }
+        .composer-action-btn {
+            flex-shrink: 0;
+            min-width: 5.25rem;
+            height: 2.75rem;
+            border-radius: 0.875rem;
+            border: 1px solid transparent;
+            padding: 0 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+        }
+        .composer-action-btn:hover {
+            transform: translateY(-1px);
+        }
+        .composer-action-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .composer-stop-btn {
+            background: #fff7ed;
+            color: #9a3412;
+            border-color: #fed7aa;
+        }
+        .composer-stop-btn:hover {
+            background: #ffedd5;
+        }
+        .composer-edit-btn {
+            background: #eff6ff;
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+        .composer-edit-btn:hover {
+            background: #dbeafe;
+        }
+        .logger-toolbar {
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #6b7280;
+            font-size: 12px;
+        }
+        .toolbar-btn {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 9999px;
+            padding: 3px 10px;
+            color: #4b5563;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+        .toolbar-btn:hover {
+            background: #f9fafb;
+        }
+        .history-toggle-btn {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+        }
+        .history-toggle-btn:hover {
+            background: #e0e7ff;
+        }
+	.history-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+}
+/* Step headings stand out as numbered blocks */
+.markdown-body h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #4338ca;
+    margin: 16px 0 6px;
+    padding: 6px 12px;
+    background: linear-gradient(90deg, #eef2ff, transparent);
+    border-left: 4px solid #6366f1;
+    border-radius: 6px;
+}
+/* Major sections (Problem, Solution, Final Answer) */
+.markdown-body h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 18px 0 8px;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #c7d2fe;
+}
+/* Give each displayed equation breathing room and a subtle backdrop */
+.markdown-body .katex-display {
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+/* The explanation sentence under each step */
+.markdown-body h3 + p {
+    margin: 4px 0 8px;
+    color: #475569;
+    font-size: 13.5px;
+}
+.markdown-body strong { color: #4338ca; }
+/* Final answer emphasis */
+.markdown-body h2:last-of-type + .katex-display,
+.markdown-body h2:last-of-type ~ .katex-display {
+    background: #f0fdf4;
+    border-color: #86efac;
+}
+
+.history-panel.hidden { display: none !important; }
+
+.history-modal {
+    width: 100%;
+    height: 100%;
+    max-width: 780px;
+    max-height: 560px;
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.history-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+.history-modal-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    min-height: 0;
+}
+.history-left {
+    border-right: 1px solid #e2e8f0;
+    padding: 14px;
+    overflow-y: auto;
+    min-height: 0;
+}
+.history-right {
+    padding: 16px;
+    overflow-y: auto;
+    min-height: 0;
+    background: #fff;
+}
+
+#reply-chip {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: 12px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+}
+.reply-chip-bar { width: 3px; border-radius: 3px; background: #0ea5e9; flex-shrink: 0; }
+.reply-chip-content { flex: 1; min-width: 0; }
+.reply-chip-label { display: block; font-size: 11px; font-weight: 600; color: #0369a1; }
+.reply-chip-text { display: block; font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#reply-chip-close { background: none; border: none; cursor: pointer; color: #64748b; font-size: 14px; padding: 0 6px; align-self: center; }
+#reply-chip-close:hover { color: #0f172a; }
+
+
+/* Stack into top/bottom on very narrow screens */
+@media (max-width: 560px) {
+    .history-modal-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 44% 56%;
+    }
+    .history-left {
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+}
+        .guardrail-banner {
+            border: 1px solid #f59e0b;
+            background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
+            color: #92400e;
+            border-radius: 12px;
+            padding: 8px 10px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .generated-file {
+            margin-top: 12px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15);
+            background: white;
+            padding: 8px;
+        }
+        .generated-file img, .generated-file iframe {
+            width: 100%;
+            border-radius: 12px;
+        }
+
+        /* ===== FEEDBACK MODAL ===== */
+        #feedback-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #feedback-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #feedback-modal {
+            background: #ffffff;
+            border-radius: 28px;
+            width: 420px;
+            max-width: 95vw;
+            padding: 36px 32px 30px;
+            box-shadow: 0 24px 60px -8px rgba(0,0,0,0.22);
+            transform: translateY(24px) scale(0.97);
+            transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+            border: 1px solid #f1f5f9;
+        }
+        #feedback-overlay.show #feedback-modal {
+            transform: translateY(0) scale(1);
+        }
+	html, body { background: transparent !important; }
+        .star-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 18px 0 6px;
+        }
+        .star-btn {
+            font-size: 2.1rem;
+            cursor: pointer;
+            color: #e2e8f0;
+            transition: color 0.18s, transform 0.18s;
+            background: none;
+            border: none;
+            padding: 2px;
+            line-height: 1;
+        }
+        .star-btn:hover,
+        .star-btn.active {
+            color: #facc15;
+            transform: scale(1.18);
+        }
+        .star-btn.active {
+            filter: drop-shadow(0 0 5px rgba(250,204,21,0.7));
+        }
+        .feedback-label {
+            text-align: center;
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 20px;
+            min-height: 18px;
+            transition: color 0.2s;
+        }
+        #feedback-textarea {
+            width: 100%;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 14px;
+            color: #1e293b;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+            background: #f8fafc;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        #feedback-textarea:focus {
+            border-color: #94a3b8;
+            background: #fff;
+        }
+        #feedback-submit-btn {
+            width: 100%;
+            margin-top: 16px;
+            background: #1e2937;
+            color: #fff;
+            border: none;
+            border-radius: 14px;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.15s;
+            letter-spacing: 0.01em;
+        }
+        #feedback-submit-btn:hover {
+            background: #0f172a;
+            transform: translateY(-1px);
+        }
+        #feedback-submit-btn:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #feedback-success {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 10px 0 6px;
+            animation: successPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+        @keyframes successPop {
+            0% { opacity: 0; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .success-icon-ring {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #facc15 0%, #eab308 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 18px;
+            box-shadow: 0 8px 24px rgba(234,179,8,0.35);
+            animation: goldGlowPulse 2s ease-in-out infinite;
+        }
+        @keyframes goldGlowPulse {
+            0%, 100% { box-shadow: 0 8px 24px rgba(234,179,8,0.35); }
+            50% { box-shadow: 0 8px 32px rgba(250,204,21,0.6); }
+        }
+        .feedback-tag-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 4px 0 16px;
+            justify-content: center;
+        }
+        .feedback-tag {
+            background: #f1f5f9;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 6px 14px;
+            font-size: 12.5px;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.18s;
+            user-select: none;
+        }
+        .feedback-tag:hover, .feedback-tag.selected {
+            background: #1e2937;
+            color: #fff;
+            border-color: #1e2937;
+        }
+
+        /* ===== IMAGE PREVIEW LIGHTBOX ===== */
+        #img-preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 10, 18, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.28s ease;
+        }
+        #img-preview-overlay.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        #img-preview-box {
+            position: relative;
+            max-width: min(860px, 95vw);
+            max-height: 90dvh;
+            background: #0f172a;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 40px 80px -12px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+            transform: scale(0.93) translateY(16px);
+            transition: transform 0.32s cubic-bezier(0.34,1.4,0.64,1);
+            display: flex;
+            flex-direction: column;
+        }
+        #img-preview-overlay.show #img-preview-box {
+            transform: scale(1) translateY(0);
+        }
+        #img-preview-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 18px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        #img-preview-topbar span {
+            font-size: 12.5px;
+            font-weight: 500;
+            color: #64748b;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        #img-preview-close {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.18s, color 0.18s;
+            line-height: 1;
+        }
+        #img-preview-close:hover {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+        }
+        #img-preview-img-wrap {
+            overflow: hidden;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            background: #060d1a;
+            min-height: 0;
+        }
+        #img-preview-img-wrap img {
+            max-width: 100%;
+            max-height: calc(90dvh - 110px);
+            object-fit: contain;
+            display: block;
+        }
+        #img-preview-footer {
+            padding: 12px 18px;
+            border-top: 1px solid rgba(255,255,255,0.07);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            gap: 10px;
+        }
+        #img-preview-hint {
+            font-size: 12px;
+            color: #334155;
+        }
+        #img-preview-dl {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: #facc15;
+            color: #0f172a;
+            border: none;
+            border-radius: 10px;
+            padding: 9px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.18s, transform 0.15s;
+            letter-spacing: 0.01em;
+            text-decoration: none;
+        }
+        #img-preview-dl:hover {
+            background: #fde047;
+            transform: translateY(-1px);
+        }
+        .generated-image img {
+            cursor: zoom-in;
+            transition: opacity 0.2s;
+        }
+        .generated-image img:hover {
+            opacity: 0.88;
+        }
+
+                /* ===== RESPONSIVE: ALL DEVICES ===== */
+        /* CSS variables for easy cross-breakpoint consistency */
+        :root {
+            --btn-size: 5rem;
+            --btn-bottom: 2rem;
+            --btn-right: 2rem;
+            --win-width: 440px;
+            --win-right: 2rem;
+            --win-gap: 0.75rem;
+        }
+
+        #chat-button {
+            bottom: var(--btn-bottom);
+            right: var(--btn-right);
+        }
+
+        /* Chat window always viewport-safe — never clips top */
+        #chat-window {
+            width: var(--win-width);
+            /* height = viewport minus: button, its bottom, gap between them, plus small safety margin */
+            height: min(620px, calc(100dvh - var(--btn-size) - var(--btn-bottom) - var(--win-gap) - 0.5rem));
+            max-height: calc(100dvh - var(--btn-size) - var(--btn-bottom) - var(--win-gap) - 0.5rem);
+            bottom: calc(var(--btn-size) + var(--btn-bottom) + var(--win-gap));
+            right: var(--win-right);
+            border-radius: 1.5rem;
+        }
+
+        /* Feedback modal always fits viewport */
+        #feedback-modal {
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+        }
+
+        /* ── Mobile phones (≤ 480px) ── */
+        @media (max-width: 480px) {
+            :root {
+                --btn-size: 3.5rem;
+                --btn-bottom: 1rem;
+                --btn-right: 1rem;
+                --win-width: calc(100vw - 12px);
+                --win-right: 6px;
+                --win-gap: 0.5rem;
+            }
+            #chat-button .w-20 { width: 3.5rem !important; height: 3.5rem !important; }
+            #hover-container    { display: none !important; }
+            #chat-window        { left: 6px !important; border-radius: 1.25rem !important; }
+            .bot-message        { max-width: 100% !important; font-size: 14px; padding: 14px 16px; }
+            .user-message       { max-width: 93%  !important; font-size: 14px; padding: 12px 16px; }
+            #chat-messages      { padding: 0.85rem !important; }
+            #user-input         { font-size: 16px !important; padding: 11px 14px !important; }
+            #send-button, #attach-btn { width: 2.75rem !important; height: 2.75rem !important; }
+            #feedback-modal     { width: calc(100vw - 20px) !important; padding: 20px 15px 16px !important; border-radius: 16px !important; }
+            .star-btn           { font-size: 1.65rem; }
+            .feedback-tag       { font-size: 12px; padding: 6px 11px; }
+        }
+
+        /* ── Tablets (481px – 900px) ── */
+        @media (min-width: 481px) and (max-width: 900px) {
+            :root {
+                --btn-size: 4.5rem;
+                --btn-bottom: 1.5rem;
+                --btn-right: 1.5rem;
+                --win-width: min(400px, calc(100vw - 40px));
+                --win-right: 1.5rem;
+                --win-gap: 0.75rem;
+            }
+            #chat-button .w-20 { width: 4.5rem !important; height: 4.5rem !important; }
+            #feedback-modal     { width: min(390px, calc(100vw - 40px)) !important; }
+        }
+
+        /* ── Laptop / Desktop (901px – 1439px) ── default vars ── */
+
+        /* ── Smart TV / Large screen (≥ 1440px) ── */
+        @media (min-width: 1440px) {
+            :root {
+                --btn-size: 6rem;
+                --btn-bottom: 2.5rem;
+                --btn-right: 3rem;
+                --win-width: 520px;
+                --win-right: 3rem;
+                --win-gap: 1rem;
+            }
+            #chat-button .w-20  { width: 6rem !important; height: 6rem !important; }
+            .markdown-body      { font-size: 16.5px !important; }
+            #feedback-modal     { width: 480px !important; padding: 36px 32px 28px !important; }
+            .star-btn           { font-size: 2.3rem; }
+        }
+
+        /* ── 4K / Ultra-wide TV (≥ 2560px) ── */
+        @media (min-width: 2560px) {
+            :root {
+                --btn-size: 7rem;
+                --btn-bottom: 3rem;
+                --btn-right: 4rem;
+                --win-width: 640px;
+                --win-right: 4rem;
+                --win-gap: 1.25rem;
+            }
+            #chat-button .w-20  { width: 7rem !important; height: 7rem !important; }
+            .markdown-body      { font-size: 18px !important; }
+            #feedback-modal     { width: 560px !important; padding: 44px 38px 34px !important; }
+        }
+
+        /* ── Expanded width mode ── */
+        #chat-window.chat-expanded {
+            width: min(820px, calc(100vw - 3rem)) !important;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #chat-window {
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        @media (max-width: 480px) {
+            #chat-window.chat-expanded {
+                width: calc(100vw - 12px) !important;
+            }
+        }
+
+        /* ── Input area ── */
+        #user-input {
+            min-width: 0;
+            width: 100%;
+            text-overflow: ellipsis;
+        }
+        #user-input::placeholder {
+            color: #9ca3af;
+            font-size: 13.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #input-area {
+            flex-shrink: 0;
+        }
+
+        /* ── Touch devices: bigger tap targets ── */
+        @media (hover: none) and (pointer: coarse) {
+            .star-btn            { min-width: 44px; min-height: 44px; }
+            .feedback-tag        { padding: 9px 16px; font-size: 13.5px; }
+            #feedback-submit-btn { padding: 16px; font-size: 16px; }
+            #send-button, #attach-btn { min-width: 48px; min-height: 48px; }
+        }
+	.nexa-search-results { margin: 4px 0; }
+.nexa-search-head {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #64748b; margin-bottom: 10px;
+}
+.nexa-search-card {
+    border: 1px solid #e2e8f0; border-left: 3px solid #0ea5e9;
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+    background: #fff; transition: box-shadow 0.15s, transform 0.15s;
+}
+.nexa-search-card:hover {
+    box-shadow: 0 8px 20px -12px rgba(15,23,42,0.35);
+    transform: translateY(-1px);
+}
+.nexa-search-title {
+    display: block; font-size: 15px; font-weight: 600;
+    color: #1d4ed8; text-decoration: none; line-height: 1.35;
+}
+.nexa-search-title:hover { text-decoration: underline; }
+.nexa-search-domain { font-size: 11.5px; color: #16a34a; margin: 2px 0 6px; }
+.nexa-search-snippet { font-size: 13px; color: #475569; line-height: 1.55; }
+.nexa-search-more {
+    display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600;
+    color: #0ea5e9; text-decoration: none;
+}
+.nexa-search-more:hover { text-decoration: underline; }
+    </style>
+</head>
+<body class="font-sans" style="background:transparent;">
+    <!-- Floating Chat Button -->
+    <div id="chat-button" class="fixed z-50 cursor-pointer">
+        <div class="flex flex-col items-end gap-2">
+            <div id="hover-container" class="bg-white rounded-3xl px-5 py-3 shadow-xl flex items-center gap-3 opacity-0 scale-95 transition-all duration-300 origin-bottom-right">
+                <div id="welcome-message" class="text-gray-800 text-sm font-medium whitespace-nowrap"></div>
+            </div>
+            <div class="w-20 h-20">
+                <img id="nexa-logo" src="assets/nexa.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
+            </div>
+        </div>
+    </div>
+    <!-- Chat Window -->
+    <div id="chat-window" class="hidden fixed bg-white shadow-2xl flex flex-col overflow-hidden border border-gray-100 z-50">
+        <!-- Header -->
+        <div class="bg-slate-50 border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9">
+                    <img src="assets/nexa1.png" class="w-full h-full object-contain glowing-gold-logo" alt="Nexa Logo"/>
+                </div>
+                <div>
+                    <h2 class="font-bold text-2xl tracking-tight text-gray-900">NEXA</h2>
+                    <p class="text-xs text-gray-500 -mt-1">At the heart of intelligence is love</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+		<button id="new-chat-btn" class="toolbar-btn text-xs font-semibold" type="button">New</button>
+                <button id="history-toggle-btn" class="toolbar-btn history-toggle-btn text-xs font-semibold" type="button">History</button>
+                <button id="share-chat-btn" class="toolbar-btn text-xs font-semibold" type="button">Share</button>
+                <button id="expand-chat" title="Expand width" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center" style="width:32px;height:32px;border-radius:8px;background:none;border:none;cursor:pointer;font-size:17px;">
+                    <i id="expand-icon" class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                </button>
+                <button id="close-chat" class="text-gray-500 hover:text-gray-700 text-2xl transition-colors">✕</button>
+            </div>
+        </div>
+	<div id="history-panel" class="history-panel hidden">
+    <div class="history-modal">
+        <div class="history-modal-header">
+            <div>
+                <p class="text-sm font-semibold text-gray-900">Chat history</p>
+                <p class="text-xs text-gray-500">Browse and reopen your previous Nexa sessions.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="refresh-history-btn" class="toolbar-btn text-xs" type="button">Refresh</button>
+                <button id="close-history-btn" class="toolbar-btn text-xs" type="button">Close ✕</button>
+            </div>
+        </div>
+        <div class="history-modal-body">
+            <!-- LEFT: session list -->
+            <div class="history-left">
+                <label for="history-search-input" class="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search previous chats</label>
+                <div class="mt-2 flex items-center gap-2">
+                    <input id="history-search-input" type="search" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" placeholder="Try: cells, photosynthesis" />
+                    <button id="history-search-clear-btn" class="toolbar-btn text-xs shrink-0" type="button">Clear</button>
+                </div>
+                <p id="history-search-status" class="mt-2 text-xs text-slate-500">Showing recent sessions.</p>
+                <div id="history-session-list" class="space-y-2 mt-3"></div>
+                <p id="history-session-list-empty" class="text-xs text-gray-500 mt-3">No saved sessions found for this email.</p>
+            </div>
+            <!-- RIGHT: transcript -->
+            <div class="history-right">
+                <div id="history-session-empty" class="text-sm text-gray-500">Select a session to preview its transcript.</div>
+                <div id="history-session-detail" class="hidden space-y-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+        <!-- Messages Area -->
+        <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
+	<div id="math-keypad" style="display:none; padding:8px; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:8px; background:#f8fafc;">
+    <div style="display:grid; grid-template-columns:repeat(8,1fr); gap:4px;">
+        <!-- buttons injected by JS -->
+    </div>
+</div>        
+<!-- Input Area -->
+        <div id="input-area" class="px-3 py-3 border-t bg-white">
+            <div class="mb-2 flex items-center gap-2">
+                <input id="user-email" type="email" style="display:none;"
+                       class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
+                       placeholder="Enter your school email (required)"/>
+                <span id="access-role-badge" class="shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600">Student mode</span>
+            </div>
+            <div class="mb-2">
+                <input id="user-name" type="text" style="display:none;"
+                       class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
+                       placeholder="Enter your name (optional for logs)"/>
+            </div>
+	    <div id="reply-chip" style="display:none;">
+    <div class="reply-chip-bar"></div>
+    <div class="reply-chip-content">
+        <span class="reply-chip-label">Replying to Nexa</span>
+        <span id="reply-chip-text" class="reply-chip-text"></span>
+    </div>
+    <button id="reply-chip-close" type="button" title="Cancel reply">✕</button>
+</div>
+            <div class="flex items-center gap-2">
+                <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+                    <i class="fa-solid fa-paperclip text-lg"></i>
+                </button>
+		<button id="url-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-sky-600 hover:bg-gray-100 rounded-xl transition-all" title="Read a web page">
+                    <i class="fa-solid fa-globe text-lg"></i>
+                </button>
+		<button id="math-mode-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded-xl transition-all" title="Mathematics mode">
+    <i class="fa-solid fa-square-root-variable text-lg"></i>
+</button>
+                <div class="input-copy-wrapper">
+                    <input id="user-input" type="text"
+                           class="w-full border border-gray-300 focus:border-blue-500 rounded-2xl px-4 py-3 focus:outline-none text-sm"
+                           placeholder="Ask me anything about curriculum."/>
+                    <button id="input-copy-btn" title="Copy input">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+                <button id="send-button"
+                        class="flex-shrink-0 w-10 h-10 bg-gray-900 hover:bg-black text-white rounded-xl flex items-center justify-center transition-all">
+                    <i class="fa-solid fa-paper-plane text-sm"></i>
+                </button>
+                <button id="edit-prompt-btn" class="composer-action-btn composer-edit-btn hidden" type="button" title="Edit the prompt">
+                    <i class="fa-regular fa-pen-to-square"></i>
+                    <span>Edit</span>
+                </button>
+                <button id="stop-generation-btn" class="composer-action-btn composer-stop-btn hidden" type="button" title="Stop generation">
+                    <i class="fa-solid fa-stop"></i>
+                    <span>Stop</span>
+                </button>
+            </div>
+            <div class="logger-toolbar">
+                <span id="stack-size"></span>
+                <button id="undo-log-btn" class="toolbar-btn" type="button"></button>
+            </div>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+// ==================== CONFIG ====================
+const API_URL = "/chat";
+const CHAT_STATUS_URL = "/chat-status";
+const UPLOAD_URL = "/upload";
+const LOG_API_URL = "/api/chat-log";
+const RATING_API_URL = "/api/chat-rating";
+const POP_API_URL = "/api/chat-log/pop";
+const IMAGE_API_URL = "/api/chat-image";
+const CHAT_HISTORY_API_URL = "/api/chat-history";
+const CHAT_SESSIONS_API_URL = "/api/chat-sessions";
+const CHAT_SESSION_SEARCH_API_URL = "/api/chat-sessions";
+const SHARE_CHAT_API_URL = "/api/share-chat";
+
+const chatButton = document.getElementById('chat-button');
+const chatWindow = document.getElementById('chat-window');
+const closeChat = document.getElementById('close-chat');
+const messagesContainer = document.getElementById('chat-messages');
+const userEmailInput = document.getElementById('user-email');
+const userInput = document.getElementById('user-input');
+const userNameInput = document.getElementById('user-name');
+
+// ==================== EXPAND / COLLAPSE WIDTH TOGGLE ====================
+const expandBtn  = document.getElementById('expand-chat');
+const expandIcon = document.getElementById('expand-icon');
+let chatExpanded = false;
+
+
+const mathSymbols = [
+    ['√','\\sqrt{}'], ['∫','\\int'], ['∑','\\sum'], ['π','\\pi'],
+    ['≤','\\leq'], ['≥','\\geq'], ['≠','\\neq'], ['∞','\\infty'],
+    ['x²','^2'], ['xⁿ','^{}'], ['÷','/'], ['×','*'],
+    ['(',' ('], [')',') '], ['½','\\frac{}{}'], ['θ','\\theta'],
+];
+
+function buildMathKeypad() {
+    const grid = document.querySelector('#math-keypad div');
+    grid.innerHTML = '';
+    mathSymbols.forEach(([label, insert]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.style.cssText = 'padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; font-size:15px;';
+        b.onclick = () => insertAtCursor(userInput, insert);
+        grid.appendChild(b);
+    });
+}
+buildMathKeypad();
+
+function insertAtCursor(input, text) {
+    const start = input.selectionStart, end = input.selectionEnd;
+    input.value = input.value.slice(0, start) + text + input.value.slice(end);
+    input.focus();
+    input.selectionStart = input.selectionEnd = start + text.length;
+}
+
+document.getElementById('math-mode-btn').addEventListener('click', () => {
+    const kp = document.getElementById('math-keypad');
+    kp.style.display = kp.style.display === 'none' ? 'block' : 'none';
+});
+
+
+expandBtn.addEventListener('click', () => {
+    chatExpanded = !chatExpanded;
+    chatWindow.classList.toggle('chat-expanded', chatExpanded);
+    if (chatExpanded) {
+        expandIcon.classList.remove('fa-up-right-and-down-left-from-center');
+        expandIcon.classList.add('fa-down-left-and-up-right-to-center');
+        expandBtn.title = 'Reduce width';
+    } else {
+        expandIcon.classList.remove('fa-down-left-and-up-right-to-center');
+        expandIcon.classList.add('fa-up-right-and-down-left-from-center');
+        expandBtn.title = 'Expand width';
+    }
+});
+
+
+const accessRoleBadge = document.getElementById('access-role-badge');
+const sendButton = document.getElementById('send-button');
+const stopGenerationBtn = document.getElementById('stop-generation-btn');
+const editPromptBtn = document.getElementById('edit-prompt-btn');
+const attachBtn = document.getElementById('attach-btn');
+const undoLogBtn = document.getElementById('undo-log-btn');
+const stackSizeLabel = document.getElementById('stack-size');
+const historyToggleBtn = document.getElementById('history-toggle-btn');
+const historyPanel = document.getElementById('history-panel');
+const historySessionList = document.getElementById('history-session-list');
+const historySessionListEmpty = document.getElementById('history-session-list-empty');
+const historySessionEmpty = document.getElementById('history-session-empty');
+const historySessionDetail = document.getElementById('history-session-detail');
+const refreshHistoryBtn = document.getElementById('refresh-history-btn');
+const closeHistoryBtn = document.getElementById('close-history-btn');
+const historySearchInput = document.getElementById('history-search-input');
+const historySearchClearBtn = document.getElementById('history-search-clear-btn');
+const historySearchStatus = document.getElementById('history-search-status');
+const shareChatBtn = document.getElementById('share-chat-btn');
+const newChatBtn = document.getElementById('new-chat-btn');
+
+let sessionId = null;
+let userMessageCount = 0;
+const FEEDBACK_TRIGGER_COUNT = 2; // show feedback after every 2 prompts
+let chatHistoryLoaded = false;
+let chatSessionsLoaded = false;
+let activeHistorySessionId = null;
+let cachedHistorySessions = [];
+let historySearchTimer = null;
+let historySearchRequestId = 0;
+let pendingReplyText = null;
+let activeChatAbortController = null;
+let activeChatTurnId = null;
+let activeChatPrompt = '';
+let chatIsGenerating = false;
+
+
+const chatLogStack = [];
+const pendingLogRetryStack = [];
+
+
+document.getElementById('chat-button').addEventListener('click', () => {
+    chatWindow.classList.remove('hidden');   // open the window
+
+    // Only start a fresh chat if the conversation is empty (avoid wiping an active chat).
+    const hasMessages = messagesContainer && messagesContainer.children.length > 0;
+    if (!hasMessages) {
+        startNewChat();
+    }
+});
+
+function normalizeEmail(email) {
+    return (email || '').trim().toLowerCase();
+}
+
+function getSessionStorageKey(email) {
+    const normalizedEmail = normalizeEmail(email);
+    return normalizedEmail ? `nexa_session_id:${normalizedEmail}` : 'nexa_session_id';
+}
+function notifyParentSize() {
+    const historyOpen = !historyPanel.classList.contains('hidden');
+    window.parent.postMessage({
+        nexa: true,
+        action: 'resize',
+        open: !chatWindow.classList.contains('hidden'),
+        expanded: chatExpanded,
+        history: historyOpen
+    }, '*');
+}
+const nexaSizeObserver = new MutationObserver(notifyParentSize);
+nexaSizeObserver.observe(chatWindow, { attributes: true, attributeFilter: ['class'] });
+nexaSizeObserver.observe(historyPanel, { attributes: true, attributeFilter: ['class'] });
+window.addEventListener('load', notifyParentSize);
+
+function inferAccessRoleFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const [localPart, domain = ''] = normalizedEmail.split('@');
+    // Prefer the domain-based EduNex account rules:
+    // - teacher accounts use the education domain marker (e.g. yasaru.rathnasooriya@education.edu.pg)
+    // - student accounts use the edunex domain marker (e.g. yasaru.rathnasooriya@edunex.edu.pg)
+    // Keep the older local-part markers as a fallback so existing accounts still work.
+    if (domain.startsWith('education.') || localPart.includes('.education')) {
+        return 'teacher';
+    }
+
+    if (domain.startsWith('edunex.') || localPart.includes('.edunex')) {
+        return 'student';
+    }
+
+    return 'student';
+}
+
+// ==================== MOODLE INTEGRATION - FORCE EMAIL ====================
+const urlParams = new URLSearchParams(window.location.search);
+const sharedTokenMatch = window.location.pathname.match(/^\/share\/([^/?#]+)/);
+const sharedChatToken = decodeURIComponent(sharedTokenMatch?.[1] || urlParams.get('share_token') || urlParams.get('shared') || '');
+const isSharedChatPage = Boolean(sharedChatToken);
+
+let emailFromMoodle = urlParams.get('email');
+let lmsLoginName = urlParams.get('name')
+    || urlParams.get('firstname')
+    || urlParams.get('first_name')
+    || urlParams.get('given_name')
+    || urlParams.get('fullname')
+    || urlParams.get('display_name')
+    || '';
+if (lmsLoginName) {
+    lmsLoginName = decodeURIComponent(lmsLoginName).trim();
+}
+
+if (emailFromMoodle) {
+    emailFromMoodle = decodeURIComponent(emailFromMoodle);
+    const normalizedMoodleEmail = normalizeEmail(emailFromMoodle);
+    console.log("🔐 Moodle email received:", normalizedMoodleEmail);
+
+    userEmailInput.value = emailFromMoodle;
+    localStorage.setItem('nexa_user_email', normalizedMoodleEmail);
+
+    // Clear stale global name keys so a previous user's name can't leak.
+    localStorage.removeItem('nexa_lms_user_name');
+    localStorage.removeItem('nexa_user_name');
+
+    // Store THIS user's name keyed to their email only.
+    const nameKey = `nexa_lms_user_name:${normalizedMoodleEmail}`;
+    if (lmsLoginName) {
+        localStorage.setItem(nameKey, lmsLoginName);
+    } else {
+        localStorage.removeItem(nameKey);
+    }
+
+    setSessionForEmail(emailFromMoodle);
+
+    setTimeout(() => {
+        chatWindow.classList.remove('hidden');
+        console.log("✅ Nexa chat auto-opened for Moodle user");
+    }, 600);
+}
+
+// Also listen for any future changes
+userEmailInput.addEventListener('change', function() {
+    if (this.value && this.value.includes('@')) {
+        localStorage.setItem('nexa_user_email', normalizeEmail(this.value));
+    }
+});
+
+function updateAccessRoleBadge(value) {
+    const role = value === 'teacher' || value === 'student'
+        ? value
+        : inferAccessRoleFromEmail(value);
+    accessRoleBadge.textContent = role === 'teacher' ? 'Teacher mode' : 'Student mode';
+    accessRoleBadge.className = role === 'teacher'
+        ? 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-amber-100 text-amber-800'
+        : 'shrink-0 px-3 py-2 rounded-2xl text-xs font-semibold bg-gray-100 text-gray-600';
+    return role;
+}
+
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatHistoryTimestamp(timestamp) {
+    if (!timestamp) return 'Unknown time';
+    const parsed = new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? timestamp : parsed.toLocaleString();
+}
+
+function setHistorySearchStatus(message) {
+    if (historySearchStatus) {
+        historySearchStatus.textContent = message;
+    }
+}
+
+function closeHistoryPanel() {
+    historyPanel.classList.add('hidden');
+}
+
+function openHistoryPanel() {
+    historyPanel.classList.remove('hidden');
+}
+
+function refreshHistoryIfVisible() {
+    if (!historyPanel.classList.contains('hidden')) {
+        chatSessionsLoaded = false;
+        loadChatSessions(true);
+    } else {
+        chatSessionsLoaded = false;
+    }
+}
+
+function updateComposerButtons() {
+    const readOnlyMode = isSharedChatPage;
+    const generateLocked = chatIsGenerating;
+    const composerLocked = readOnlyMode || generateLocked;
+
+    userInput.readOnly = composerLocked;
+    sendButton.disabled = composerLocked;
+    attachBtn.disabled = composerLocked;
+    document.getElementById('url-btn').disabled = composerLocked;
+    if (newChatBtn) {
+        newChatBtn.disabled = composerLocked;
+    }
+
+    stopGenerationBtn.classList.toggle('hidden', !generateLocked);
+    editPromptBtn.classList.toggle('hidden', !generateLocked);
+    sendButton.classList.toggle('hidden', generateLocked);
+
+    userInput.placeholder = readOnlyMode
+        ? 'Shared chats are read-only.'
+        : (generateLocked ? 'Nexa is thinking...' : 'Ask me anything about curriculum.');
+
+    userInput.classList.toggle('cursor-not-allowed', composerLocked);
+    sendButton.classList.toggle('opacity-50', composerLocked);
+    attachBtn.classList.toggle('opacity-50', composerLocked);
+    document.getElementById('url-btn').classList.toggle('opacity-50', composerLocked);
+    if (newChatBtn) {
+        newChatBtn.classList.toggle('opacity-50', composerLocked);
+    }
+}
+
+function beginChatGeneration(promptText) {
+    activeChatPrompt = promptText || '';
+    activeChatTurnId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : generateSessionId();
+    activeChatAbortController = new AbortController();
+    chatIsGenerating = true;
+    updateComposerButtons();
+    return {
+        turnId: activeChatTurnId,
+        signal: activeChatAbortController.signal,
+    };
+}
+
+function sendStopGenerationSignal() {
+    if (!activeChatTurnId) return;
+
+    fetch('/api/chat-stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turn_id: activeChatTurnId, session_id: sessionId }),
+    }).catch(error => {
+        console.warn('Stop API failed', error);
+    });
+}
+
+async function stopActiveChatGeneration(restorePrompt = false) {
+    if (activeChatAbortController) {
+        activeChatAbortController.abort();
+    }
+
+    const promptToRestore = restorePrompt ? activeChatPrompt : '';
+    activeChatAbortController = null;
+    activeChatTurnId = null;
+    activeChatPrompt = '';
+    chatIsGenerating = false;
+    document.getElementById('typing-msg')?.remove();
+    updateComposerButtons();
+
+    if (restorePrompt) {
+        userInput.value = promptToRestore;
+        requestAnimationFrame(() => {
+            userInput.focus();
+            userInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+        if (typeof userInput.setSelectionRange === 'function') {
+            const cursorPosition = promptToRestore.length;
+            userInput.setSelectionRange(cursorPosition, cursorPosition);
+        }
+    }
+
+    sendStopGenerationSignal();
+}
+
+function markChatGenerationFinished() {
+    activeChatAbortController = null;
+    activeChatTurnId = null;
+    activeChatPrompt = '';
+    chatIsGenerating = false;
+    document.getElementById('typing-msg')?.remove();
+    updateComposerButtons();
+}
+
+editPromptBtn.addEventListener('click', async () => {
+    await stopActiveChatGeneration(true);
+});
+
+stopGenerationBtn.addEventListener('click', async () => {
+    await stopActiveChatGeneration(false);
+});
+
+function startNewChat() {
+    if (isSharedChatPage) {
+        showSharedChatNotice();
+        return;
+    }
+
+    const email = normalizeEmail(userEmailInput.value);
+    if (!email || !email.includes('@')) {
+        addMessage('Please enter your email before starting a new chat.', false);
+        userEmailInput.focus();
+        return;
+    }
+    sessionId = generateSessionId();
+    localStorage.setItem(getSessionStorageKey(email), sessionId);
+    localStorage.setItem('nexa_session_id', sessionId);
+
+    chatHistoryLoaded = true;   // brand-new session, nothing to fetch
+    chatSessionsLoaded = false; // history list should refresh next open
+    activeHistorySessionId = null;
+    userMessageCount = 0;
+
+    messagesContainer.innerHTML = '';
+    clearReplyContext();
+    closeHistoryPanel();
+
+    const firstName = getFirstName(getCurrentDisplayName());
+    const welcomeCard = document.createElement('div');
+    welcomeCard.className = 'flex justify-start';
+
+	welcomeCard.innerHTML = `
+        <div class="bot-message max-w-[92%]">
+            <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-100 to-yellow-200 text-amber-700 flex items-center justify-center shrink-0 shadow-sm">
+                    <i class="fa-solid fa-sparkles text-base"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">New chat ready</div>
+                    <h3 class="mt-1 text-lg font-bold text-slate-900">Hi ${escapeHtml(firstName)}, welcome back.</h3>
+                    <p class="mt-2 text-sm text-slate-600 leading-6">
+                        Your new chat is ready. Ask me anything about the curriculum, lesson plans, or learning support.
+                    </p>
+                    <div style="margin-top:14px; background:#f3e3d0; border:1px solid #d9b48f; border-left:4px solid #8b5a2b; border-radius:12px; padding:12px 14px;">
+                        <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:#6b4423; margin-bottom:5px;">
+                            <i class="fa-solid fa-shield-halved"></i> Disclaimer
+                        </div>
+                        <p style="margin:0; font-size:12.5px; line-height:1.6; color:#5c3a1e;">
+                            This response was generated by NEXA AI. Please verify important information with your official learning resources and consult your teacher or lecturer if needed. NEXA AI supports learning — it does not replace your human teachers.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    messagesContainer.appendChild(welcomeCard);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function setReplyContext(text) {
+    pendingReplyText = (text || '').trim();
+    if (!pendingReplyText) return;
+    const chip = document.getElementById('reply-chip');
+    const preview = document.getElementById('reply-chip-text');
+    preview.textContent = pendingReplyText.length > 120
+        ? pendingReplyText.slice(0, 120).trim() + '…'
+        : pendingReplyText;
+    chip.style.display = 'flex';
+    userInput.focus();
+}
+
+function clearReplyContext() {
+    pendingReplyText = null;
+    const chip = document.getElementById('reply-chip');
+    if (chip) chip.style.display = 'none';
+}
+
+function renderHistoryTranscript(messages) {
+    if (!messages.length) {
+        historySessionEmpty.textContent = 'This session has no messages yet.';
+        historySessionEmpty.classList.remove('hidden');
+        historySessionDetail.classList.add('hidden');
+        historySessionDetail.innerHTML = '';
+        return;
+    }
+
+    historySessionEmpty.classList.add('hidden');
+    historySessionDetail.classList.remove('hidden');
+    historySessionDetail.innerHTML = messages.map(message => {
+        const isUser = message.role === 'user';
+        const bubbleClass = isUser ? 'bg-slate-900 text-white' : 'bg-sky-50 text-slate-800';
+        const disclaimerState = isUser ? null : getResponseDisclaimerState(message.content || '');
+        const imageMarkup = !isUser && message.image_url
+            ? `
+                <div class="generated-image mt-4">
+                    <img src="${escapeHtml(message.image_url)}" alt="Generated Image" title="Click to preview">
+                </div>
+            `
+            : '';
+        const text = isUser
+            ? `<div class="whitespace-pre-wrap break-words text-sm leading-6">${escapeHtml(message.content || '')}</div>`
+            : `<div class="markdown-body text-sm">${renderMarkdown(message.content || '')}</div>${imageMarkup}`;
+
+        const disclaimerMarkup = !isUser && disclaimerState && disclaimerState.hasDisclaimer
+            ? renderDisclaimerBanner(disclaimerState.disclaimerText)
+            : '';
+
+        return `
+            <div class="${isUser ? 'flex justify-end' : 'flex flex-col items-start'}">
+                <div class="max-w-full md:max-w-[92%] rounded-2xl px-4 py-3 ${bubbleClass}">
+                    ${text}
+                </div>
+                ${disclaimerMarkup}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderHistorySessions(sessions, emptyMessage = 'No saved sessions found for this email.') {
+    cachedHistorySessions = Array.isArray(sessions) ? sessions.slice() : [];
+    historySessionList.innerHTML = '';
+    historySessionListEmpty.textContent = emptyMessage;
+    historySessionListEmpty.classList.toggle('hidden', sessions.length > 0);
+
+    sessions.forEach((session, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-session-btn';
+        if (session.session_id === activeHistorySessionId) {
+            button.classList.add('active');
+        }
+
+        button.innerHTML = `
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="text-sm font-semibold text-slate-900 truncate">Session ${sessions.length - index}</div>
+                    <div class="text-xs text-slate-500 mt-1 break-all">${escapeHtml(session.session_id)}</div>
+                </div>
+                <span class="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">${Number(session.message_count || 0)} logs</span>
+            </div>
+            <div class="history-session-snippet mt-2 text-[11px] text-slate-500 ${session.snippet ? '' : 'hidden'}">${escapeHtml(session.snippet || '')}</div>
+            <div class="mt-2 text-xs text-slate-500">Last active ${escapeHtml(formatHistoryTimestamp(session.last_activity))}</div>
+        `;
+
+        button.addEventListener('click', () => loadHistorySession(session.session_id));
+        historySessionList.appendChild(button);
+    });
+}
+
+async function loadChatSessions(force = false, query = null) {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    const activeQuery = query === null ? (historySearchInput.value || '').trim() : (query || '').trim();
+    if (!normalizedEmail) {
+        historySessionList.innerHTML = '';
+        historySessionListEmpty.textContent = 'Enter a school email to view saved sessions.';
+        historySessionListEmpty.classList.remove('hidden');
+        setHistorySearchStatus('Enter a school email to search previous chats.');
+        return;
+    }
+
+    if (!activeQuery && chatSessionsLoaded && !force) {
+        return;
+    }
+
+    const requestId = ++historySearchRequestId;
+    historySessionListEmpty.textContent = activeQuery ? 'Searching previous chats...' : 'Loading saved sessions...';
+    historySessionListEmpty.classList.remove('hidden');
+    setHistorySearchStatus(activeQuery ? `Searching for “${activeQuery}”...` : 'Showing recent sessions.');
+
+    try {
+        const endpoint = activeQuery
+            ? `${CHAT_SESSION_SEARCH_API_URL}/${encodeURIComponent(normalizedEmail)}/search?query=${encodeURIComponent(activeQuery)}`
+            : `${CHAT_SESSIONS_API_URL}/${encodeURIComponent(normalizedEmail)}`;
+        const res = await fetch(endpoint);
+        if (!res.ok) {
+            throw new Error(`Session API returned ${res.status}`);
+        }
+
+        const data = await res.json();
+        const sessions = Array.isArray(data.sessions) ? data.sessions : [];
+        if (requestId !== historySearchRequestId) {
+            return;
+        }
+
+        renderHistorySessions(
+            sessions,
+            activeQuery ? `No previous chats matched “${activeQuery}”.` : 'No saved sessions found for this email.'
+        );
+
+        if (!activeQuery) {
+            chatSessionsLoaded = true;
+        }
+
+        setHistorySearchStatus(
+            activeQuery
+                ? (sessions.length ? `Found ${sessions.length} matching session${sessions.length === 1 ? '' : 's'} for “${activeQuery}”.` : `No previous chats matched “${activeQuery}”.`)
+                : 'Showing recent sessions.'
+        );
+
+        if (!activeQuery && sessions.length) {
+            const initialSessionId = activeHistorySessionId && sessions.some(session => session.session_id === activeHistorySessionId)
+                ? activeHistorySessionId
+                : sessions[0].session_id;
+            await loadHistorySession(initialSessionId);
+        } else if (!sessions.length && !activeQuery) {
+            historySessionEmpty.textContent = 'No saved sessions found for this email.';
+            historySessionEmpty.classList.remove('hidden');
+            historySessionDetail.classList.add('hidden');
+            historySessionDetail.innerHTML = '';
+        } else if (activeQuery && !sessions.length) {
+            historySessionEmpty.textContent = `No previous chats matched “${activeQuery}”.`;
+            historySessionEmpty.classList.remove('hidden');
+            historySessionDetail.classList.add('hidden');
+            historySessionDetail.innerHTML = '';
+        }
+    } catch (err) {
+        console.error('Failed to load saved sessions', err);
+        historySessionListEmpty.textContent = activeQuery ? 'Unable to search previous chats right now.' : 'Unable to load saved sessions right now.';
+        historySessionListEmpty.classList.remove('hidden');
+        setHistorySearchStatus(activeQuery ? 'Search failed.' : 'Showing recent sessions.');
+    }
+}
+
+async function loadHistorySession(sessionToView) {
+    if (!sessionToView) return;
+
+    activeHistorySessionId = sessionToView;
+    historySessionEmpty.textContent = 'Loading transcript...';
+    historySessionEmpty.classList.remove('hidden');
+    historySessionDetail.classList.add('hidden');
+    historySessionDetail.innerHTML = '';
+
+    sessionId = sessionToView;
+    chatHistoryLoaded = false;
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    if (normalizedEmail) {
+        localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
+    }
+    // Show chat window and keep the history panel open so the user
+    // can browse sessions and preview transcripts freely.
+    chatWindow.classList.remove('hidden');
+    openHistoryPanel();
+
+    try {
+        const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionToView)}`);
+        if (!res.ok) {
+            throw new Error(`History API returned ${res.status}`);
+        }
+
+        const data = await res.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        renderHistoryTranscript(messages);
+        renderHistorySessions(cachedHistorySessions);
+
+        await loadChatHistory();
+    } catch (err) {
+        console.error('Failed to load session history', err);
+        historySessionEmpty.textContent = 'Unable to load the selected session.';
+        historySessionEmpty.classList.remove('hidden');
+        historySessionDetail.classList.add('hidden');
+    }
+}
+
+function getDisplayNameFromEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    const localPart = normalizedEmail.split('@')[0] || '';
+    return localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'User';
+}
+
+function getCurrentDisplayName() {
+    const lmsName = (localStorage.getItem('nexa_lms_user_name') || '').trim();
+    if (lmsName) {
+        return lmsName;
+    }
+
+    const savedName = (localStorage.getItem('nexa_user_name') || '').trim();
+    if (savedName) {
+        return savedName;
+    }
+
+    const emailName = getDisplayNameFromEmail(userEmailInput.value);
+    return emailName || 'User';
+}
+
+function getFirstName(displayName) {
+    const normalizedName = (displayName || '').trim();
+    if (!normalizedName) {
+        return 'there';
+    }
+
+    const strippedName = normalizedName
+        .replace(/^((mr|mrs|ms|miss|dr|sir|madam)\.?\s+)/i, '')
+        .replace(/^[@#]+/, '')
+        .trim();
+
+    return (strippedName.split(/\s+/)[0] || 'there').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') || 'there';
+}
+
+function updateWelcomeMessage() {
+    const welcomeMessage = document.getElementById('welcome-message');
+    if (!welcomeMessage) return;
+    const firstName = getFirstName(getCurrentDisplayName());
+    welcomeMessage.textContent = `Hi ${firstName}, Nexa is here to help you`;
+}
+
+function showSharedChatNotice() {
+    const existingNotice = document.getElementById('shared-chat-notice');
+    if (existingNotice) return;
+
+    const notice = document.createElement('div');
+    notice.id = 'shared-chat-notice';
+    notice.className = 'mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 shadow-sm';
+    notice.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <div class="min-w-0">
+                <div class="text-sm font-semibold">Shared chat is read-only</div>
+                <p class="mt-1 text-sm leading-6 text-sky-700">You can review and copy this conversation, but replying is disabled.</p>
+            </div>
+        </div>
+    `;
+    messagesContainer.prepend(notice);
+}
+
+function setChatReadOnlyMode(isReadOnly) {
+    userInput.readOnly = isReadOnly;
+    userInput.placeholder = isReadOnly ? 'Shared chats are read-only.' : 'Ask me anything about curriculum.';
+    userInput.style.cursor = isReadOnly ? 'not-allowed' : '';
+    sendButton.disabled = isReadOnly;
+    attachBtn.disabled = isReadOnly;
+    undoLogBtn.disabled = isReadOnly;
+    historyToggleBtn.disabled = isReadOnly;
+    shareChatBtn.disabled = isReadOnly;
+    if (newChatBtn) {
+        newChatBtn.disabled = isReadOnly;
+    }
+
+    userInput.classList.toggle('cursor-not-allowed', isReadOnly);
+    sendButton.classList.toggle('opacity-50', isReadOnly);
+    attachBtn.classList.toggle('opacity-50', isReadOnly);
+    undoLogBtn.classList.toggle('opacity-50', isReadOnly);
+    historyToggleBtn.classList.toggle('opacity-50', isReadOnly);
+    shareChatBtn.classList.toggle('opacity-50', isReadOnly);
+    if (newChatBtn) {
+        newChatBtn.classList.toggle('opacity-50', isReadOnly);
+    }
+}
+
+userNameInput.value = localStorage.getItem('nexa_user_name') || '';
+userNameInput.addEventListener('change', () => {
+    localStorage.setItem('nexa_user_name', userNameInput.value.trim());
+    updateWelcomeMessage();
+});
+
+userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
+
+function setSessionForEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    sessionId = normalizedEmail ? (localStorage.getItem(getSessionStorageKey(normalizedEmail)) || null) : null;
+    chatHistoryLoaded = false;
+    chatSessionsLoaded = false;
+    activeHistorySessionId = null;
+    cachedHistorySessions = [];
+    closeHistoryPanel();
+    messagesContainer.innerHTML = '';
+    updateAccessRoleBadge(normalizedEmail);
+    updateWelcomeMessage();
+    if (sessionId && !isSharedChatPage) {
+        loadChatHistory();
+    }
+}
+
+async function openSharedChatFromToken(shareToken) {
+    if (!shareToken) return;
+
+    setChatReadOnlyMode(true);
+    chatWindow.classList.remove('hidden');
+    messagesContainer.innerHTML = '';
+    updateAccessRoleBadge(userEmailInput.value);
+    updateWelcomeMessage();
+
+    try {
+        const res = await fetch(`/api/shared-chat/${encodeURIComponent(shareToken)}`);
+        if (!res.ok) {
+            addMessage('This shared chat link is unavailable or expired.', false);
+            return;
+        }
+
+        const data = await res.json();
+        if (!data.session_id) {
+            addMessage('This shared chat link is missing a session reference.', false);
+            return;
+        }
+
+        sessionId = data.session_id;
+        chatHistoryLoaded = false;
+        chatSessionsLoaded = false;
+        activeHistorySessionId = null;
+        cachedHistorySessions = [];
+        localStorage.setItem('nexa_session_id', sessionId);
+
+        const normalizedEmail = normalizeEmail(userEmailInput.value);
+        if (normalizedEmail) {
+            localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
+        }
+
+        await loadChatHistory();
+        showSharedChatNotice();
+        chatWindow.classList.remove('hidden');
+    } catch (error) {
+        console.error('Failed to load shared chat session', error);
+        addMessage('Failed to load the shared chat. Please refresh the page.', false);
+    }
+}
+
+userEmailInput.addEventListener('change', () => {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    localStorage.setItem('nexa_user_email', normalizedEmail);
+    setSessionForEmail(normalizedEmail);
+    updateWelcomeMessage();
+});
+
+setSessionForEmail(userEmailInput.value);
+setChatReadOnlyMode(isSharedChatPage);
+if (isSharedChatPage) {
+    // Switch to full-page shared layout so the shared transcript appears like the previous shared view
+    document.body.classList.add('shared-full');
+}
+if (sharedChatToken) {
+    openSharedChatFromToken(sharedChatToken);
+}
+
+function getInternationalTimestamp() {
+    return new Date().toISOString();
+}
+
+function updateStackSizeLabel() {
+    stackSizeLabel.textContent = `Logs in stack: ${chatLogStack.length}`;
+}
+
+async function loadChatHistory() {
+    if (!sessionId || chatHistoryLoaded) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionId)}`);
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+        const messages = Array.isArray(data.messages) ? data.messages : [];
+        if (!messages.length) {
+            chatHistoryLoaded = true;
+            return;
+        }
+
+        messagesContainer.innerHTML = '';
+        for (const message of messages) {
+            const isUser = message.role === 'user';
+            const fileUrl = !isUser && message.image_url ? message.image_url : null;
+            const isPdf = !isUser && !!message.pdf_url;
+            addMessage(message.content || '', isUser, fileUrl, isPdf);
+        }
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        chatHistoryLoaded = true;
+    } catch (err) {
+        console.error('Failed to load chat history', err);
+    }
+}
+
+const guardrailRules = [
+    {
+        name: 'sexual content',
+        pattern: /\b(sex|nude|naked|porn|explicit|sexual|blowjob|handjob|intercourse)\b/i,
+        reply: 'I cannot help with sexual or explicit content. I can help with school-safe learning topics instead.'
+    },
+    {
+        name: 'violence or weapons',
+        pattern: /\b(kill|murder|stab|shoot|weapon|bomb|explosive|poison|attack)\b/i,
+        reply: 'I cannot help with violent or weapon-related requests. I can help with safety and education topics.'
+    },
+    {
+        name: 'self-harm',
+        pattern: /\b(suicide|self-harm|cut myself|hurt myself|die by suicide)\b/i,
+        reply: 'I cannot help with self-harm requests. Please reach out to a trusted adult, counselor, or emergency support right away.'
+    },
+    {
+        name: 'hate or harassment',
+        pattern: /\b(racist|sexist|homophobic|slur|hate speech|dehumanize|harass)\b/i,
+        reply: 'I cannot help with hateful or harassing content. I can help rewrite your request in respectful language.'
+    },
+    {
+        name: 'cheating or misconduct',
+        pattern: /\b(cheat|plagiarize|test answer key|exam leak|bypass school filter|hack class account)\b/i,
+        reply: 'I cannot help with cheating or misconduct. I can help you study and practice honestly.'
+    },
+    {
+        name: 'privacy invasion',
+        pattern: /\b(password|otp|credit card|bank account|personal data|doxx|address|phone number)\b/i,
+        reply: 'I cannot help with private or sensitive information misuse. I can help with digital safety guidance instead.'
+    },
+    {
+        name: 'drugs or substances',
+        pattern: /\b(drug|cocaine|meth|heroin|weed|marijuana|smuggle|overdose)\b/i,
+        reply: 'I cannot help with drug misuse requests. I can help with health and prevention information.'
+    },
+    {
+        name: 'severe profanity',
+        pattern: /\b(fuck|shit|bitch|bastard)\b/i,
+        reply: 'Let us keep this school-appropriate. I can still help with a clean version of your question.'
+    },
+    {
+        name: 'Tok Pisin language',
+        pattern: /\b(gutpela|nogut|tasol|plis|mi|yu|em|ol|wantaim|bai|ken|gat|stap|kamap|go-daun|nau|liklik|bigfela|no-get|givim|soim|helpim|wanem|husat|we|weate|finis|nambis|ples|dispela|yet|tu|tri|tu-pis|tru|bilong|moa|lain|harim|tok|singim|dring|gro|ting|hed|lek|han|bel|maus)\b/i,
+        reply: 'I am sorry I am still learning tok pisin. I can be you tok pisin assistant sooner.'
+    }
+];
+
+function classifyPrompt(text) {
+    const cleaned = (text || '').trim();
+    if (!cleaned) {
+        return { allowed: true, category: null, reply: null };
+    }
+
+    for (const rule of guardrailRules) {
+        if (rule.pattern.test(cleaned)) {
+            return { allowed: false, category: rule.name, reply: rule.reply };
+        }
+    }
+
+    return { allowed: true, category: null, reply: null };
+}
+
+const OUTPUT_BLOCKED_CATEGORIES = [
+    'sexual content',
+    'violence or weapons',
+    'self-harm',
+    'hate or harassment',
+    'drugs or substances'
+];
+
+function containsUnsafeModelOutput(text) {
+    const value = text || '';
+    return guardrailRules.some(rule =>
+        OUTPUT_BLOCKED_CATEGORIES.includes(rule.name) && rule.pattern.test(value)
+    );
+}
+
+function pushChatLog(logEntry) {
+    chatLogStack.push(logEntry);
+    updateStackSizeLabel();
+}
+
+function popChatLog() {
+    const removed = chatLogStack.pop();
+    updateStackSizeLabel();
+    return removed;
+}
+
+async function saveChatLogToDatabase(logEntry) {
+    return true;
+}
+
+async function saveRatingToDatabase(payload) {
+    try {
+        const res = await fetch(RATING_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            throw new Error(`Rating API returned ${res.status}`);
+        }
+    } catch (err) {
+        console.error('Rating save failed', err);
+    }
+}
+
+async function retryPendingLogs() {
+    return true;
+}
+
+async function updateLogResponse(logId, responseText, pdfUrl = null) {
+    const logItem = chatLogStack.find(item => item.log_id === logId);
+    if (!logItem) return;
+
+    logItem.nexa_response = responseText;
+    if (pdfUrl) {
+        logItem.pdf_url = pdfUrl;
+    }
+    logItem.timestamp = getInternationalTimestamp();
+}
+
+async function blobToBase64(blob) {
+    const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read image blob'));
+        reader.readAsDataURL(blob);
+    });
+
+    return String(dataUrl).split(',')[1] || '';
+}
+
+async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }) {
+    try {
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) {
+            throw new Error(`Image fetch returned ${imageResponse.status}`);
+
+        }
+
+        const imageBlob = await imageResponse.blob();
+        const imageBase64 = await blobToBase64(imageBlob);
+        const uploadResponse = await fetch(IMAGE_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                log_id: logId,
+                user_name: userName,
+                image_base64: imageBase64,
+                image_mime_type: imageBlob.type || 'application/octet-stream',
+                image_filename: filename || 'generated-image.png'
+            })
+        });
+
+        if (!uploadResponse.ok) {
+            throw new Error(`Image API returned ${uploadResponse.status}`);
+        }
+
+        return true;
+    } catch (err) {
+        console.error('Image base64 save failed', err);
+        return false;
+    }
+}
+
+function getResponseDisclaimerState(text) {
+    const safeText = typeof text === 'string' ? text : '';
+    const disclaimerBodyText = 'This response was generated by NEXA AI. Please verify important information with your official learning resources and consult your teacher or lecturer if needed. NEXA AI supports learning it does not replace your human teachers.';
+    const disclaimerPrefixedText = `Disclaimer: ${disclaimerBodyText}`;
+    const disclaimerVariants = [disclaimerPrefixedText, disclaimerBodyText];
+
+    let matchedDisclaimer = '';
+    let disclaimerIndex = -1;
+    for (const variant of disclaimerVariants) {
+        const idx = safeText.indexOf(variant);
+        if (idx >= 0 && (disclaimerIndex === -1 || idx < disclaimerIndex)) {
+            matchedDisclaimer = variant;
+            disclaimerIndex = idx;
+        }
+    }
+
+    const hasDisclaimer = disclaimerIndex >= 0;
+    const disclaimerAtStart = hasDisclaimer && disclaimerIndex === 0;
+    let bodyText = safeText;
+
+    if (disclaimerAtStart) {
+        bodyText = safeText.slice(matchedDisclaimer.length).replace(/^\s*---\s*/, '').trim();
+    } else if (hasDisclaimer) {
+        bodyText = safeText.slice(0, disclaimerIndex).trim();
+    }
+
+    bodyText = bodyText.replace(/^\s*---\s*/, '').replace(/\n\n---\s*$/, '').trim();
+    // Strip any leftover 'DISCLAIMER:' token (upper or mixed case) that may remain
+    // between the separator and the disclaimer body (backend uses 'DISCLAIMER:'),
+    // which would otherwise leave a small 'DISCLAIMER:' label inside the bot bubble.
+    bodyText = bodyText.replace(/\bDISCLAIMER:\s*$/i, '').replace(/\bDisclaimer:\s*$/i, '').trim();
+
+    return { bodyText, hasDisclaimer, disclaimerText: disclaimerBodyText };
+}
+
+function renderDisclaimerBanner(disclaimerText) { return ''; }
+
+function renderMarkdown(text) {
+    const { bodyText } = getResponseDisclaimerState(text);
+    const parsed = marked.parse(bodyText, { breaks: true, gfm: true });
+    const withSourceButtons = parsed.replace(
+        /<p>(?:<strong>)?Source:(?:<\/strong>)?\s*(?:<a href="([^"]+)"[^>]*>[^<]*<\/a>|(https?:\/\/[^\s<]+))<\/p>/gi,
+        (_, anchorUrl, plainUrl) => {
+            const sourceUrl = anchorUrl || plainUrl || '';
+            if (!sourceUrl) return '';
+            return `
+                <div class="source-chip">
+                    <span class="source-chip-label">Source</span>
+                    <button type="button" class="source-link-btn" data-source-url="${escapeHtml(sourceUrl)}">
+                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                        Open source
+                    </button>
+                </div>
+            `;
+        }
+    );
+    // Links live inside an iframe — force them to open in a new browser tab.
+    return withSourceButtons.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ');
+}
+
+// ==================== ADD MESSAGE ====================
+function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, logMeta = null) {
+    const safeText = typeof text === 'string' ? text : (text == null ? '' : String(text));
+    const disclaimerState = isUser ? null : getResponseDisclaimerState(safeText);
+    const div = document.createElement('div');
+    div.className = isUser
+        ? 'flex justify-end group'
+        : 'flex flex-col items-start group';
+    if (isUser) {
+        div.innerHTML = `
+            <div class="user-message" ${pairId ? `data-pair-id="${pairId}"` : ''}>
+                <span class="user-text">${safeText}</span>
+                <div class="message-actions">
+                    <button class="msg-action-btn" onclick="copyMsgText(this, '${escapeForAttr(safeText)}')" title="Copy">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    } else {
+        const pairAttr = pairId ? `data-pair-id="${pairId}"` : '';
+        let html = `
+            <div class="bot-message" ${pairAttr}>
+                <div class="markdown-body">${renderMarkdown(safeText)}</div>
+        `;
+        if (fileUrl) {
+            if (isPdf) {
+                html += `
+                    <div class="generated-file mt-4">
+                        <iframe src="${fileUrl}" width="100%" height="400" class="border rounded"></iframe>
+                        <button onclick="downloadFile('${fileUrl}', 'lesson-plan.pdf')"
+                                class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm">
+                            📥 Download PDF
+                        </button>
+                    </div>`;
+            } else {
+                html += `
+                    <div class="generated-image mt-4">
+                        <img src="${fileUrl}" alt="Generated Image" onclick="openImagePreview('${fileUrl}')" title="Click to preview">
+                        <button onclick="downloadFile('${fileUrl}', 'image.png')"
+                                class="mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm">
+                            📥 Download Image
+                        </button>
+                    </div>`;
+            }
+        }
+        const responseControls = logMeta && logMeta.logId ? `
+                <div class="response-actions" data-log-id="${logMeta.logId}">
+                    <button type="button" class="copy-response-btn" title="Copy response">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                    <button type="button" class="like-response-btn" title="Good response">
+                        <i class="fa-regular fa-thumbs-up"></i>
+                    </button>
+			<button type="button" class="reply-response-btn" title="Quote &amp; reply">
+                        <i class="fa-solid fa-reply"></i>
+                    </button>
+                    <button type="button" class="dislike-response-btn" title="Bad response">
+                        <i class="fa-regular fa-thumbs-down"></i>
+                    </button>
+                </div>` : '';
+        html += `
+                <div class="message-actions"></div>${responseControls}
+            </div>`;
+        if (disclaimerState && disclaimerState.hasDisclaimer) {
+            html += renderDisclaimerBanner(disclaimerState.disclaimerText);
+        }
+        div.innerHTML = html;
+    }
+    messagesContainer.appendChild(div);
+    div.querySelectorAll('.user-message, .bot-message').forEach(attachMsgHover);
+
+    if (!isUser && logMeta && logMeta.logId) {
+        const controls = div.querySelector('.response-actions');
+        const copyBtn = controls ? controls.querySelector('.copy-response-btn') : null;
+        const likeBtn = controls ? controls.querySelector('.like-response-btn') : null;
+        const dislikeBtn = controls ? controls.querySelector('.dislike-response-btn') : null;
+        const replyBtn = controls ? controls.querySelector('.reply-response-btn') : null;
+        if (replyBtn) {
+            replyBtn.addEventListener('click', () => {
+                const markdown = div.querySelector('.markdown-body');
+                const responseText = markdown ? markdown.innerText.trim() : safeText;
+                setReplyContext(responseText);
+            });
+        }
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                const markdown = div.querySelector('.markdown-body');
+                const responseText = markdown ? markdown.innerText.trim() : safeText;
+                try {
+                    const copied = await copyTextToClipboard(responseText);
+                    if (!copied) {
+                        showCopyToast('Copy failed');
+                        return;
+                    }
+                    copyBtn.classList.add('copied');
+                    copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+                    setTimeout(() => {
+                        copyBtn.classList.remove('copied');
+                        copyBtn.innerHTML = '<i class="fa-regular fa-copy"></i>';
+                    }, 1200);
+                } catch (err) {
+                    console.error('Copy failed', err);
+                }
+            });
+        }
+
+        const setFeedback = async (type) => {
+            const stars = type === 'like' ? 5 : 1;
+
+            if (likeBtn && dislikeBtn) {
+                likeBtn.classList.toggle('active-like', type === 'like');
+                dislikeBtn.classList.toggle('active-dislike', type === 'dislike');
+                likeBtn.innerHTML = type === 'like' ? '<i class="fa-solid fa-thumbs-up"></i>' : '<i class="fa-regular fa-thumbs-up"></i>';
+                dislikeBtn.innerHTML = type === 'dislike' ? '<i class="fa-solid fa-thumbs-down"></i>' : '<i class="fa-regular fa-thumbs-down"></i>';
+            }
+
+            const logItem = chatLogStack.find(item => item.log_id === logMeta.logId);
+            if (logItem) {
+                logItem.stars = stars;
+                logItem.timestamp = getInternationalTimestamp();
+            }
+
+            await saveRatingToDatabase({
+                log_id: logMeta.logId,
+                user_name: logMeta.userName,
+                stars,
+                timestamp: getInternationalTimestamp()
+            });
+        };
+
+        if (likeBtn) {
+            likeBtn.addEventListener('click', () => setFeedback('like'));
+        }
+
+        if (dislikeBtn) {
+            dislikeBtn.addEventListener('click', () => setFeedback('dislike'));
+        }
+    }
+
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// ==================== HOVER FOR MESSAGE ACTIONS ====================
+// Use JS hover with small leave-delay so buttons stay reachable
+function attachMsgHover(msgEl) {
+    let leaveTimer = null;
+    const actions = msgEl.querySelector('.message-actions');
+    if (!actions) return;
+    actions.classList.add('show');
+    msgEl.addEventListener('mouseenter', () => {
+        clearTimeout(leaveTimer);
+        actions.classList.add('show');
+    });
+    msgEl.addEventListener('mouseleave', () => {
+        leaveTimer = setTimeout(() => actions.classList.remove('show'), 120);
+    });
+    // Keep visible while hovering over the actions themselves
+    actions.addEventListener('mouseenter', () => clearTimeout(leaveTimer));
+    actions.addEventListener('mouseleave', () => {
+        leaveTimer = setTimeout(() => actions.classList.remove('show'), 120);
+    });
+}
+
+// ==================== COPY HELPERS ====================
+function escapeForAttr(str) {
+    return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
+}
+
+async function copyTextToClipboard(text) {
+    const value = String(text || '');
+
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+            await navigator.clipboard.writeText(value);
+            return true;
+        } catch (error) {
+            console.warn('Clipboard API copy failed, using fallback', error);
+        }
+    }
+
+    const fallbackArea = document.createElement('textarea');
+    fallbackArea.value = value;
+    fallbackArea.setAttribute('readonly', 'readonly');
+    fallbackArea.style.position = 'fixed';
+    fallbackArea.style.top = '-9999px';
+    fallbackArea.style.left = '-9999px';
+    fallbackArea.style.opacity = '0';
+    document.body.appendChild(fallbackArea);
+    fallbackArea.focus();
+    fallbackArea.select();
+
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (error) {
+        console.error('Fallback copy failed', error);
+    }
+
+    document.body.removeChild(fallbackArea);
+    return copied;
+}
+
+// Copy output text - called from copy button inside bot-message
+window.copyOutput = function(btn) {
+    const markdown = btn.closest('.bot-message').querySelector('.markdown-body');
+    const text = markdown ? markdown.innerText.trim() : '';
+    copyTextToClipboard(text).then(success => {
+        if (!success) {
+            showCopyToast('Copy failed');
+            return;
+        }
+        animateCopyBtn(btn);
+        showCopyToast('Response copied');
+    });
+};
+
+// Copy user message text
+window.copyMsgText = function(btn, text) {
+    // decode newlines and get live text from span if possible
+    const span = btn.closest('.user-message')?.querySelector('.user-text');
+    const actual = span ? span.innerText.trim() : text.replace(/\\n/g, '\n');
+    copyTextToClipboard(actual).then(success => {
+        if (!success) {
+            showCopyToast('Copy failed');
+            return;
+        }
+        animateCopyBtn(btn);
+        showCopyToast('Message copied');
+    });
+};
+
+function animateCopyBtn(btn) {
+    const icon = btn.querySelector('i');
+    if (!icon) return;
+    icon.className = 'fa-solid fa-check';
+    btn.classList.add('copied');
+    setTimeout(() => {
+        icon.className = 'fa-regular fa-copy';
+        btn.classList.remove('copied');
+    }, 1800);
+}
+
+window.copyToClipboard = function(text) {
+    copyTextToClipboard(text).then(success => showCopyToast(success ? 'Copied' : 'Copy failed'));
+};
+
+window.copyPair = function(pairId) {
+    const userEl  = messagesContainer.querySelector(`.user-message[data-pair-id="${pairId}"]`);
+    const botEl   = messagesContainer.querySelector(`.bot-message[data-pair-id="${pairId}"]`);
+    const span    = userEl?.querySelector('.user-text');
+    const prompt  = span ? span.innerText.trim() : (userEl ? userEl.innerText.trim() : '');
+    const response = botEl  ? (botEl.querySelector('.markdown-body')?.innerText?.trim() || '') : '';
+    const combined = `User:\n${prompt}\n\nNexa:\n${response}`;
+    copyTextToClipboard(combined).then(success => showCopyToast(success ? 'Prompt + response copied' : 'Copy failed'));
+};
+
+function showCopyToast(msg) {
+    let toast = document.getElementById('copy-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'copy-toast';
+        toast.style.cssText = `
+            position:fixed; bottom:5.5rem; left:50%; transform:translateX(-50%) translateY(8px);
+            background:#1e2937; color:#fff; font-size:13px; font-weight:500;
+            padding:9px 18px; border-radius:999px; z-index:99999;
+            box-shadow:0 8px 24px rgba(0,0,0,0.25);
+            display:flex; align-items:center; gap:8px;
+            opacity:0; transition:opacity 0.22s ease, transform 0.22s ease;
+            white-space:nowrap; pointer-events:none;
+        `;
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${msg}`;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(8px)';
+    }, 2200);
+}
+
+window.openSourceUrl = function(url) {
+    const sourceUrl = String(url || '').trim();
+    if (!sourceUrl) return;
+
+    const link = document.createElement('a');
+    link.href = sourceUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+document.addEventListener('click', event => {
+    const sourceButton = event.target.closest('.source-link-btn');
+    if (!sourceButton) return;
+    window.openSourceUrl(sourceButton.dataset.sourceUrl);
+});
+
+window.downloadFile = function(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+};
+
+window.editMessage = function(el) {
+    const span = el.querySelector('.user-text');
+    const oldText = span ? span.innerText.trim() : el.innerText.trim();
+    const newText = prompt("Edit your message:", oldText);
+    if (newText && newText !== oldText) {
+        el.closest('.flex').remove();
+        addMessage(newText, true);
+        userInput.value = newText;
+        setTimeout(sendMessage, 100);
+    }
+};
+
+// ==================== FILE UPLOAD ====================
+const fileInput = document.createElement('input');
+fileInput.type = 'file';
+fileInput.accept = '.pdf,.txt,.docx';
+fileInput.style.display = 'none';
+document.body.appendChild(fileInput);
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+let stagedFile = null;
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    stagedFile = file;
+    showAttachmentChip(file.name);
+    userInput.focus();
+});
+
+function showAttachmentChip(name) {
+    let chip = document.getElementById('attachment-chip');
+    if (!chip) {
+        chip = document.createElement('div');
+        chip.id = 'attachment-chip';
+        chip.style.cssText = 'display:flex;align-items:center;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#3730a3;';
+        document.getElementById('input-area').insertBefore(chip, document.getElementById('input-area').firstChild);
+    }
+    chip.innerHTML = `<i class="fa-solid fa-paperclip"></i><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span><button id="attachment-chip-close" style="background:none;border:none;cursor:pointer;color:#64748b;">✕</button>`;
+    chip.style.display = 'flex';
+    document.getElementById('attachment-chip-close').onclick = clearStagedFile;
+}
+
+function clearStagedFile() {
+    stagedFile = null;
+    fileInput.value = '';
+    const chip = document.getElementById('attachment-chip');
+    if (chip) chip.style.display = 'none';
+}
+
+function generateSessionId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    // Fallback
+    return 'sess-' + Date.now().toString(36) + '-' + 
+           Math.random().toString(36).substr(2, 9);
+}
+
+async function sendMessage() {
+    if (isSharedChatPage || userInput.readOnly) {
+        showSharedChatNotice();
+        return;
+    }
+
+    if (chatIsGenerating) {
+        addMessage('Nexa is still thinking. Stop or edit the current prompt first.', false);
+        return;
+    }
+
+    let text = userInput.value.trim();
+    if (!text && !stagedFile) return;
+    if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
+    const stagedFileName = stagedFile ? stagedFile.name : null;
+    const urlMatch = text.match(/https?:\/\/[^\s]+/i);
+    const pastedUrl = urlMatch ? urlMatch[0] : '';
+    const messageWithoutUrl = pastedUrl ? text.replace(pastedUrl, '').trim() : text;
+
+    // Capture the quoted Nexa response separately (don't pollute the question text).
+    let replyContext = null;
+    if (pendingReplyText) {
+        replyContext = pendingReplyText.length > 500
+            ? pendingReplyText.slice(0, 500).trim() + '…'
+            : pendingReplyText;
+        clearReplyContext();
+    }
+
+    const userEmail = normalizeEmail(userEmailInput.value);
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email first. Nexa uses it to switch between student and teacher mode.', false);
+        userEmailInput.focus();
+        return;
+    }
+
+    const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
+
+    if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+        localStorage.setItem('nexa_session_id', sessionId);
+    }
+
+    localStorage.setItem('nexa_user_name', userName);
+    localStorage.setItem('nexa_user_email', userEmail);
+    sessionId = localStorage.getItem(getSessionStorageKey(userEmail)) || null;
+    updateAccessRoleBadge(userEmail);
+
+    const assessment = classifyPrompt(text);
+    if (!assessment.allowed) {
+        const pairId = 'p' + Date.now();
+        let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const clientLogId = logId;
+        const blockedReply = `${assessment.reply} This request was blocked by Nexa student safety guardrails.`;
+
+        addMessage(text, true, null, false, pairId);
+        addMessage(blockedReply, false, null, false, pairId, { logId, userName });
+
+        const blockedLog = {
+            log_id: logId,
+            session_id: sessionId,
+            user_email: userEmail,
+            user_name: userName,
+            user_prompt: text,
+            nexa_response: blockedReply,
+            pdf_url: null,
+            timestamp: getInternationalTimestamp(),
+            stars: 0
+        };
+        pushChatLog(blockedLog);
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: text,
+                    user_email: userEmail,
+                    session_id: sessionId
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.log_id) {
+                logId = data.log_id;
+                blockedLog.log_id = logId;
+                const pushedItem = chatLogStack.find(item => item.log_id === clientLogId);
+                if (pushedItem) {
+                    pushedItem.log_id = logId;
+                }
+            }
+        } catch (err) {
+            console.error('Blocked log sync failed', err);
+        }
+
+        userInput.value = '';
+        clearStagedFile();
+        return;
+    }
+
+    const pairId = 'p' + Date.now();
+    let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const clientLogId = logId;
+    const timestamp = getInternationalTimestamp();
+
+    addMessage(text, true, null, false, pairId);
+
+    pushChatLog({
+        log_id: logId,
+        session_id: sessionId,
+        user_email: userEmail,
+        user_name: userName,
+        user_prompt: text,
+        nexa_response: '',
+        pdf_url: null,
+        timestamp,
+        stars: 0
+    });
+
+    userInput.value = "";
+
+    // If a document is staged, upload it first so its text enters the session buffer.
+    if (stagedFile) {
+        const fd = new FormData();
+        fd.append('file', stagedFile);
+        fd.append('session_id', sessionId);
+        try {
+            const up = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
+            const upData = await up.json().catch(() => ({}));
+            if (!up.ok) throw new Error(upData.detail || 'Upload failed');
+        } catch (err) {
+            addMessage('⚠️ Could not read the attached document.', false);
+            clearStagedFile();
+            return;
+        }
+        clearStagedFile();
+    }
+
+    const chatGeneration = beginChatGeneration(text);
+
+    // Track user message count & trigger feedback window ONCE after 2 prompts
+    userMessageCount++;
+    if (userMessageCount === FEEDBACK_TRIGGER_COUNT) {
+        setTimeout(() => {
+            document.getElementById('feedback-overlay').classList.add('show');
+            document.getElementById('feedback-form-view').style.display = 'block';
+            document.getElementById('feedback-success').style.display = 'none';
+            document.getElementById('feedback-submit-btn').disabled = true;
+            document.getElementById('star-label').textContent = 'Tap a star to rate';
+            document.querySelectorAll('.star-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.feedback-tag').forEach(b => b.classList.remove('selected'));
+            document.getElementById('feedback-textarea').value = '';
+        }, 800);
+    }
+
+    let loadingMessage = 'Nexa is Thinking...';
+    try {
+        const statusRes = await fetch(CHAT_STATUS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+    message: messageWithoutUrl || text,
+    question: messageWithoutUrl || '',
+    url: pastedUrl || null,
+    user_email: userEmail,               // ← ADD THIS
+    user_name: getCurrentDisplayName(),
+    session_id: sessionId,
+    reply_context: replyContext,
+    staged_file_name: stagedFileName,
+    turn_id: chatGeneration.turnId
+}),
+            signal: chatGeneration.signal
+        });
+        const statusData = await statusRes.json();
+        if (statusRes.ok && statusData?.status_message) {
+            loadingMessage = statusData.status_message;
+        }
+    } catch (err) {
+        if (err?.name === 'AbortError') {
+            markChatGenerationFinished();
+            return;
+        }
+        console.warn('Status preview failed', err);
+    }
+
+    // typing indicator
+    const typing = document.createElement("div");
+    typing.id = "typing-msg";
+    typing.innerHTML = `
+        <div class="bot-message">
+            ${loadingMessage}
+        </div>
+    `;
+    messagesContainer.appendChild(typing);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const res = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                message: messageWithoutUrl || text,
+                question: messageWithoutUrl || '',
+                url: pastedUrl || null,
+                user_name: getCurrentDisplayName(),
+                session_id: sessionId,
+                reply_context: replyContext,
+                staged_file_name: stagedFileName,
+                turn_id: chatGeneration.turnId
+            }),
+            signal: chatGeneration.signal
+        });
+
+        const data = await res.json();
+
+        document.getElementById("typing-msg")?.remove();
+
+        sessionId = data.session_id;
+        if (data.log_id) {
+            logId = data.log_id;
+        }
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+        localStorage.setItem("nexa_session_id", sessionId);
+        if (data.access_role) {
+            updateAccessRoleBadge(data.access_role);
+        }
+
+        const logItem = chatLogStack.find(item => item.log_id === clientLogId || item.log_id === logId);
+        if (logItem) {
+            logItem.session_id = sessionId;
+            logItem.user_email = userEmail;
+            logItem.log_id = logId;
+        }
+
+        const modelText = typeof data.response === 'string' ? data.response : '';
+        if (containsUnsafeModelOutput(modelText)) {
+            const blockedModelReply = 'I cannot provide that content. This response was blocked by Nexa student safety guardrails.';
+            addMessage(blockedModelReply, false, null, false, pairId, { logId, userName });
+            await updateLogResponse(logId, blockedModelReply);
+            refreshHistoryIfVisible();
+            return;
+        }
+
+        // ================= IMAGE HANDLING =================
+        if (data.image_url && data.image_id) {
+
+            addMessage(data.response, false, null, false, pairId, { logId, userName });
+            await updateLogResponse(logId, data.response || '', data.pdf_url || null);
+
+            const imageUrl = data.image_url;
+            const imageId = data.image_id;
+
+            const interval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`/image-status/${imageId}`);
+                    const statusData = await statusRes.json();
+                    console.log("IMAGE STATUS:", statusData);
+
+                    if (statusData.status === "ready") {
+                        clearInterval(interval);
+                        await saveImageBase64ToDatabase({
+                            logId,
+                            userName,
+                            imageUrl,
+                            filename: imageUrl.split('/').pop() || `image_${imageId}.png`
+                        });
+                        addMessage("🖼️ Generated Image:", false, imageUrl, false, pairId);
+                    }
+
+                    if (statusData.status === "failed") {
+                        clearInterval(interval);
+                        addMessage("❌ Image generation failed.", false);
+                    }
+                } catch (err) {
+                    console.log("Polling error:", err);
+                }
+            }, 2000);
+
+        } else {
+            // normal text response
+            addMessage(data.response, false, data.pdf_url, !!data.pdf_url, pairId, { logId, userName });
+            await updateLogResponse(logId, data.response || '');
+        }
+
+        refreshHistoryIfVisible();
+        markChatGenerationFinished();
+
+    } catch (err) {
+        if (err?.name === 'AbortError') {
+            markChatGenerationFinished();
+            return;
+        }
+        document.getElementById("typing-msg")?.remove();
+        console.error(err);
+        addMessage(err?.message ? `⚠️ ${err.message}` : "⚠️ Sorry, I'm having trouble connecting. Please try again.", false);
+        await updateLogResponse(logId, 'Connection error: response not received.');
+    } finally {
+        if (chatIsGenerating) {
+            markChatGenerationFinished();
+        }
+    }
+}
+
+async function shareCurrentChat() {
+    const userEmail = normalizeEmail(userEmailInput.value);
+
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email before sharing this chat.', false);
+        userEmailInput.focus();
+        return;
+    }
+
+    if (!sessionId) {
+        addMessage('No chat session available to share yet. Please ask Nexa at least one question first.', false);
+        return;
+    }
+
+    try {
+        shareChatBtn.disabled = true;
+        shareChatBtn.textContent = 'Sharing...';
+
+        const res = await fetch(SHARE_CHAT_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                session_id: sessionId,
+                user_email: userEmail
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || `Share API returned ${res.status}`);
+        }
+
+        const fullShareUrl = new URL(data.share_url, window.location.origin).toString();
+
+        window.open(fullShareUrl, '_blank', 'noopener,noreferrer');
+
+        try {
+            const copied = await copyTextToClipboard(fullShareUrl);
+            if (!copied) {
+                addMessage(`✅ Share link created:\n\n${fullShareUrl}`, false);
+                return;
+            }
+            addMessage(`✅ Share link created and copied to clipboard:\n\n${fullShareUrl}`, false);
+        } catch (copyErr) {
+            addMessage(`✅ Share link created:\n\n${fullShareUrl}`, false);
+        }
+
+    } catch (err) {
+        console.error('Share failed', err);
+        addMessage('⚠️ Failed to create share link. Please check backend/database connection.', false);
+    } finally {
+        shareChatBtn.disabled = false;
+        shareChatBtn.textContent = 'Share';
+    }
+}
+
+// Event Listeners
+sendButton.addEventListener('click', sendMessage);
+shareChatBtn.addEventListener('click', shareCurrentChat);
+userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+chatButton.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
+closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
+historyToggleBtn.addEventListener('click', async () => {
+    if (historyPanel.classList.contains('hidden')) {
+        openHistoryPanel();
+        await loadChatSessions(true);
+    } else {
+        closeHistoryPanel();
+    }
+});
+document.getElementById('new-chat-btn').addEventListener('click', startNewChat);
+document.getElementById('reply-chip-close').addEventListener('click', clearReplyContext);
+closeHistoryBtn.addEventListener('click', closeHistoryPanel);
+refreshHistoryBtn.addEventListener('click', async () => {
+    chatSessionsLoaded = false;
+    await loadChatSessions(true);
+});
+historySearchInput.addEventListener('input', () => {
+    clearTimeout(historySearchTimer);
+    historySearchTimer = setTimeout(() => {
+        chatSessionsLoaded = false;
+        loadChatSessions(true, historySearchInput.value.trim());
+    }, 250);
+});
+historySearchInput.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(historySearchTimer);
+        chatSessionsLoaded = false;
+        loadChatSessions(true, historySearchInput.value.trim());
+    }
+});
+historySearchClearBtn.addEventListener('click', async () => {
+    historySearchInput.value = '';
+    chatSessionsLoaded = false;
+    historySearchInput.focus();
+    await loadChatSessions(true, '');
+});
+undoLogBtn.addEventListener('click', async () => {
+    const removed = popChatLog();
+    if (!removed) {
+        addMessage('No logs available to pop from stack.', false);
+        return;
+    }
+
+    try {
+        const res = await fetch(POP_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ log_id: removed.log_id })
+        });
+
+        if (!res.ok) {
+            throw new Error(`Pop API returned ${res.status}`);
+        }
+
+        addMessage(`Last log removed for user ${removed.user_name}.`, false);
+    } catch (err) {
+        console.error('Failed to pop log from database', err);
+        addMessage('Log removed locally but failed to remove from database.', false);
+    }
+});
+
+document.getElementById('url-btn').addEventListener('click', async () => {
+    const userEmail = normalizeEmail(userEmailInput.value);
+    if (!userEmail || !userEmail.includes('@')) {
+        addMessage('Please enter your email first.', false);
+        userEmailInput.focus();
+        return;
+    }
+    if (inferAccessRoleFromEmail(userEmail) === 'none') {
+        addMessage('This account does not have access to Nexa.', false);
+        return;
+    }
+
+    const url = prompt('Enter a web page URL for Nexa to read:');
+    if (!url || !url.trim()) return;
+
+    const question = prompt('What should Nexa do with this page?\n(Leave blank for a summary)') || '';
+
+    if (!sessionId) {
+        sessionId = generateSessionId();
+        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
+    }
+
+    const pairId = 'p' + Date.now();
+    addMessage(`🌐 Read: ${url}${question ? '\n\n' + question : ''}`, true, null, false, pairId);
+
+    const typing = document.createElement('div');
+    typing.id = 'typing-msg';
+    typing.innerHTML = `<div class="bot-message">🌐 Nexa is reading the page...</div>`;
+    messagesContainer.appendChild(typing);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    try {
+        const res = await fetch('/read-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: url.trim(), question: question.trim(), user_email: userEmail, session_id: sessionId })
+        });
+        const data = await res.json();
+        document.getElementById('typing-msg')?.remove();
+        sessionId = data.session_id || sessionId;
+        addMessage(data.response || 'No response.', false, null, false, pairId, { logId: data.log_id, userName: getDisplayNameFromEmail(userEmail) });
+        refreshHistoryIfVisible();
+    } catch (err) {
+        document.getElementById('typing-msg')?.remove();
+        addMessage('⚠️ Could not read that page. Please check the URL and try again.', false);
+    }
+});
+
+
+updateStackSizeLabel();
+if (!isSharedChatPage) {
+    loadChatHistory();
+}
+
+// Input copy button
+const inputCopyBtn = document.getElementById('input-copy-btn');
+inputCopyBtn.addEventListener('click', () => {
+    const text = userInput.value;
+    if (!text) return;
+    copyTextToClipboard(text).then(success => {
+        if (!success) {
+            showCopyToast('Copy failed');
+            return;
+        }
+        const icon = inputCopyBtn.querySelector('i');
+        icon.className = 'fa-solid fa-check';
+        inputCopyBtn.classList.add('copied');
+        inputCopyBtn.style.opacity = '1';
+        showCopyToast('Input copied');
+        setTimeout(() => {
+            icon.className = 'fa-regular fa-copy';
+            inputCopyBtn.classList.remove('copied');
+            inputCopyBtn.style.opacity = '';
+        }, 1800);
+    });
+});
+
+// Hover Effect
+const hoverContainer = document.getElementById('hover-container');
+chatButton.addEventListener('mouseenter', () => {
+    hoverContainer.classList.remove('opacity-0', 'scale-95');
+    hoverContainer.classList.add('opacity-100', 'scale-100');
+});
+chatButton.addEventListener('mouseleave', () => {
+    hoverContainer.classList.add('opacity-0', 'scale-95');
+    hoverContainer.classList.remove('opacity-100', 'scale-100');
+});
+</script>
+
+<!-- ===== IMAGE PREVIEW LIGHTBOX ===== -->
+<div id="img-preview-overlay">
+    <div id="img-preview-box">
+        <div id="img-preview-topbar">
+            <span>Generated Image</span>
+            <button id="img-preview-close" title="Close (Esc)">✕</button>
+        </div>
+        <div id="img-preview-img-wrap">
+            <img id="img-preview-src" src="" alt="Preview"/>
+        </div>
+        <div id="img-preview-footer">
+            <span id="img-preview-hint">Click outside or press <kbd style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:1px 5px;font-size:11px;color:#64748b;">Esc</kbd> to close</span>
+            <a id="img-preview-dl" href="#" download="generated-image.png">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ===== FEEDBACK MODAL ===== -->
+<div id="feedback-overlay">
+    <div id="feedback-modal">
+        <!-- Form View -->
+        <div id="feedback-form-view">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px;">
+                <div>
+                    <h3 style="font-size:1.22rem;font-weight:700;color:#0f172a;margin:0;">Rate Your Experience</h3>
+                    <p style="font-size:13px;color:#64748b;margin:5px 0 0;">Your feedback helps improve Nexa</p>
+                </div>
+                <button id="close-feedback-btn" style="background:none;border:none;cursor:pointer;font-size:1.25rem;color:#94a3b8;line-height:1;padding:4px;margin-left:10px;flex-shrink:0;">✕</button>
+            </div>
+
+            <!-- Stars -->
+            <div class="star-row" id="star-row">
+                <button class="star-btn" data-val="1">★</button>
+                <button class="star-btn" data-val="2">★</button>
+                <button class="star-btn" data-val="3">★</button>
+                <button class="star-btn" data-val="4">★</button>
+                <button class="star-btn" data-val="5">★</button>
+            </div>
+            <div class="feedback-label" id="star-label">Tap a star to rate</div>
+
+            <!-- Quick tags -->
+            <div class="feedback-tag-row" id="tag-row">
+                <span class="feedback-tag" data-tag="Helpful">👍 Helpful</span>
+                <span class="feedback-tag" data-tag="Accurate">✅ Accurate</span>
+                <span class="feedback-tag" data-tag="Too slow">⏱ Too slow</span>
+                <span class="feedback-tag" data-tag="Confusing">😕 Confusing</span>
+                <span class="feedback-tag" data-tag="Needs improvement">🔧 Needs improvement</span>
+            </div>
+
+            <!-- Text area -->
+            <textarea id="feedback-textarea" rows="3" placeholder="Tell us more (optional)..."></textarea>
+
+            <!-- Submit -->
+            <button id="feedback-submit-btn" disabled>Submit Feedback</button>
+        </div>
+
+        <!-- Success View -->
+        <div id="feedback-success">
+            <div class="success-icon-ring">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#1e2937" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+            <h3 style="font-size:1.2rem;font-weight:700;color:#0f172a;margin:0 0 8px;">Thank You!</h3>
+            <p style="font-size:14px;color:#64748b;margin:0 0 22px;line-height:1.6;">Your feedback was successfully submitted.<br>We appreciate you helping us improve Nexa.</p>
+            <button id="feedback-done-btn" style="background:#1e2937;color:#fff;border:none;border-radius:12px;padding:11px 32px;font-size:14px;font-weight:600;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='#0f172a'" onmouseout="this.style.background='#1e2937'">Done</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== IMAGE PREVIEW LIGHTBOX ====================
+(function () {
+    const overlay  = document.getElementById('img-preview-overlay');
+    const imgEl    = document.getElementById('img-preview-src');
+    const closeBtn = document.getElementById('img-preview-close');
+    const dlBtn    = document.getElementById('img-preview-dl');
+
+    window.openImagePreview = function (src) {
+        imgEl.src = src;
+        dlBtn.href = src;
+        overlay.classList.add('show');
+        document.body.style.overflow = 'hidden';
+    };
+
+    function closePreview() {
+        overlay.classList.remove('show');
+        document.body.style.overflow = '';
+        setTimeout(() => { imgEl.src = ''; }, 300);
+    }
+
+    closeBtn.addEventListener('click', closePreview);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closePreview(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreview(); });
+})();
+</script>
+
+<script>
+// ==================== FEEDBACK MODAL ====================
+(function () {
+    const overlay       = document.getElementById('feedback-overlay');
+    const formView      = document.getElementById('feedback-form-view');
+    const successView   = document.getElementById('feedback-success');
+    const submitBtn     = document.getElementById('feedback-submit-btn');
+    const starLabel     = document.getElementById('star-label');
+    const starBtns      = document.querySelectorAll('.star-btn');
+    const tagBtns       = document.querySelectorAll('.feedback-tag');
+    const textarea      = document.getElementById('feedback-textarea');
+    const closeFeedback = document.getElementById('close-feedback-btn');
+    const doneBtn       = document.getElementById('feedback-done-btn');
+
+    const starLabels = ['', 'Poor 😞', 'Fair 😐', 'Good 😊', 'Great 😄', 'Excellent 🤩'];
+    let selectedRating = 0;
+    let selectedTags   = [];
+
+    function openModal() {
+        selectedRating = 0;
+        selectedTags   = [];
+        textarea.value = '';
+        formView.style.display = 'block';
+        successView.style.display = 'none';
+        submitBtn.disabled = true;
+        starLabel.textContent = 'Tap a star to rate';
+        starBtns.forEach(b => b.classList.remove('active'));
+        tagBtns.forEach(b => b.classList.remove('selected'));
+        overlay.classList.add('show');
+    }
+
+    function closeModal() {
+        overlay.classList.remove('show');
+    }
+
+    // Star interaction
+    starBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedRating = parseInt(btn.dataset.val);
+            starBtns.forEach(b => {
+                b.classList.toggle('active', parseInt(b.dataset.val) <= selectedRating);
+            });
+            starLabel.textContent = starLabels[selectedRating];
+            submitBtn.disabled = false;
+        });
+        btn.addEventListener('mouseenter', () => {
+            const hoverVal = parseInt(btn.dataset.val);
+            starBtns.forEach(b => {
+                b.style.color = parseInt(b.dataset.val) <= hoverVal ? '#facc15' : '';
+            });
+        });
+        btn.addEventListener('mouseleave', () => {
+            starBtns.forEach(b => { b.style.color = ''; });
+        });
+    });
+
+    // Tag interaction
+    tagBtns.forEach(tag => {
+        tag.addEventListener('click', () => {
+            const val = tag.dataset.tag;
+            if (tag.classList.contains('selected')) {
+                tag.classList.remove('selected');
+                selectedTags = selectedTags.filter(t => t !== val);
+            } else {
+                tag.classList.add('selected');
+                selectedTags.push(val);
+            }
+        });
+    });
+
+    // Submit
+    submitBtn.addEventListener('click', () => {
+        if (!selectedRating) return;
+        // Frontend-only: just log and show success
+        console.log('Feedback submitted:', {
+            rating: selectedRating,
+            tags: selectedTags,
+            comment: textarea.value.trim()
+        });
+        formView.style.display = 'none';
+        successView.style.display = 'flex';
+    });
+
+    // Close handlers
+    closeFeedback.addEventListener('click', closeModal);
+    doneBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+})();
+</script>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        renderMathInElement(document.body, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "$", right: "$", display: false},
+                {left: "\\(", right: "\\)", display: false},
+                {left: "\\[", right: "\\]", display: true}
+            ],
+            throwOnError: false
+        });
+    });
+
+    // Also re-render after new messages are added
+    const originalAddMessage = window.addMessage;
+    if (originalAddMessage) {
+        window.addMessage = function(...args) {
+            originalAddMessage(...args);
+            setTimeout(() => {
+                //renderMathInElement(document.body, { delimiters: [...] }); // same options
+            }, 100);
+        };
+    }
+</script>
+</body>
+</html>
