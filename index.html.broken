@@ -1191,14 +1191,6 @@ const SHARE_CHAT_API_URL = "/api/share-chat";
 
 const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
-
-// Bind the logo IMMEDIATELY, before any other UI code that might throw.
-if (chatButton && chatWindow) {
-    chatButton.addEventListener('click', () => {
-        chatWindow.classList.toggle('hidden');
-    });
-}
-
 const closeChat = document.getElementById('close-chat');
 const messagesContainer = document.getElementById('chat-messages');
 const userEmailInput = document.getElementById('user-email');
@@ -1220,7 +1212,6 @@ const mathSymbols = [
 
 function buildMathKeypad() {
     const grid = document.querySelector('#math-keypad div');
-	if (!grid) return;
     grid.innerHTML = '';
     mathSymbols.forEach(([label, insert]) => {
         const b = document.createElement('button');
@@ -1240,15 +1231,13 @@ function insertAtCursor(input, text) {
     input.selectionStart = input.selectionEnd = start + text.length;
 }
 
-const mathBtn = document.getElementById('math-mode-btn');
-if (mathBtn) {
-    mathBtn.addEventListener('click', () => {
-        const kp = document.getElementById('math-keypad');
-        if (kp) kp.style.display = kp.style.display === 'none' ? 'block' : 'none';
-    });
-}
+document.getElementById('math-mode-btn').addEventListener('click', () => {
+    const kp = document.getElementById('math-keypad');
+    kp.style.display = kp.style.display === 'none' ? 'block' : 'none';
+});
 
-if (expandBtn) expandBtn.addEventListener('click', () => {
+
+expandBtn.addEventListener('click', () => {
     chatExpanded = !chatExpanded;
     chatWindow.classList.toggle('chat-expanded', chatExpanded);
     if (chatExpanded) {
@@ -1304,7 +1293,15 @@ const chatLogStack = [];
 const pendingLogRetryStack = [];
 
 
+document.getElementById('chat-button').addEventListener('click', () => {
+    chatWindow.classList.remove('hidden');   // open the window
 
+    // Only start a fresh chat if the conversation is empty (avoid wiping an active chat).
+    const hasMessages = messagesContainer && messagesContainer.children.length > 0;
+    if (!hasMessages) {
+        startNewChat();
+    }
+});
 
 function normalizeEmail(email) {
     return (email || '').trim().toLowerCase();
@@ -1332,19 +1329,18 @@ window.addEventListener('load', notifyParentSize);
 function inferAccessRoleFromEmail(email) {
     const normalizedEmail = normalizeEmail(email);
     const [localPart, domain = ''] = normalizedEmail.split('@');
-    // Match the backend exactly:
-    //   stu.edunex.edu.pg  -> student
-    //   edunex.edu.pg      -> teacher
-    if (domain === 'stu.edunex.edu.pg' || domain.endsWith('.stu.edunex.edu.pg')) {
-        return 'student';
-    }
-    if (domain === 'edunex.edu.pg' || domain.endsWith('.edunex.edu.pg')) {
-        return 'teacher';
-    }
-    // legacy fallback
+    // Prefer the domain-based EduNex account rules:
+    // - teacher accounts use the education domain marker (e.g. yasaru.rathnasooriya@education.edu.pg)
+    // - student accounts use the edunex domain marker (e.g. yasaru.rathnasooriya@edunex.edu.pg)
+    // Keep the older local-part markers as a fallback so existing accounts still work.
     if (domain.startsWith('education.') || localPart.includes('.education')) {
         return 'teacher';
     }
+
+    if (domain.startsWith('edunex.') || localPart.includes('.edunex')) {
+        return 'student';
+    }
+
     return 'student';
 }
 
@@ -1382,13 +1378,16 @@ if (emailFromMoodle) {
     const nameKey = `nexa_lms_user_name:${normalizedMoodleEmail}`;
     if (lmsLoginName) {
         localStorage.setItem(nameKey, lmsLoginName);
-	localStorage.setItem('nexa_lms_user_name', lmsLoginName);
     } else {
         localStorage.removeItem(nameKey);
     }
 
     setSessionForEmail(emailFromMoodle);
 
+    setTimeout(() => {
+        chatWindow.classList.remove('hidden');
+        console.log("✅ Nexa chat auto-opened for Moodle user");
+    }, 600);
 }
 
 // Also listen for any future changes
@@ -2625,10 +2624,12 @@ async function sendMessage() {
         showSharedChatNotice();
         return;
     }
+
     if (chatIsGenerating) {
         addMessage('Nexa is still thinking. Stop or edit the current prompt first.', false);
         return;
     }
+
     let text = userInput.value.trim();
     if (!text && !stagedFile) return;
     if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
@@ -2636,6 +2637,7 @@ async function sendMessage() {
     const urlMatch = text.match(/https?:\/\/[^\s]+/i);
     const pastedUrl = urlMatch ? urlMatch[0] : '';
     const messageWithoutUrl = pastedUrl ? text.replace(pastedUrl, '').trim() : text;
+
     // Capture the quoted Nexa response separately (don't pollute the question text).
     let replyContext = null;
     if (pendingReplyText) {
@@ -2644,30 +2646,37 @@ async function sendMessage() {
             : pendingReplyText;
         clearReplyContext();
     }
+
     const userEmail = normalizeEmail(userEmailInput.value);
     if (!userEmail || !userEmail.includes('@')) {
         addMessage('Please enter your email first. Nexa uses it to switch between student and teacher mode.', false);
         userEmailInput.focus();
         return;
     }
+
     const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
+
     if (!sessionId) {
         sessionId = generateSessionId();
         localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem('nexa_session_id', sessionId);
     }
+
     localStorage.setItem('nexa_user_name', userName);
     localStorage.setItem('nexa_user_email', userEmail);
     sessionId = localStorage.getItem(getSessionStorageKey(userEmail)) || null;
     updateAccessRoleBadge(userEmail);
+
     const assessment = classifyPrompt(text);
     if (!assessment.allowed) {
         const pairId = 'p' + Date.now();
         let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         const clientLogId = logId;
         const blockedReply = `${assessment.reply} This request was blocked by Nexa student safety guardrails.`;
+
         addMessage(text, true, null, false, pairId);
         addMessage(blockedReply, false, null, false, pairId, { logId, userName });
+
         const blockedLog = {
             log_id: logId,
             session_id: sessionId,
@@ -2680,6 +2689,7 @@ async function sendMessage() {
             stars: 0
         };
         pushChatLog(blockedLog);
+
         try {
             const res = await fetch(API_URL, {
                 method: 'POST',
@@ -2692,6 +2702,7 @@ async function sendMessage() {
                     session_id: sessionId
                 })
             });
+
             const data = await res.json();
             if (res.ok && data.log_id) {
                 logId = data.log_id;
@@ -2704,15 +2715,19 @@ async function sendMessage() {
         } catch (err) {
             console.error('Blocked log sync failed', err);
         }
+
         userInput.value = '';
         clearStagedFile();
         return;
     }
+
     const pairId = 'p' + Date.now();
     let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const clientLogId = logId;
     const timestamp = getInternationalTimestamp();
+
     addMessage(text, true, null, false, pairId);
+
     pushChatLog({
         log_id: logId,
         session_id: sessionId,
@@ -2724,7 +2739,9 @@ async function sendMessage() {
         timestamp,
         stars: 0
     });
+
     userInput.value = "";
+
     // If a document is staged, upload it first so its text enters the session buffer.
     if (stagedFile) {
         const fd = new FormData();
@@ -2741,7 +2758,9 @@ async function sendMessage() {
         }
         clearStagedFile();
     }
+
     const chatGeneration = beginChatGeneration(text);
+
     // Track user message count & trigger feedback window ONCE after 2 prompts
     userMessageCount++;
     if (userMessageCount === FEEDBACK_TRIGGER_COUNT) {
@@ -2756,22 +2775,23 @@ async function sendMessage() {
             document.getElementById('feedback-textarea').value = '';
         }, 800);
     }
+
     let loadingMessage = 'Nexa is Thinking...';
     try {
         const statusRes = await fetch(CHAT_STATUS_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: messageWithoutUrl || text,
-                question: messageWithoutUrl || '',
-                url: pastedUrl || null,
-                user_email: userEmail,
-                user_name: getCurrentDisplayName(),
-                session_id: sessionId,
-                reply_context: replyContext,
-                staged_file_name: stagedFileName,
-                turn_id: chatGeneration.turnId
-            }),
+		body: JSON.stringify({
+    message: messageWithoutUrl || text,
+    question: messageWithoutUrl || '',
+    url: pastedUrl || null,
+    user_email: userEmail,               // ← ADD THIS
+    user_name: getCurrentDisplayName(),
+    session_id: sessionId,
+    reply_context: replyContext,
+    staged_file_name: stagedFileName,
+    turn_id: chatGeneration.turnId
+}),
             signal: chatGeneration.signal
         });
         const statusData = await statusRes.json();
@@ -2785,6 +2805,7 @@ async function sendMessage() {
         }
         console.warn('Status preview failed', err);
     }
+
     // typing indicator
     const typing = document.createElement("div");
     typing.id = "typing-msg";
@@ -2795,6 +2816,7 @@ async function sendMessage() {
     `;
     messagesContainer.appendChild(typing);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
     try {
         const res = await fetch(API_URL, {
             method: "POST",
@@ -2805,7 +2827,6 @@ async function sendMessage() {
                 message: messageWithoutUrl || text,
                 question: messageWithoutUrl || '',
                 url: pastedUrl || null,
-                user_email: userEmail,
                 user_name: getCurrentDisplayName(),
                 session_id: sessionId,
                 reply_context: replyContext,
@@ -2814,8 +2835,11 @@ async function sendMessage() {
             }),
             signal: chatGeneration.signal
         });
+
         const data = await res.json();
+
         document.getElementById("typing-msg")?.remove();
+
         sessionId = data.session_id;
         if (data.log_id) {
             logId = data.log_id;
@@ -2825,12 +2849,14 @@ async function sendMessage() {
         if (data.access_role) {
             updateAccessRoleBadge(data.access_role);
         }
+
         const logItem = chatLogStack.find(item => item.log_id === clientLogId || item.log_id === logId);
         if (logItem) {
             logItem.session_id = sessionId;
             logItem.user_email = userEmail;
             logItem.log_id = logId;
         }
+
         const modelText = typeof data.response === 'string' ? data.response : '';
         if (containsUnsafeModelOutput(modelText)) {
             const blockedModelReply = 'I cannot provide that content. This response was blocked by Nexa student safety guardrails.';
@@ -2839,38 +2865,51 @@ async function sendMessage() {
             refreshHistoryIfVisible();
             return;
         }
+
+        // ================= IMAGE HANDLING =================
         if (data.image_url && data.image_id) {
+
             addMessage(data.response, false, null, false, pairId, { logId, userName });
             await updateLogResponse(logId, data.response || '', data.pdf_url || null);
+
             const imageUrl = data.image_url;
             const imageId = data.image_id;
+
             const interval = setInterval(async () => {
                 try {
                     const statusRes = await fetch(`/image-status/${imageId}`);
                     const statusData = await statusRes.json();
+                    console.log("IMAGE STATUS:", statusData);
+
                     if (statusData.status === "ready") {
                         clearInterval(interval);
                         await saveImageBase64ToDatabase({
-                            logId, userName, imageUrl,
+                            logId,
+                            userName,
+                            imageUrl,
                             filename: imageUrl.split('/').pop() || `image_${imageId}.png`
                         });
                         addMessage("🖼️ Generated Image:", false, imageUrl, false, pairId);
                     }
+
                     if (statusData.status === "failed") {
                         clearInterval(interval);
-                        addMessage("❌ Image generation failed. Please try again.", false);
+                        addMessage("❌ Image generation failed.", false);
                     }
                 } catch (err) {
                     console.log("Polling error:", err);
                 }
             }, 2000);
-            setTimeout(() => clearInterval(interval), 260000);  // stop after ~4.3 min
+
         } else {
+            // normal text response
             addMessage(data.response, false, data.pdf_url, !!data.pdf_url, pairId, { logId, userName });
             await updateLogResponse(logId, data.response || '');
         }
+
         refreshHistoryIfVisible();
         markChatGenerationFinished();
+
     } catch (err) {
         if (err?.name === 'AbortError') {
             markChatGenerationFinished();
@@ -2886,7 +2925,6 @@ async function sendMessage() {
         }
     }
 }
-
 
 async function shareCurrentChat() {
     const userEmail = normalizeEmail(userEmailInput.value);
@@ -2951,6 +2989,7 @@ async function shareCurrentChat() {
 sendButton.addEventListener('click', sendMessage);
 shareChatBtn.addEventListener('click', shareCurrentChat);
 userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+chatButton.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
 closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
 historyToggleBtn.addEventListener('click', async () => {
     if (historyPanel.classList.contains('hidden')) {

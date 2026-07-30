@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Nexa Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @tailwind base;
+        @tailwind components;
+        @tailwind utilities;
+
+        /* Enhanced Markdown Styling for Educational Content */
+        .prose {
+            max-width: none;
+            color: #334155;
+        }
+        
+        .prose h1 {
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: #1e2937;
+            margin: 1.2rem 0 0.8rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+        
+        .prose h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #334155;
+            margin: 1.6rem 0 0.75rem;
+        }
+        
+        .prose h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 1.3rem 0 0.6rem;
+        }
+
+        .prose ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin: 1rem 0;
+        }
+        
+        .prose ol {
+            list-style-type: decimal;
+            padding-left: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        .prose li {
+            margin-bottom: 0.4rem;
+            line-height: 1.75;
+        }
+
+        .prose p {
+            margin-bottom: 1.1rem;
+            line-height: 1.75;
+        }
+
+        .prose strong {
+            color: #1e40af;
+        }
+
+        .bot-message {
+            background-color: #f8fafc;
+            border-radius: 20px 20px 20px 8px;
+            padding: 20px;
+            max-width: 92%;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .user-message {
+            background-color: #1f2937;
+            color: white;
+            border-radius: 20px 20px 8px 20px;
+            padding: 18px;
+            max-width: 85%;
+        }
+
+        .glowing-gold-logo {
+            filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.7));
+            animation: gold-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes gold-glow {
+            0%, 100% { filter: drop-shadow(0 0 8px #facc15) drop-shadow(0 0 16px #eab308) drop-shadow(0 0 28px rgba(234, 179, 8, 0.7)); }
+            50% { filter: drop-shadow(0 0 14px #fde047) drop-shadow(0 0 24px #facc15) drop-shadow(0 0 38px rgba(250, 204, 21, 0.85)); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 font-sans">
+
+<!-- Floating Button -->
+<div id="chat-button" class="fixed bottom-8 right-8 z-50 cursor-pointer">
+    <img src="assets/nexa.png" class="w-20 h-20 glowing-gold-logo" alt="Nexa Logo">
+</div>
+
+<!-- Chat Window -->
+<div id="chat-window" class="hidden fixed bottom-28 right-8 w-[440px] h-[660px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden z-50">
+    <div class="bg-slate-50 p-4 flex items-center justify-between border-b">
+        <div class="flex items-center gap-3">
+            <img src="assets/nexa.png" class="w-10 h-10 glowing-gold-logo" alt="Nexa">
+            <div>
+                <h2 class="font-bold text-2xl tracking-tight">NEXA</h2>
+                <p class="text-xs text-gray-500">Grade 6 Science • Powered by Llama 3.1</p>
+            </div>
+        </div>
+        <button id="close-chat" class="text-3xl text-gray-400 hover:text-red-500">✕</button>
+    </div>
+
+    <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
+
+    <div class="p-4 border-t bg-white">
+        <div class="flex gap-2">
+            <input id="user-input" type="text" 
+                   class="flex-1 border border-gray-300 rounded-2xl px-5 py-3.5 focus:outline-none focus:border-blue-500 text-base"
+                   placeholder="Ask for lesson plan, PDF, diagram, or image..."/>
+            <button id="send-button" class="w-12 h-12 bg-gray-900 text-white rounded-2xl hover:bg-black transition-all active:scale-95">
+                <i class="fa-solid fa-arrow-up"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = "http://10.0.0.212:8000/chat";
+
+    const messagesContainer = document.getElementById('chat-messages');
+    const userInput = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-button');
+    const chatWindow = document.getElementById('chat-window');
+    const closeChat = document.getElementById('close-chat');
+
+    let sessionId = localStorage.getItem('nexa_session_id') || null;
+
+    function addMessage(content, isUser, pdfUrl = null, imageUrl = null) {
+        const div = document.createElement('div');
+        div.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+
+        if (isUser) {
+            div.innerHTML = `
+                <div class="user-message">
+                    <div class="text-[15.5px] leading-relaxed">${content}</div>
+                </div>`;
+        } else {
+            let html = `
+                <div class="bot-message">
+			
+            if (pdfUrl) {
+                html += `
+                    <div class="mt-5 p-4 bg-white border border-blue-100 rounded-2xl">
+                        <a href="${pdfUrl}" download 
+                           class="flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-xl transition">
+                            <i class="fa-solid fa-file-pdf text-xl"></i>
+                            Download Lesson Plan as PDF
+                        </a>
+                    </div>`;
+            }
+
+            if (imageUrl) {
+                html += `
+                    <div class="mt-5">
+                        <img src="${imageUrl}" class="rounded-2xl shadow-lg max-w-full" alt="Generated Image"/>
+                        <a href="${imageUrl}" download 
+                           class="mt-3 inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
+                            <i class="fa-solid fa-download"></i> Download Image
+                        </a>
+                    </div>`;
+            }
+
+            html += `</div>`;
+            div.innerHTML = html;
+        }
+
+        messagesContainer.appendChild(div);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        addMessage(text, true);
+        userInput.value = "";
+
+        // Typing indicator
+        const typing = document.createElement('div');
+        typing.className = 'flex justify-start';
+        typing.innerHTML = `
+            <div class="bot-message flex items-center gap-3 px-6 py-4">
+                <div class="flex space-x-2">
+                    <div class="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div class="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                    <div class="w-2.5 h-2.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                </div>
+            </div>`;
+        messagesContainer.appendChild(typing);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, session_id: sessionId })
+            });
+
+            const data = await res.json();
+            typing.remove();
+
+            addMessage(data.response, false, data.pdf_url, data.image_url);
+
+            sessionId = data.session_id;
+            localStorage.setItem('nexa_session_id', sessionId);
+
+        } catch (err) {
+            typing.remove();
+            addMessage("Sorry, I couldn't connect. Please make sure the server is running.", false);
+        }
+    }
+
+    // Event Listeners
+    sendButton.addEventListener('click', sendMessage);
+    userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+    document.getElementById('chat-button').addEventListener('click', () => chatWindow.classList.remove('hidden'));
+    closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
+</script>
+</body>
+</html>

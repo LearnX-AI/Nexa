@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Nexa - AI Curriculum Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-	<!-- KaTeX -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0lB0miv6k4f4B0" crossorigin="anonymous">
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-..." crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -27,46 +22,20 @@
         }
         .glowing-gold-logo:hover { transform: scale(1.08); }
         .markdown-body {
-            font-size: 15px;
+            font-size: 15.8px;
             line-height: 1.75;
             color: #1f2937;
             overflow-wrap: anywhere;
             word-break: break-word;
         }
-        .markdown-body h1 {
-            font-size: 1.8rem;
-            font-weight: 800;
-            color: #0f172a;
-            margin: 0 0 1rem;
-            padding: 0 0 0.85rem;
-            border-bottom: 1px solid #dbeafe;
-            letter-spacing: -0.03em;
-        }
-        .markdown-body h2 {
-            font-size: 1.08rem;
-            font-weight: 700;
-            color: #1e3a8a;
-            margin: 1.5rem 0 0.75rem;
-            padding: 0.7rem 0.9rem;
-            background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
-            border: 1px solid #dbeafe;
-            border-radius: 14px;
-        }
-        .markdown-body h3 { font-size: 1rem; font-weight: 700; color: #334155; margin: 1.2rem 0 0.6rem; }
+        .markdown-body h1 { font-size: 1.85rem; font-weight: 700; color: #0f172a; margin: 1.8rem 0 1rem; border-bottom: 3px solid #e2e8f0; padding-bottom: 0.6rem; }
+        .markdown-body h2 { font-size: 1.45rem; font-weight: 600; color: #334155; margin: 1.8rem 0 0.9rem; }
+        .markdown-body h3 { font-size: 1.25rem; font-weight: 600; color: #475569; margin: 1.5rem 0 0.7rem; }
         .markdown-body ul, .markdown-body ol { margin: 1rem 0; padding-left: 1.8rem; }
         .markdown-body li { margin: 0.45rem 0; }
-        .markdown-body table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 1.2rem 0;
-            background: #ffffff;
-            border: 1px solid #dbeafe;
-            border-radius: 14px;
-            overflow: hidden;
-        }
-        .markdown-body tr:nth-child(even) td { background: #f8fbff; }
-        .markdown-body th, .markdown-body td { border: 1px solid #dbeafe; padding: 12px 14px; text-align: left; vertical-align: top; }
-        .markdown-body th { background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%); font-weight: 700; color: #1d4ed8; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin: 1.2rem 0; background: white; }
+        .markdown-body th, .markdown-body td { border: 1px solid #cbd5e1; padding: 12px 14px; text-align: left; }
+        .markdown-body th { background-color: #f1f5f9; font-weight: 600; color: #1e40af; }
         .markdown-body a { overflow-wrap: anywhere; word-break: break-word; }
         .markdown-body pre {
             overflow-x: auto;
@@ -79,120 +48,17 @@
         .markdown-body code {
             white-space: pre-wrap;
             word-break: break-word;
-            background: #eef2ff;
-            color: #3730a3;
-            padding: 0.12rem 0.35rem;
-            border-radius: 6px;
         }
-	.markdown-body h2 {
-    font-size: 15px; font-weight: 700; color: #1e293b;
-    margin: 14px 0 6px; padding-bottom: 4px; border-bottom: 2px solid #e0e7ff;
-}
-.markdown-body blockquote {
-    border-left: 3px solid #6366f1; background: #eef2ff;
-    padding: 6px 12px; margin: 8px 0; border-radius: 6px;
-    color: #3730a3; font-size: 13px;
-}
-.markdown-body strong { color: #4338ca; }
-.markdown-body .katex-display {
-    margin: 10px 0; padding: 6px 0; overflow-x: auto;
-}		
-
         .markdown-body img {
             max-width: 100%;
             height: auto;
         }
-        .markdown-body blockquote {
-            margin: 1rem 0;
-            padding: 0.9rem 1rem;
-            border-left: 4px solid #60a5fa;
-            background: #eff6ff;
-            color: #334155;
-            border-radius: 0 12px 12px 0;
-        }
-        .markdown-body hr {
-            border: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #cbd5e1, transparent);
-            margin: 1.5rem 0;
-        }
-        .markdown-body details {
-            margin: 1rem 0;
-            padding: 0.9rem 1rem;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-        }
-        .markdown-body summary {
-            cursor: pointer;
-            font-weight: 700;
-            color: #1d4ed8;
-            list-style: none;
-        }
-        .markdown-body summary::-webkit-details-marker {
-            display: none;
-        }
-        .disclaimer-banner {
-            margin-top: 1rem;
-            padding: 1rem 1.05rem;
-            border: 1px solid #f5d48a;
-            border-left: 4px solid #f59e0b;
-            border-radius: 20px;
-            background: linear-gradient(180deg, #fffdf5 0%, #fff8e6 100%);
-            color: #7c2d12;
-            box-shadow: 0 16px 40px -30px rgba(146, 64, 14, 0.32);
-        }
-        .disclaimer-label {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.28rem 0.6rem;
-            border-radius: 999px;
-            background: rgba(245, 158, 11, 0.12);
-            font-size: 0.72rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: #b45309;
-            margin-bottom: 0.45rem;
-        }
-        .disclaimer-banner p {
-            margin: 0;
-            font-size: 0.95rem;
-            line-height: 1.6;
-            color: #8a3415;
-        }
-        /* Full-page shared chat layout */
-        body.shared-full {
-            background: #f8fafc;
-        }
-        body.shared-full #chat-button { display: none !important; }
-        body.shared-full #chat-window {
-            position: relative !important;
-            top: auto !important;
-            right: auto !important;
-            left: auto !important;
-            bottom: auto !important;
-            margin: 36px auto !important;
-            width: calc(100% - 120px) !important;
-            max-width: 1100px !important;
-            height: auto !important;
-            border-radius: 14px !important;
-            box-shadow: none !important;
-            z-index: auto !important;
-        }
-        body.shared-full #chat-window .bg-slate-50 { display: none !important; }
-        body.shared-full #input-area { display: none !important; }
-        body.shared-full #chat-window > .history-panel { display: none !important; }
-        body.shared-full #chat-window .history-modal { display: none !important; }
         .bot-message {
-            background: linear-gradient(180deg, #f8fbff 0%, #f0f7ff 100%);
-            border: 1px solid #dbeafe;
-            border-radius: 24px 24px 24px 10px;
-            padding: 22px 24px;
+            background-color: #f0f9ff;
+            border-radius: 22px 22px 22px 8px;
+            padding: 20px 24px;
             max-width: 95%;
             position: relative;
-            box-shadow: 0 16px 40px -28px rgba(15, 23, 42, 0.45);
         }
         .user-message {
             background-color: #1e2937;
@@ -207,7 +73,7 @@
             display: flex;
             gap: 2px;
             margin-top: 6px;
-            opacity: 1;
+            opacity: 0;
             transition: opacity 0.15s ease;
         }
         .message-actions.show {
@@ -337,80 +203,6 @@
         .response-actions button.active-dislike {
             transform: scale(1.08);
         }
-        .source-chip {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.9rem;
-            padding-top: 0.9rem;
-            border-top: 1px solid #dbeafe;
-        }
-        .source-chip-label {
-            font-size: 0.72rem;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            color: #0f766e;
-        }
-        .source-link-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            border: 1px solid #bae6fd;
-            background: #f0f9ff;
-            color: #0f766e;
-            border-radius: 9999px;
-            padding: 0.45rem 0.8rem;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background-color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
-        }
-        .source-link-btn:hover {
-            background: #e0f2fe;
-            border-color: #7dd3fc;
-            transform: translateY(-1px);
-        }
-        .composer-action-btn {
-            flex-shrink: 0;
-            min-width: 5.25rem;
-            height: 2.75rem;
-            border-radius: 0.875rem;
-            border: 1px solid transparent;
-            padding: 0 0.9rem;
-            font-size: 0.8rem;
-            font-weight: 700;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.4rem;
-            transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
-        }
-        .composer-action-btn:hover {
-            transform: translateY(-1px);
-        }
-        .composer-action-btn:disabled {
-            opacity: 0.55;
-            cursor: not-allowed;
-            transform: none;
-        }
-        .composer-stop-btn {
-            background: #fff7ed;
-            color: #9a3412;
-            border-color: #fed7aa;
-        }
-        .composer-stop-btn:hover {
-            background: #ffedd5;
-        }
-        .composer-edit-btn {
-            background: #eff6ff;
-            color: #1d4ed8;
-            border-color: #bfdbfe;
-        }
-        .composer-edit-btn:hover {
-            background: #dbeafe;
-        }
         .logger-toolbar {
             margin-top: 8px;
             display: flex;
@@ -439,132 +231,34 @@
         .history-toggle-btn:hover {
             background: #e0e7ff;
         }
-	.history-panel {
-    position: fixed;
-    inset: 0;
-    z-index: 120;
-    background: rgba(15, 23, 42, 0.45);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 14px;
-}
-/* Step headings stand out as numbered blocks */
-.markdown-body h3 {
-    font-size: 14px;
-    font-weight: 700;
-    color: #4338ca;
-    margin: 16px 0 6px;
-    padding: 6px 12px;
-    background: linear-gradient(90deg, #eef2ff, transparent);
-    border-left: 4px solid #6366f1;
-    border-radius: 6px;
-}
-/* Major sections (Problem, Solution, Final Answer) */
-.markdown-body h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: #1e293b;
-    margin: 18px 0 8px;
-    padding-bottom: 5px;
-    border-bottom: 2px solid #c7d2fe;
-}
-/* Give each displayed equation breathing room and a subtle backdrop */
-.markdown-body .katex-display {
-    margin: 10px 0;
-    padding: 10px 14px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    overflow-x: auto;
-}
-/* The explanation sentence under each step */
-.markdown-body h3 + p {
-    margin: 4px 0 8px;
-    color: #475569;
-    font-size: 13.5px;
-}
-.markdown-body strong { color: #4338ca; }
-/* Final answer emphasis */
-.markdown-body h2:last-of-type + .katex-display,
-.markdown-body h2:last-of-type ~ .katex-display {
-    background: #f0fdf4;
-    border-color: #86efac;
-}
-
-.history-panel.hidden { display: none !important; }
-
-.history-modal {
-    width: 100%;
-    height: 100%;
-    max-width: 780px;
-    max-height: 560px;
-    background: #fff;
-    border-radius: 20px;
-    box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.45);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-.history-modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 18px;
-    border-bottom: 1px solid #e2e8f0;
-    background: #f8fafc;
-    flex-shrink: 0;
-}
-.history-modal-body {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
-    min-height: 0;
-}
-.history-left {
-    border-right: 1px solid #e2e8f0;
-    padding: 14px;
-    overflow-y: auto;
-    min-height: 0;
-}
-.history-right {
-    padding: 16px;
-    overflow-y: auto;
-    min-height: 0;
-    background: #fff;
-}
-
-#reply-chip {
-    display: flex;
-    align-items: stretch;
-    gap: 10px;
-    background: #f0f9ff;
-    border: 1px solid #bae6fd;
-    border-radius: 12px;
-    padding: 8px 10px;
-    margin-bottom: 8px;
-}
-.reply-chip-bar { width: 3px; border-radius: 3px; background: #0ea5e9; flex-shrink: 0; }
-.reply-chip-content { flex: 1; min-width: 0; }
-.reply-chip-label { display: block; font-size: 11px; font-weight: 600; color: #0369a1; }
-.reply-chip-text { display: block; font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#reply-chip-close { background: none; border: none; cursor: pointer; color: #64748b; font-size: 14px; padding: 0 6px; align-self: center; }
-#reply-chip-close:hover { color: #0f172a; }
-
-
-/* Stack into top/bottom on very narrow screens */
-@media (max-width: 560px) {
-    .history-modal-body {
-        grid-template-columns: 1fr;
-        grid-template-rows: 44% 56%;
-    }
-    .history-left {
-        border-right: none;
-        border-bottom: 1px solid #e2e8f0;
-    }
-}
+        .history-panel {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        }
+        .history-session-btn {
+            width: 100%;
+            text-align: left;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: white;
+            transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .history-session-btn:hover {
+            transform: translateY(-1px);
+            border-color: #cbd5e1;
+            box-shadow: 0 10px 24px -14px rgba(15, 23, 42, 0.3);
+        }
+        .history-session-btn.active {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+        }
+        .history-session-snippet {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            color: #475569;
+        }
         .guardrail-banner {
             border: 1px solid #f59e0b;
             background: linear-gradient(180deg, #fffbeb 0%, #fff7ed 100%);
@@ -619,7 +313,6 @@
         #feedback-overlay.show #feedback-modal {
             transform: translateY(0) scale(1);
         }
-	html, body { background: transparent !important; }
         .star-row {
             display: flex;
             gap: 10px;
@@ -1013,32 +706,6 @@
             #feedback-submit-btn { padding: 16px; font-size: 16px; }
             #send-button, #attach-btn { min-width: 48px; min-height: 48px; }
         }
-	.nexa-search-results { margin: 4px 0; }
-.nexa-search-head {
-    font-size: 12px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: #64748b; margin-bottom: 10px;
-}
-.nexa-search-card {
-    border: 1px solid #e2e8f0; border-left: 3px solid #0ea5e9;
-    border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
-    background: #fff; transition: box-shadow 0.15s, transform 0.15s;
-}
-.nexa-search-card:hover {
-    box-shadow: 0 8px 20px -12px rgba(15,23,42,0.35);
-    transform: translateY(-1px);
-}
-.nexa-search-title {
-    display: block; font-size: 15px; font-weight: 600;
-    color: #1d4ed8; text-decoration: none; line-height: 1.35;
-}
-.nexa-search-title:hover { text-decoration: underline; }
-.nexa-search-domain { font-size: 11.5px; color: #16a34a; margin: 2px 0 6px; }
-.nexa-search-snippet { font-size: 13px; color: #475569; line-height: 1.55; }
-.nexa-search-more {
-    display: inline-block; margin-top: 8px; font-size: 12.5px; font-weight: 600;
-    color: #0ea5e9; text-decoration: none;
-}
-.nexa-search-more:hover { text-decoration: underline; }
     </style>
 </head>
 <body class="font-sans" style="background:transparent;">
@@ -1046,13 +713,20 @@
     <div id="chat-button" class="fixed z-50 cursor-pointer">
         <div class="flex flex-col items-end gap-2">
             <div id="hover-container" class="bg-white rounded-3xl px-5 py-3 shadow-xl flex items-center gap-3 opacity-0 scale-95 transition-all duration-300 origin-bottom-right">
-                <div id="welcome-message" class="text-gray-800 text-sm font-medium whitespace-nowrap"></div>
+                <div class="text-gray-800 text-sm font-medium whitespace-nowrap">Hello! I'm Nexa. How can I help?</div>
             </div>
             <div class="w-20 h-20">
-                <img id="nexa-logo" src="assets/nexa.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
+                <img id="nexa-logo" src="assets/edunex.png" class="w-full h-full object-contain glowing-gold-logo" alt="EduNeX Logo"/>
             </div>
         </div>
     </div>
+<!-- Logged in user banner -->
+<div id="logged-user-banner" class="bg-emerald-50 border-b border-emerald-100 px-5 py-2.5 hidden">
+    <div class="flex items-center gap-2 text-sm">
+        <span class="text-emerald-600">👤</span>
+        <span class="font-medium text-emerald-700">Logged in as: <span id="logged-email" class="font-semibold"></span></span>
+    </div>
+</div>
     <!-- Chat Window -->
     <div id="chat-window" class="hidden fixed bg-white shadow-2xl flex flex-col overflow-hidden border border-gray-100 z-50">
         <!-- Header -->
@@ -1067,7 +741,6 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
-		<button id="new-chat-btn" class="toolbar-btn text-xs font-semibold" type="button">New</button>
                 <button id="history-toggle-btn" class="toolbar-btn history-toggle-btn text-xs font-semibold" type="button">History</button>
                 <button id="share-chat-btn" class="toolbar-btn text-xs font-semibold" type="button">Share</button>
                 <button id="expand-chat" title="Expand width" class="text-gray-500 hover:text-gray-700 transition-colors flex items-center justify-center" style="width:32px;height:32px;border-radius:8px;background:none;border:none;cursor:pointer;font-size:17px;">
@@ -1076,46 +749,39 @@
                 <button id="close-chat" class="text-gray-500 hover:text-gray-700 text-2xl transition-colors">✕</button>
             </div>
         </div>
-	<div id="history-panel" class="history-panel hidden">
-    <div class="history-modal">
-        <div class="history-modal-header">
-            <div>
-                <p class="text-sm font-semibold text-gray-900">Chat history</p>
-                <p class="text-xs text-gray-500">Browse and reopen your previous Nexa sessions.</p>
-            </div>
-            <div class="flex items-center gap-2">
-                <button id="refresh-history-btn" class="toolbar-btn text-xs" type="button">Refresh</button>
-                <button id="close-history-btn" class="toolbar-btn text-xs" type="button">Close ✕</button>
-            </div>
-        </div>
-        <div class="history-modal-body">
-            <!-- LEFT: session list -->
-            <div class="history-left">
-                <label for="history-search-input" class="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search previous chats</label>
-                <div class="mt-2 flex items-center gap-2">
-                    <input id="history-search-input" type="search" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" placeholder="Try: cells, photosynthesis" />
-                    <button id="history-search-clear-btn" class="toolbar-btn text-xs shrink-0" type="button">Clear</button>
+        <div id="history-panel" class="history-panel hidden border-b border-gray-200 flex-shrink-0">
+            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-gray-900">Previous chats</p>
+                    <p class="text-xs text-gray-500">Search words to suggest matching chat history.</p>
                 </div>
-                <p id="history-search-status" class="mt-2 text-xs text-slate-500">Showing recent sessions.</p>
-                <div id="history-session-list" class="space-y-2 mt-3"></div>
-                <p id="history-session-list-empty" class="text-xs text-gray-500 mt-3">No saved sessions found for this email.</p>
+                <div class="flex items-center gap-2">
+                    <button id="refresh-history-btn" class="toolbar-btn text-xs" type="button">Refresh</button>
+                    <button id="close-history-btn" class="toolbar-btn text-xs" type="button">Close</button>
+                </div>
             </div>
-            <!-- RIGHT: transcript -->
-            <div class="history-right">
-                <div id="history-session-empty" class="text-sm text-gray-500">Select a session to preview its transcript.</div>
-                <div id="history-session-detail" class="hidden space-y-4"></div>
+            <div class="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] max-h-80 overflow-hidden min-h-0">
+                <div class="p-3 border-b md:border-b-0 md:border-r border-gray-200 overflow-y-auto min-h-0">
+                    <div class="mb-3">
+                        <label for="history-search-input" class="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Search previous chats</label>
+                        <div class="mt-2 flex items-center gap-2">
+                            <input id="history-search-input" type="search" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none" placeholder="Try: cells, photosynthesis, lesson plan" />
+                            <button id="history-search-clear-btn" class="toolbar-btn text-xs shrink-0" type="button">Clear</button>
+                        </div>
+                        <p id="history-search-status" class="mt-2 text-xs text-slate-500">Showing recent sessions.</p>
+                    </div>
+                    <div id="history-session-list" class="space-y-2"></div>
+                    <p id="history-session-list-empty" class="text-xs text-gray-500 mt-3">No saved sessions found for this email.</p>
+                </div>
+                <div class="p-4 overflow-y-auto bg-white min-h-0">
+                    <div id="history-session-empty" class="text-sm text-gray-500">Select a session to preview its transcript.</div>
+                    <div id="history-session-detail" class="hidden space-y-4"></div>
+                </div>
             </div>
         </div>
-    </div>
-</div>
         <!-- Messages Area -->
         <div id="chat-messages" class="flex-1 p-6 overflow-y-auto bg-gray-50 space-y-7"></div>
-	<div id="math-keypad" style="display:none; padding:8px; border:1px solid #e2e8f0; border-radius:12px; margin-bottom:8px; background:#f8fafc;">
-    <div style="display:grid; grid-template-columns:repeat(8,1fr); gap:4px;">
-        <!-- buttons injected by JS -->
-    </div>
-</div>        
-<!-- Input Area -->
+        <!-- Input Area -->
         <div id="input-area" class="px-3 py-3 border-t bg-white">
             <div class="mb-2 flex items-center gap-2">
                 <input id="user-email" type="email" style="display:none;"
@@ -1128,24 +794,10 @@
                        class="w-full border border-gray-300 rounded-2xl px-4 py-2.5 focus:outline-none focus:border-gray-400 text-sm"
                        placeholder="Enter your name (optional for logs)"/>
             </div>
-	    <div id="reply-chip" style="display:none;">
-    <div class="reply-chip-bar"></div>
-    <div class="reply-chip-content">
-        <span class="reply-chip-label">Replying to Nexa</span>
-        <span id="reply-chip-text" class="reply-chip-text"></span>
-    </div>
-    <button id="reply-chip-close" type="button" title="Cancel reply">✕</button>
-</div>
             <div class="flex items-center gap-2">
                 <button id="attach-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
                     <i class="fa-solid fa-paperclip text-lg"></i>
                 </button>
-		<button id="url-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-sky-600 hover:bg-gray-100 rounded-xl transition-all" title="Read a web page">
-                    <i class="fa-solid fa-globe text-lg"></i>
-                </button>
-		<button id="math-mode-btn" class="flex-shrink-0 w-10 h-10 flex items-center justify-center text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded-xl transition-all" title="Mathematics mode">
-    <i class="fa-solid fa-square-root-variable text-lg"></i>
-</button>
                 <div class="input-copy-wrapper">
                     <input id="user-input" type="text"
                            class="w-full border border-gray-300 focus:border-blue-500 rounded-2xl px-4 py-3 focus:outline-none text-sm"
@@ -1157,14 +809,6 @@
                 <button id="send-button"
                         class="flex-shrink-0 w-10 h-10 bg-gray-900 hover:bg-black text-white rounded-xl flex items-center justify-center transition-all">
                     <i class="fa-solid fa-paper-plane text-sm"></i>
-                </button>
-                <button id="edit-prompt-btn" class="composer-action-btn composer-edit-btn hidden" type="button" title="Edit the prompt">
-                    <i class="fa-regular fa-pen-to-square"></i>
-                    <span>Edit</span>
-                </button>
-                <button id="stop-generation-btn" class="composer-action-btn composer-stop-btn hidden" type="button" title="Stop generation">
-                    <i class="fa-solid fa-stop"></i>
-                    <span>Stop</span>
                 </button>
             </div>
             <div class="logger-toolbar">
@@ -1178,7 +822,6 @@
 <script>
 // ==================== CONFIG ====================
 const API_URL = "/chat";
-const CHAT_STATUS_URL = "/chat-status";
 const UPLOAD_URL = "/upload";
 const LOG_API_URL = "/api/chat-log";
 const RATING_API_URL = "/api/chat-rating";
@@ -1191,14 +834,6 @@ const SHARE_CHAT_API_URL = "/api/share-chat";
 
 const chatButton = document.getElementById('chat-button');
 const chatWindow = document.getElementById('chat-window');
-
-// Bind the logo IMMEDIATELY, before any other UI code that might throw.
-if (chatButton && chatWindow) {
-    chatButton.addEventListener('click', () => {
-        chatWindow.classList.toggle('hidden');
-    });
-}
-
 const closeChat = document.getElementById('close-chat');
 const messagesContainer = document.getElementById('chat-messages');
 const userEmailInput = document.getElementById('user-email');
@@ -1210,45 +845,7 @@ const expandBtn  = document.getElementById('expand-chat');
 const expandIcon = document.getElementById('expand-icon');
 let chatExpanded = false;
 
-
-const mathSymbols = [
-    ['√','\\sqrt{}'], ['∫','\\int'], ['∑','\\sum'], ['π','\\pi'],
-    ['≤','\\leq'], ['≥','\\geq'], ['≠','\\neq'], ['∞','\\infty'],
-    ['x²','^2'], ['xⁿ','^{}'], ['÷','/'], ['×','*'],
-    ['(',' ('], [')',') '], ['½','\\frac{}{}'], ['θ','\\theta'],
-];
-
-function buildMathKeypad() {
-    const grid = document.querySelector('#math-keypad div');
-	if (!grid) return;
-    grid.innerHTML = '';
-    mathSymbols.forEach(([label, insert]) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        b.style.cssText = 'padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer; font-size:15px;';
-        b.onclick = () => insertAtCursor(userInput, insert);
-        grid.appendChild(b);
-    });
-}
-buildMathKeypad();
-
-function insertAtCursor(input, text) {
-    const start = input.selectionStart, end = input.selectionEnd;
-    input.value = input.value.slice(0, start) + text + input.value.slice(end);
-    input.focus();
-    input.selectionStart = input.selectionEnd = start + text.length;
-}
-
-const mathBtn = document.getElementById('math-mode-btn');
-if (mathBtn) {
-    mathBtn.addEventListener('click', () => {
-        const kp = document.getElementById('math-keypad');
-        if (kp) kp.style.display = kp.style.display === 'none' ? 'block' : 'none';
-    });
-}
-
-if (expandBtn) expandBtn.addEventListener('click', () => {
+expandBtn.addEventListener('click', () => {
     chatExpanded = !chatExpanded;
     chatWindow.classList.toggle('chat-expanded', chatExpanded);
     if (chatExpanded) {
@@ -1261,12 +858,8 @@ if (expandBtn) expandBtn.addEventListener('click', () => {
         expandBtn.title = 'Expand width';
     }
 });
-
-
 const accessRoleBadge = document.getElementById('access-role-badge');
 const sendButton = document.getElementById('send-button');
-const stopGenerationBtn = document.getElementById('stop-generation-btn');
-const editPromptBtn = document.getElementById('edit-prompt-btn');
 const attachBtn = document.getElementById('attach-btn');
 const undoLogBtn = document.getElementById('undo-log-btn');
 const stackSizeLabel = document.getElementById('stack-size');
@@ -1282,7 +875,6 @@ const historySearchInput = document.getElementById('history-search-input');
 const historySearchClearBtn = document.getElementById('history-search-clear-btn');
 const historySearchStatus = document.getElementById('history-search-status');
 const shareChatBtn = document.getElementById('share-chat-btn');
-const newChatBtn = document.getElementById('new-chat-btn');
 
 let sessionId = null;
 let userMessageCount = 0;
@@ -1293,18 +885,9 @@ let activeHistorySessionId = null;
 let cachedHistorySessions = [];
 let historySearchTimer = null;
 let historySearchRequestId = 0;
-let pendingReplyText = null;
-let activeChatAbortController = null;
-let activeChatTurnId = null;
-let activeChatPrompt = '';
-let chatIsGenerating = false;
-
 
 const chatLogStack = [];
 const pendingLogRetryStack = [];
-
-
-
 
 function normalizeEmail(email) {
     return (email || '').trim().toLowerCase();
@@ -1314,89 +897,21 @@ function getSessionStorageKey(email) {
     const normalizedEmail = normalizeEmail(email);
     return normalizedEmail ? `nexa_session_id:${normalizedEmail}` : 'nexa_session_id';
 }
-function notifyParentSize() {
-    const historyOpen = !historyPanel.classList.contains('hidden');
-    window.parent.postMessage({
-        nexa: true,
-        action: 'resize',
-        open: !chatWindow.classList.contains('hidden'),
-        expanded: chatExpanded,
-        history: historyOpen
-    }, '*');
-}
-const nexaSizeObserver = new MutationObserver(notifyParentSize);
-nexaSizeObserver.observe(chatWindow, { attributes: true, attributeFilter: ['class'] });
-nexaSizeObserver.observe(historyPanel, { attributes: true, attributeFilter: ['class'] });
-window.addEventListener('load', notifyParentSize);
 
 function inferAccessRoleFromEmail(email) {
     const normalizedEmail = normalizeEmail(email);
-    const [localPart, domain = ''] = normalizedEmail.split('@');
-    // Match the backend exactly:
-    //   stu.edunex.edu.pg  -> student
-    //   edunex.edu.pg      -> teacher
-    if (domain === 'stu.edunex.edu.pg' || domain.endsWith('.stu.edunex.edu.pg')) {
+    const localPart = normalizedEmail.split('@')[0] || '';
+    // EduNex local-part rules: ".education" => teacher, ".edunex" => student
+    if (localPart.includes('.education')) {
+        return 'teacher';
+    }
+
+    if (localPart.includes('.edunex')) {
         return 'student';
     }
-    if (domain === 'edunex.edu.pg' || domain.endsWith('.edunex.edu.pg')) {
-        return 'teacher';
-    }
-    // legacy fallback
-    if (domain.startsWith('education.') || localPart.includes('.education')) {
-        return 'teacher';
-    }
+
     return 'student';
 }
-
-// ==================== MOODLE INTEGRATION - FORCE EMAIL ====================
-const urlParams = new URLSearchParams(window.location.search);
-const sharedTokenMatch = window.location.pathname.match(/^\/share\/([^/?#]+)/);
-const sharedChatToken = decodeURIComponent(sharedTokenMatch?.[1] || urlParams.get('share_token') || urlParams.get('shared') || '');
-const isSharedChatPage = Boolean(sharedChatToken);
-
-let emailFromMoodle = urlParams.get('email');
-let lmsLoginName = urlParams.get('name')
-    || urlParams.get('firstname')
-    || urlParams.get('first_name')
-    || urlParams.get('given_name')
-    || urlParams.get('fullname')
-    || urlParams.get('display_name')
-    || '';
-if (lmsLoginName) {
-    lmsLoginName = decodeURIComponent(lmsLoginName).trim();
-}
-
-if (emailFromMoodle) {
-    emailFromMoodle = decodeURIComponent(emailFromMoodle);
-    const normalizedMoodleEmail = normalizeEmail(emailFromMoodle);
-    console.log("🔐 Moodle email received:", normalizedMoodleEmail);
-
-    userEmailInput.value = emailFromMoodle;
-    localStorage.setItem('nexa_user_email', normalizedMoodleEmail);
-
-    // Clear stale global name keys so a previous user's name can't leak.
-    localStorage.removeItem('nexa_lms_user_name');
-    localStorage.removeItem('nexa_user_name');
-
-    // Store THIS user's name keyed to their email only.
-    const nameKey = `nexa_lms_user_name:${normalizedMoodleEmail}`;
-    if (lmsLoginName) {
-        localStorage.setItem(nameKey, lmsLoginName);
-	localStorage.setItem('nexa_lms_user_name', lmsLoginName);
-    } else {
-        localStorage.removeItem(nameKey);
-    }
-
-    setSessionForEmail(emailFromMoodle);
-
-}
-
-// Also listen for any future changes
-userEmailInput.addEventListener('change', function() {
-    if (this.value && this.value.includes('@')) {
-        localStorage.setItem('nexa_user_email', normalizeEmail(this.value));
-    }
-});
 
 function updateAccessRoleBadge(value) {
     const role = value === 'teacher' || value === 'student'
@@ -1447,181 +962,6 @@ function refreshHistoryIfVisible() {
     }
 }
 
-function updateComposerButtons() {
-    const readOnlyMode = isSharedChatPage;
-    const generateLocked = chatIsGenerating;
-    const composerLocked = readOnlyMode || generateLocked;
-
-    userInput.readOnly = composerLocked;
-    sendButton.disabled = composerLocked;
-    attachBtn.disabled = composerLocked;
-    document.getElementById('url-btn').disabled = composerLocked;
-    if (newChatBtn) {
-        newChatBtn.disabled = composerLocked;
-    }
-
-    stopGenerationBtn.classList.toggle('hidden', !generateLocked);
-    editPromptBtn.classList.toggle('hidden', !generateLocked);
-    sendButton.classList.toggle('hidden', generateLocked);
-
-    userInput.placeholder = readOnlyMode
-        ? 'Shared chats are read-only.'
-        : (generateLocked ? 'Nexa is thinking...' : 'Ask me anything about curriculum.');
-
-    userInput.classList.toggle('cursor-not-allowed', composerLocked);
-    sendButton.classList.toggle('opacity-50', composerLocked);
-    attachBtn.classList.toggle('opacity-50', composerLocked);
-    document.getElementById('url-btn').classList.toggle('opacity-50', composerLocked);
-    if (newChatBtn) {
-        newChatBtn.classList.toggle('opacity-50', composerLocked);
-    }
-}
-
-function beginChatGeneration(promptText) {
-    activeChatPrompt = promptText || '';
-    activeChatTurnId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : generateSessionId();
-    activeChatAbortController = new AbortController();
-    chatIsGenerating = true;
-    updateComposerButtons();
-    return {
-        turnId: activeChatTurnId,
-        signal: activeChatAbortController.signal,
-    };
-}
-
-function sendStopGenerationSignal() {
-    if (!activeChatTurnId) return;
-
-    fetch('/api/chat-stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ turn_id: activeChatTurnId, session_id: sessionId }),
-    }).catch(error => {
-        console.warn('Stop API failed', error);
-    });
-}
-
-async function stopActiveChatGeneration(restorePrompt = false) {
-    if (activeChatAbortController) {
-        activeChatAbortController.abort();
-    }
-
-    const promptToRestore = restorePrompt ? activeChatPrompt : '';
-    activeChatAbortController = null;
-    activeChatTurnId = null;
-    activeChatPrompt = '';
-    chatIsGenerating = false;
-    document.getElementById('typing-msg')?.remove();
-    updateComposerButtons();
-
-    if (restorePrompt) {
-        userInput.value = promptToRestore;
-        requestAnimationFrame(() => {
-            userInput.focus();
-            userInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        });
-        if (typeof userInput.setSelectionRange === 'function') {
-            const cursorPosition = promptToRestore.length;
-            userInput.setSelectionRange(cursorPosition, cursorPosition);
-        }
-    }
-
-    sendStopGenerationSignal();
-}
-
-function markChatGenerationFinished() {
-    activeChatAbortController = null;
-    activeChatTurnId = null;
-    activeChatPrompt = '';
-    chatIsGenerating = false;
-    document.getElementById('typing-msg')?.remove();
-    updateComposerButtons();
-}
-
-editPromptBtn.addEventListener('click', async () => {
-    await stopActiveChatGeneration(true);
-});
-
-stopGenerationBtn.addEventListener('click', async () => {
-    await stopActiveChatGeneration(false);
-});
-
-function startNewChat() {
-    if (isSharedChatPage) {
-        showSharedChatNotice();
-        return;
-    }
-
-    const email = normalizeEmail(userEmailInput.value);
-    if (!email || !email.includes('@')) {
-        addMessage('Please enter your email before starting a new chat.', false);
-        userEmailInput.focus();
-        return;
-    }
-    sessionId = generateSessionId();
-    localStorage.setItem(getSessionStorageKey(email), sessionId);
-    localStorage.setItem('nexa_session_id', sessionId);
-
-    chatHistoryLoaded = true;   // brand-new session, nothing to fetch
-    chatSessionsLoaded = false; // history list should refresh next open
-    activeHistorySessionId = null;
-    userMessageCount = 0;
-
-    messagesContainer.innerHTML = '';
-    clearReplyContext();
-    closeHistoryPanel();
-
-    const firstName = getFirstName(getCurrentDisplayName());
-    const welcomeCard = document.createElement('div');
-    welcomeCard.className = 'flex justify-start';
-
-	welcomeCard.innerHTML = `
-        <div class="bot-message max-w-[92%]">
-            <div class="flex items-start gap-3">
-                <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-100 to-yellow-200 text-amber-700 flex items-center justify-center shrink-0 shadow-sm">
-                    <i class="fa-solid fa-sparkles text-base"></i>
-                </div>
-                <div class="min-w-0">
-                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">New chat ready</div>
-                    <h3 class="mt-1 text-lg font-bold text-slate-900">Hi ${escapeHtml(firstName)}, welcome back.</h3>
-                    <p class="mt-2 text-sm text-slate-600 leading-6">
-                        Your new chat is ready. Ask me anything about the curriculum, lesson plans, or learning support.
-                    </p>
-                    <div style="margin-top:14px; background:#f3e3d0; border:1px solid #d9b48f; border-left:4px solid #8b5a2b; border-radius:12px; padding:12px 14px;">
-                        <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:#6b4423; margin-bottom:5px;">
-                            <i class="fa-solid fa-shield-halved"></i> Disclaimer
-                        </div>
-                        <p style="margin:0; font-size:12.5px; line-height:1.6; color:#5c3a1e;">
-                            This response was generated by NEXA AI. Please verify important information with your official learning resources and consult your teacher or lecturer if needed. NEXA AI supports learning — it does not replace your human teachers.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-
-    messagesContainer.appendChild(welcomeCard);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function setReplyContext(text) {
-    pendingReplyText = (text || '').trim();
-    if (!pendingReplyText) return;
-    const chip = document.getElementById('reply-chip');
-    const preview = document.getElementById('reply-chip-text');
-    preview.textContent = pendingReplyText.length > 120
-        ? pendingReplyText.slice(0, 120).trim() + '…'
-        : pendingReplyText;
-    chip.style.display = 'flex';
-    userInput.focus();
-}
-
-function clearReplyContext() {
-    pendingReplyText = null;
-    const chip = document.getElementById('reply-chip');
-    if (chip) chip.style.display = 'none';
-}
-
 function renderHistoryTranscript(messages) {
     if (!messages.length) {
         historySessionEmpty.textContent = 'This session has no messages yet.';
@@ -1636,7 +976,6 @@ function renderHistoryTranscript(messages) {
     historySessionDetail.innerHTML = messages.map(message => {
         const isUser = message.role === 'user';
         const bubbleClass = isUser ? 'bg-slate-900 text-white' : 'bg-sky-50 text-slate-800';
-        const disclaimerState = isUser ? null : getResponseDisclaimerState(message.content || '');
         const imageMarkup = !isUser && message.image_url
             ? `
                 <div class="generated-image mt-4">
@@ -1648,16 +987,11 @@ function renderHistoryTranscript(messages) {
             ? `<div class="whitespace-pre-wrap break-words text-sm leading-6">${escapeHtml(message.content || '')}</div>`
             : `<div class="markdown-body text-sm">${renderMarkdown(message.content || '')}</div>${imageMarkup}`;
 
-        const disclaimerMarkup = !isUser && disclaimerState && disclaimerState.hasDisclaimer
-            ? renderDisclaimerBanner(disclaimerState.disclaimerText)
-            : '';
-
         return `
-            <div class="${isUser ? 'flex justify-end' : 'flex flex-col items-start'}">
+            <div class="flex ${isUser ? 'justify-end' : 'justify-start'}">
                 <div class="max-w-full md:max-w-[92%] rounded-2xl px-4 py-3 ${bubbleClass}">
                     ${text}
                 </div>
-                ${disclaimerMarkup}
             </div>
         `;
     }).join('');
@@ -1783,10 +1117,8 @@ async function loadHistorySession(sessionToView) {
     if (normalizedEmail) {
         localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
     }
-    // Show chat window and keep the history panel open so the user
-    // can browse sessions and preview transcripts freely.
     chatWindow.classList.remove('hidden');
-    openHistoryPanel();
+    closeHistoryPanel();
 
     try {
         const res = await fetch(`${CHAT_HISTORY_API_URL}/${encodeURIComponent(sessionToView)}`);
@@ -1798,7 +1130,6 @@ async function loadHistorySession(sessionToView) {
         const messages = Array.isArray(data.messages) ? data.messages : [];
         renderHistoryTranscript(messages);
         renderHistorySessions(cachedHistorySessions);
-
         await loadChatHistory();
     } catch (err) {
         console.error('Failed to load session history', err);
@@ -1814,91 +1145,9 @@ function getDisplayNameFromEmail(email) {
     return localPart ? localPart.replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'User';
 }
 
-function getCurrentDisplayName() {
-    const lmsName = (localStorage.getItem('nexa_lms_user_name') || '').trim();
-    if (lmsName) {
-        return lmsName;
-    }
-
-    const savedName = (localStorage.getItem('nexa_user_name') || '').trim();
-    if (savedName) {
-        return savedName;
-    }
-
-    const emailName = getDisplayNameFromEmail(userEmailInput.value);
-    return emailName || 'User';
-}
-
-function getFirstName(displayName) {
-    const normalizedName = (displayName || '').trim();
-    if (!normalizedName) {
-        return 'there';
-    }
-
-    const strippedName = normalizedName
-        .replace(/^((mr|mrs|ms|miss|dr|sir|madam)\.?\s+)/i, '')
-        .replace(/^[@#]+/, '')
-        .trim();
-
-    return (strippedName.split(/\s+/)[0] || 'there').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') || 'there';
-}
-
-function updateWelcomeMessage() {
-    const welcomeMessage = document.getElementById('welcome-message');
-    if (!welcomeMessage) return;
-    const firstName = getFirstName(getCurrentDisplayName());
-    welcomeMessage.textContent = `Hi ${firstName}, Nexa is here to help you`;
-}
-
-function showSharedChatNotice() {
-    const existingNotice = document.getElementById('shared-chat-notice');
-    if (existingNotice) return;
-
-    const notice = document.createElement('div');
-    notice.id = 'shared-chat-notice';
-    notice.className = 'mb-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 shadow-sm';
-    notice.innerHTML = `
-        <div class="flex items-start gap-3">
-            <div class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sky-700">
-                <i class="fa-solid fa-lock"></i>
-            </div>
-            <div class="min-w-0">
-                <div class="text-sm font-semibold">Shared chat is read-only</div>
-                <p class="mt-1 text-sm leading-6 text-sky-700">You can review and copy this conversation, but replying is disabled.</p>
-            </div>
-        </div>
-    `;
-    messagesContainer.prepend(notice);
-}
-
-function setChatReadOnlyMode(isReadOnly) {
-    userInput.readOnly = isReadOnly;
-    userInput.placeholder = isReadOnly ? 'Shared chats are read-only.' : 'Ask me anything about curriculum.';
-    userInput.style.cursor = isReadOnly ? 'not-allowed' : '';
-    sendButton.disabled = isReadOnly;
-    attachBtn.disabled = isReadOnly;
-    undoLogBtn.disabled = isReadOnly;
-    historyToggleBtn.disabled = isReadOnly;
-    shareChatBtn.disabled = isReadOnly;
-    if (newChatBtn) {
-        newChatBtn.disabled = isReadOnly;
-    }
-
-    userInput.classList.toggle('cursor-not-allowed', isReadOnly);
-    sendButton.classList.toggle('opacity-50', isReadOnly);
-    attachBtn.classList.toggle('opacity-50', isReadOnly);
-    undoLogBtn.classList.toggle('opacity-50', isReadOnly);
-    historyToggleBtn.classList.toggle('opacity-50', isReadOnly);
-    shareChatBtn.classList.toggle('opacity-50', isReadOnly);
-    if (newChatBtn) {
-        newChatBtn.classList.toggle('opacity-50', isReadOnly);
-    }
-}
-
 userNameInput.value = localStorage.getItem('nexa_user_name') || '';
 userNameInput.addEventListener('change', () => {
     localStorage.setItem('nexa_user_name', userNameInput.value.trim());
-    updateWelcomeMessage();
 });
 
 userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
@@ -1913,52 +1162,40 @@ function setSessionForEmail(email) {
     closeHistoryPanel();
     messagesContainer.innerHTML = '';
     updateAccessRoleBadge(normalizedEmail);
-    updateWelcomeMessage();
-    if (sessionId && !isSharedChatPage) {
+    if (sessionId) {
         loadChatHistory();
     }
 }
 
-async function openSharedChatFromToken(shareToken) {
-    if (!shareToken) return;
 
-    setChatReadOnlyMode(true);
-    chatWindow.classList.remove('hidden');
+
+// ==================== EMAIL HANDLING FROM URL + LOCALSTORAGE ====================
+
+userNameInput.value = localStorage.getItem('nexa_user_name') || '';
+
+// Read email from URL parameter first, then fallback to localStorage
+let userEmailFromUrl = new URLSearchParams(window.location.search).get('email');
+
+if (userEmailFromUrl) {
+    userEmailFromUrl = decodeURIComponent(userEmailFromUrl);
+    userEmailInput.value = userEmailFromUrl;
+    localStorage.setItem('nexa_user_email', userEmailFromUrl);
+} else {
+    userEmailInput.value = localStorage.getItem('nexa_user_email') || '';
+}
+
+function setSessionForEmail(email) {
+    const normalizedEmail = normalizeEmail(email);
+    sessionId = normalizedEmail ? (localStorage.getItem(getSessionStorageKey(normalizedEmail)) || null) : null;
+    chatHistoryLoaded = false;
+    chatSessionsLoaded = false;
+    activeHistorySessionId = null;
+    cachedHistorySessions = [];
+    closeHistoryPanel();
     messagesContainer.innerHTML = '';
-    updateAccessRoleBadge(userEmailInput.value);
-    updateWelcomeMessage();
-
-    try {
-        const res = await fetch(`/api/shared-chat/${encodeURIComponent(shareToken)}`);
-        if (!res.ok) {
-            addMessage('This shared chat link is unavailable or expired.', false);
-            return;
-        }
-
-        const data = await res.json();
-        if (!data.session_id) {
-            addMessage('This shared chat link is missing a session reference.', false);
-            return;
-        }
-
-        sessionId = data.session_id;
-        chatHistoryLoaded = false;
-        chatSessionsLoaded = false;
-        activeHistorySessionId = null;
-        cachedHistorySessions = [];
-        localStorage.setItem('nexa_session_id', sessionId);
-
-        const normalizedEmail = normalizeEmail(userEmailInput.value);
-        if (normalizedEmail) {
-            localStorage.setItem(getSessionStorageKey(normalizedEmail), sessionId);
-        }
-
-        await loadChatHistory();
-        showSharedChatNotice();
-        chatWindow.classList.remove('hidden');
-    } catch (error) {
-        console.error('Failed to load shared chat session', error);
-        addMessage('Failed to load the shared chat. Please refresh the page.', false);
+    updateAccessRoleBadge(normalizedEmail);
+    if (sessionId) {
+        loadChatHistory();
     }
 }
 
@@ -1966,18 +1203,42 @@ userEmailInput.addEventListener('change', () => {
     const normalizedEmail = normalizeEmail(userEmailInput.value);
     localStorage.setItem('nexa_user_email', normalizedEmail);
     setSessionForEmail(normalizedEmail);
-    updateWelcomeMessage();
+});
+
+// Initialize with email (from URL or localStorage)
+setSessionForEmail(userEmailInput.value);
+
+// Optional: Show email visibly in the header
+function showLoggedInUser() {
+    const email = normalizeEmail(userEmailInput.value);
+    if (email) {
+        // You can add a visible badge in the header if you want
+        console.log(`✅ Logged in as: ${email}`);
+    }
+}
+setTimeout(showLoggedInUser, 1000);
+
+function updateLoggedUserBanner() {
+    const email = normalizeEmail(userEmailInput.value);
+    const banner = document.getElementById('logged-user-banner');
+    const emailSpan = document.getElementById('logged-email');
+    
+    if (email) {
+        emailSpan.textContent = email;
+        banner.classList.remove('hidden');
+    }
+}
+
+// Call it after setting email
+setTimeout(updateLoggedUserBanner, 800);
+
+userEmailInput.addEventListener('change', () => {
+    const normalizedEmail = normalizeEmail(userEmailInput.value);
+    localStorage.setItem('nexa_user_email', normalizedEmail);
+    setSessionForEmail(normalizedEmail);
 });
 
 setSessionForEmail(userEmailInput.value);
-setChatReadOnlyMode(isSharedChatPage);
-if (isSharedChatPage) {
-    // Switch to full-page shared layout so the shared transcript appears like the previous shared view
-    document.body.classList.add('shared-full');
-}
-if (sharedChatToken) {
-    openSharedChatFromToken(sharedChatToken);
-}
 
 function getInternationalTimestamp() {
     return new Date().toISOString();
@@ -2063,7 +1324,7 @@ const guardrailRules = [
     {
         name: 'Tok Pisin language',
         pattern: /\b(gutpela|nogut|tasol|plis|mi|yu|em|ol|wantaim|bai|ken|gat|stap|kamap|go-daun|nau|liklik|bigfela|no-get|givim|soim|helpim|wanem|husat|we|weate|finis|nambis|ples|dispela|yet|tu|tri|tu-pis|tru|bilong|moa|lain|harim|tok|singim|dring|gro|ting|hed|lek|han|bel|maus)\b/i,
-        reply: 'I am sorry I am still learning tok pisin. I can be you tok pisin assistant sooner.'
+        reply: 'I can help with English and other major languages, but I cannot respond to Tok Pisin. Please ask your question in English instead.'
     }
 ];
 
@@ -2082,19 +1343,8 @@ function classifyPrompt(text) {
     return { allowed: true, category: null, reply: null };
 }
 
-const OUTPUT_BLOCKED_CATEGORIES = [
-    'sexual content',
-    'violence or weapons',
-    'self-harm',
-    'hate or harassment',
-    'drugs or substances'
-];
-
 function containsUnsafeModelOutput(text) {
-    const value = text || '';
-    return guardrailRules.some(rule =>
-        OUTPUT_BLOCKED_CATEGORIES.includes(rule.name) && rule.pattern.test(value)
-    );
+    return guardrailRules.some(rule => rule.pattern.test(text || ''));
 }
 
 function pushChatLog(logEntry) {
@@ -2109,7 +1359,23 @@ function popChatLog() {
 }
 
 async function saveChatLogToDatabase(logEntry) {
-    return true;
+    try {
+        const res = await fetch(LOG_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(logEntry)
+        });
+
+        if (!res.ok) {
+            throw new Error(`Logger API returned ${res.status}`);
+        }
+
+        return true;
+    } catch (err) {
+        pendingLogRetryStack.push(logEntry);
+        console.error('Log save failed; moved to retry stack.', err);
+        return false;
+    }
 }
 
 async function saveRatingToDatabase(payload) {
@@ -2129,7 +1395,11 @@ async function saveRatingToDatabase(payload) {
 }
 
 async function retryPendingLogs() {
-    return true;
+    while (pendingLogRetryStack.length > 0) {
+        const nextLog = pendingLogRetryStack.pop();
+        const ok = await saveChatLogToDatabase(nextLog);
+        if (!ok) break;
+    }
 }
 
 async function updateLogResponse(logId, responseText, pdfUrl = null) {
@@ -2141,6 +1411,8 @@ async function updateLogResponse(logId, responseText, pdfUrl = null) {
         logItem.pdf_url = pdfUrl;
     }
     logItem.timestamp = getInternationalTimestamp();
+    await saveChatLogToDatabase(logItem);
+    await retryPendingLogs();
 }
 
 async function blobToBase64(blob) {
@@ -2159,7 +1431,6 @@ async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }
         const imageResponse = await fetch(imageUrl);
         if (!imageResponse.ok) {
             throw new Error(`Image fetch returned ${imageResponse.status}`);
-
         }
 
         const imageBlob = await imageResponse.blob();
@@ -2189,80 +1460,21 @@ async function saveImageBase64ToDatabase({ logId, userName, imageUrl, filename }
     }
 }
 
-function getResponseDisclaimerState(text) {
-    const safeText = typeof text === 'string' ? text : '';
-    const disclaimerBodyText = 'This response was generated by NEXA AI. Please verify important information with your official learning resources and consult your teacher or lecturer if needed. NEXA AI supports learning it does not replace your human teachers.';
-    const disclaimerPrefixedText = `Disclaimer: ${disclaimerBodyText}`;
-    const disclaimerVariants = [disclaimerPrefixedText, disclaimerBodyText];
-
-    let matchedDisclaimer = '';
-    let disclaimerIndex = -1;
-    for (const variant of disclaimerVariants) {
-        const idx = safeText.indexOf(variant);
-        if (idx >= 0 && (disclaimerIndex === -1 || idx < disclaimerIndex)) {
-            matchedDisclaimer = variant;
-            disclaimerIndex = idx;
-        }
-    }
-
-    const hasDisclaimer = disclaimerIndex >= 0;
-    const disclaimerAtStart = hasDisclaimer && disclaimerIndex === 0;
-    let bodyText = safeText;
-
-    if (disclaimerAtStart) {
-        bodyText = safeText.slice(matchedDisclaimer.length).replace(/^\s*---\s*/, '').trim();
-    } else if (hasDisclaimer) {
-        bodyText = safeText.slice(0, disclaimerIndex).trim();
-    }
-
-    bodyText = bodyText.replace(/^\s*---\s*/, '').replace(/\n\n---\s*$/, '').trim();
-    // Strip any leftover 'DISCLAIMER:' token (upper or mixed case) that may remain
-    // between the separator and the disclaimer body (backend uses 'DISCLAIMER:'),
-    // which would otherwise leave a small 'DISCLAIMER:' label inside the bot bubble.
-    bodyText = bodyText.replace(/\bDISCLAIMER:\s*$/i, '').replace(/\bDisclaimer:\s*$/i, '').trim();
-
-    return { bodyText, hasDisclaimer, disclaimerText: disclaimerBodyText };
-}
-
-function renderDisclaimerBanner(disclaimerText) { return ''; }
-
+// ==================== MARKDOWN ====================
 function renderMarkdown(text) {
-    const { bodyText } = getResponseDisclaimerState(text);
-    const parsed = marked.parse(bodyText, { breaks: true, gfm: true });
-    const withSourceButtons = parsed.replace(
-        /<p>(?:<strong>)?Source:(?:<\/strong>)?\s*(?:<a href="([^"]+)"[^>]*>[^<]*<\/a>|(https?:\/\/[^\s<]+))<\/p>/gi,
-        (_, anchorUrl, plainUrl) => {
-            const sourceUrl = anchorUrl || plainUrl || '';
-            if (!sourceUrl) return '';
-            return `
-                <div class="source-chip">
-                    <span class="source-chip-label">Source</span>
-                    <button type="button" class="source-link-btn" data-source-url="${escapeHtml(sourceUrl)}">
-                        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-                        Open source
-                    </button>
-                </div>
-            `;
-        }
-    );
-    // Links live inside an iframe — force them to open in a new browser tab.
-    return withSourceButtons.replace(/<a (?![^>]*target=)/g, '<a target="_blank" rel="noopener noreferrer" ');
+    return marked.parse(text, { breaks: true, gfm: true });
 }
 
 // ==================== ADD MESSAGE ====================
 function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, logMeta = null) {
-    const safeText = typeof text === 'string' ? text : (text == null ? '' : String(text));
-    const disclaimerState = isUser ? null : getResponseDisclaimerState(safeText);
     const div = document.createElement('div');
-    div.className = isUser
-        ? 'flex justify-end group'
-        : 'flex flex-col items-start group';
+    div.className = `flex ${isUser ? 'justify-end' : 'justify-start'} group`;
     if (isUser) {
         div.innerHTML = `
             <div class="user-message" ${pairId ? `data-pair-id="${pairId}"` : ''}>
-                <span class="user-text">${safeText}</span>
+                <span class="user-text">${text}</span>
                 <div class="message-actions">
-                    <button class="msg-action-btn" onclick="copyMsgText(this, '${escapeForAttr(safeText)}')" title="Copy">
+                    <button class="msg-action-btn" onclick="copyMsgText(this, '${escapeForAttr(text)}')" title="Copy">
                         <i class="fa-regular fa-copy"></i>
                     </button>
                 </div>
@@ -2272,7 +1484,7 @@ function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, 
         const pairAttr = pairId ? `data-pair-id="${pairId}"` : '';
         let html = `
             <div class="bot-message" ${pairAttr}>
-                <div class="markdown-body">${renderMarkdown(safeText)}</div>
+                <div class="markdown-body">${renderMarkdown(text)}</div>
         `;
         if (fileUrl) {
             if (isPdf) {
@@ -2295,6 +1507,10 @@ function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, 
                     </div>`;
             }
         }
+        const copyPairBtn = pairId ? `
+                    <button class="msg-action-btn copy-pair-btn" onclick="copyPair('${pairId}')" title="Copy prompt + response">
+                        <i class="fa-solid fa-clone"></i>
+                    </button>` : '';
         const responseControls = logMeta && logMeta.logId ? `
                 <div class="response-actions" data-log-id="${logMeta.logId}">
                     <button type="button" class="copy-response-btn" title="Copy response">
@@ -2303,19 +1519,17 @@ function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, 
                     <button type="button" class="like-response-btn" title="Good response">
                         <i class="fa-regular fa-thumbs-up"></i>
                     </button>
-			<button type="button" class="reply-response-btn" title="Quote &amp; reply">
-                        <i class="fa-solid fa-reply"></i>
-                    </button>
                     <button type="button" class="dislike-response-btn" title="Bad response">
                         <i class="fa-regular fa-thumbs-down"></i>
-                    </button>
+                    </button>${copyPairBtn}
                 </div>` : '';
         html += `
-                <div class="message-actions"></div>${responseControls}
+                <div class="message-actions">
+                    <button class="msg-action-btn copy-output-btn" onclick="copyOutput(this)" title="Copy response">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>${responseControls}
             </div>`;
-        if (disclaimerState && disclaimerState.hasDisclaimer) {
-            html += renderDisclaimerBanner(disclaimerState.disclaimerText);
-        }
         div.innerHTML = html;
     }
     messagesContainer.appendChild(div);
@@ -2326,24 +1540,13 @@ function addMessage(text, isUser, fileUrl = null, isPdf = false, pairId = null, 
         const copyBtn = controls ? controls.querySelector('.copy-response-btn') : null;
         const likeBtn = controls ? controls.querySelector('.like-response-btn') : null;
         const dislikeBtn = controls ? controls.querySelector('.dislike-response-btn') : null;
-        const replyBtn = controls ? controls.querySelector('.reply-response-btn') : null;
-        if (replyBtn) {
-            replyBtn.addEventListener('click', () => {
-                const markdown = div.querySelector('.markdown-body');
-                const responseText = markdown ? markdown.innerText.trim() : safeText;
-                setReplyContext(responseText);
-            });
-        }
+
         if (copyBtn) {
             copyBtn.addEventListener('click', async () => {
                 const markdown = div.querySelector('.markdown-body');
-                const responseText = markdown ? markdown.innerText.trim() : safeText;
+                const responseText = markdown ? markdown.innerText.trim() : text;
                 try {
-                    const copied = await copyTextToClipboard(responseText);
-                    if (!copied) {
-                        showCopyToast('Copy failed');
-                        return;
-                    }
+                    await navigator.clipboard.writeText(responseText);
                     copyBtn.classList.add('copied');
                     copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
                     setTimeout(() => {
@@ -2398,7 +1601,6 @@ function attachMsgHover(msgEl) {
     let leaveTimer = null;
     const actions = msgEl.querySelector('.message-actions');
     if (!actions) return;
-    actions.classList.add('show');
     msgEl.addEventListener('mouseenter', () => {
         clearTimeout(leaveTimer);
         actions.classList.add('show');
@@ -2415,52 +1617,14 @@ function attachMsgHover(msgEl) {
 
 // ==================== COPY HELPERS ====================
 function escapeForAttr(str) {
-    return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-}
-
-async function copyTextToClipboard(text) {
-    const value = String(text || '');
-
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        try {
-            await navigator.clipboard.writeText(value);
-            return true;
-        } catch (error) {
-            console.warn('Clipboard API copy failed, using fallback', error);
-        }
-    }
-
-    const fallbackArea = document.createElement('textarea');
-    fallbackArea.value = value;
-    fallbackArea.setAttribute('readonly', 'readonly');
-    fallbackArea.style.position = 'fixed';
-    fallbackArea.style.top = '-9999px';
-    fallbackArea.style.left = '-9999px';
-    fallbackArea.style.opacity = '0';
-    document.body.appendChild(fallbackArea);
-    fallbackArea.focus();
-    fallbackArea.select();
-
-    let copied = false;
-    try {
-        copied = document.execCommand('copy');
-    } catch (error) {
-        console.error('Fallback copy failed', error);
-    }
-
-    document.body.removeChild(fallbackArea);
-    return copied;
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
 }
 
 // Copy output text - called from copy button inside bot-message
 window.copyOutput = function(btn) {
     const markdown = btn.closest('.bot-message').querySelector('.markdown-body');
     const text = markdown ? markdown.innerText.trim() : '';
-    copyTextToClipboard(text).then(success => {
-        if (!success) {
-            showCopyToast('Copy failed');
-            return;
-        }
+    navigator.clipboard.writeText(text).then(() => {
         animateCopyBtn(btn);
         showCopyToast('Response copied');
     });
@@ -2471,11 +1635,7 @@ window.copyMsgText = function(btn, text) {
     // decode newlines and get live text from span if possible
     const span = btn.closest('.user-message')?.querySelector('.user-text');
     const actual = span ? span.innerText.trim() : text.replace(/\\n/g, '\n');
-    copyTextToClipboard(actual).then(success => {
-        if (!success) {
-            showCopyToast('Copy failed');
-            return;
-        }
+    navigator.clipboard.writeText(actual).then(() => {
         animateCopyBtn(btn);
         showCopyToast('Message copied');
     });
@@ -2493,7 +1653,7 @@ function animateCopyBtn(btn) {
 }
 
 window.copyToClipboard = function(text) {
-    copyTextToClipboard(text).then(success => showCopyToast(success ? 'Copied' : 'Copy failed'));
+    navigator.clipboard.writeText(text).then(() => showCopyToast('Copied'));
 };
 
 window.copyPair = function(pairId) {
@@ -2503,7 +1663,7 @@ window.copyPair = function(pairId) {
     const prompt  = span ? span.innerText.trim() : (userEl ? userEl.innerText.trim() : '');
     const response = botEl  ? (botEl.querySelector('.markdown-body')?.innerText?.trim() || '') : '';
     const combined = `User:\n${prompt}\n\nNexa:\n${response}`;
-    copyTextToClipboard(combined).then(success => showCopyToast(success ? 'Prompt + response copied' : 'Copy failed'));
+    navigator.clipboard.writeText(combined).then(() => showCopyToast('Prompt + response copied'));
 };
 
 function showCopyToast(msg) {
@@ -2531,25 +1691,6 @@ function showCopyToast(msg) {
         toast.style.transform = 'translateX(-50%) translateY(8px)';
     }, 2200);
 }
-
-window.openSourceUrl = function(url) {
-    const sourceUrl = String(url || '').trim();
-    if (!sourceUrl) return;
-
-    const link = document.createElement('a');
-    link.href = sourceUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-
-document.addEventListener('click', event => {
-    const sourceButton = event.target.closest('.source-link-btn');
-    if (!sourceButton) return;
-    window.openSourceUrl(sourceButton.dataset.sourceUrl);
-});
 
 window.downloadFile = function(url, filename) {
     const a = document.createElement('a');
@@ -2579,95 +1720,54 @@ document.body.appendChild(fileInput);
 
 attachBtn.addEventListener('click', () => fileInput.click());
 
-let stagedFile = null;
-
-attachBtn.addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', (e) => {
+fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    stagedFile = file;
-    showAttachmentChip(file.name);
-    userInput.focus();
+    addMessage(`Uploading: ${file.name}`, true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch(UPLOAD_URL, { method: 'POST', body: formData });
+        const data = await res.json();
+        addMessage(data.message || "File uploaded successfully!", false);
+    } catch (err) {
+        addMessage("Failed to upload file.", false);
+    }
 });
 
-function showAttachmentChip(name) {
-    let chip = document.getElementById('attachment-chip');
-    if (!chip) {
-        chip = document.createElement('div');
-        chip.id = 'attachment-chip';
-        chip.style.cssText = 'display:flex;align-items:center;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:6px 10px;margin-bottom:8px;font-size:12px;color:#3730a3;';
-        document.getElementById('input-area').insertBefore(chip, document.getElementById('input-area').firstChild);
-    }
-    chip.innerHTML = `<i class="fa-solid fa-paperclip"></i><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</span><button id="attachment-chip-close" style="background:none;border:none;cursor:pointer;color:#64748b;">✕</button>`;
-    chip.style.display = 'flex';
-    document.getElementById('attachment-chip-close').onclick = clearStagedFile;
-}
-
-function clearStagedFile() {
-    stagedFile = null;
-    fileInput.value = '';
-    const chip = document.getElementById('attachment-chip');
-    if (chip) chip.style.display = 'none';
-}
-
-function generateSessionId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-        return crypto.randomUUID();
-    }
-    // Fallback
-    return 'sess-' + Date.now().toString(36) + '-' + 
-           Math.random().toString(36).substr(2, 9);
-}
-
 async function sendMessage() {
-    if (isSharedChatPage || userInput.readOnly) {
-        showSharedChatNotice();
-        return;
-    }
-    if (chatIsGenerating) {
-        addMessage('Nexa is still thinking. Stop or edit the current prompt first.', false);
-        return;
-    }
-    let text = userInput.value.trim();
-    if (!text && !stagedFile) return;
-    if (!text && stagedFile) text = `Please read the attached document: ${stagedFile.name}`;
-    const stagedFileName = stagedFile ? stagedFile.name : null;
-    const urlMatch = text.match(/https?:\/\/[^\s]+/i);
-    const pastedUrl = urlMatch ? urlMatch[0] : '';
-    const messageWithoutUrl = pastedUrl ? text.replace(pastedUrl, '').trim() : text;
-    // Capture the quoted Nexa response separately (don't pollute the question text).
-    let replyContext = null;
-    if (pendingReplyText) {
-        replyContext = pendingReplyText.length > 500
-            ? pendingReplyText.slice(0, 500).trim() + '…'
-            : pendingReplyText;
-        clearReplyContext();
-    }
+    const text = userInput.value.trim();
+    if (!text) return;
+
     const userEmail = normalizeEmail(userEmailInput.value);
     if (!userEmail || !userEmail.includes('@')) {
         addMessage('Please enter your email first. Nexa uses it to switch between student and teacher mode.', false);
         userEmailInput.focus();
         return;
     }
+
     const userName = userNameInput.value.trim() || getDisplayNameFromEmail(userEmail);
+
     if (!sessionId) {
-        sessionId = generateSessionId();
+        sessionId = crypto.randomUUID();
         localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem('nexa_session_id', sessionId);
     }
+
     localStorage.setItem('nexa_user_name', userName);
     localStorage.setItem('nexa_user_email', userEmail);
     sessionId = localStorage.getItem(getSessionStorageKey(userEmail)) || null;
     updateAccessRoleBadge(userEmail);
+
     const assessment = classifyPrompt(text);
     if (!assessment.allowed) {
         const pairId = 'p' + Date.now();
-        let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        const clientLogId = logId;
+        const logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         const blockedReply = `${assessment.reply} This request was blocked by Nexa student safety guardrails.`;
+
         addMessage(text, true, null, false, pairId);
         addMessage(blockedReply, false, null, false, pairId, { logId, userName });
+
         const blockedLog = {
             log_id: logId,
             session_id: sessionId,
@@ -2680,39 +1780,19 @@ async function sendMessage() {
             stars: 0
         };
         pushChatLog(blockedLog);
-        try {
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: text,
-                    user_email: userEmail,
-                    session_id: sessionId
-                })
-            });
-            const data = await res.json();
-            if (res.ok && data.log_id) {
-                logId = data.log_id;
-                blockedLog.log_id = logId;
-                const pushedItem = chatLogStack.find(item => item.log_id === clientLogId);
-                if (pushedItem) {
-                    pushedItem.log_id = logId;
-                }
-            }
-        } catch (err) {
-            console.error('Blocked log sync failed', err);
-        }
+        await saveChatLogToDatabase(blockedLog);
+        await retryPendingLogs();
+
         userInput.value = '';
-        clearStagedFile();
         return;
     }
+
     const pairId = 'p' + Date.now();
-    let logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const clientLogId = logId;
+    const logId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const timestamp = getInternationalTimestamp();
+
     addMessage(text, true, null, false, pairId);
+
     pushChatLog({
         log_id: logId,
         session_id: sessionId,
@@ -2724,24 +1804,9 @@ async function sendMessage() {
         timestamp,
         stars: 0
     });
+
     userInput.value = "";
-    // If a document is staged, upload it first so its text enters the session buffer.
-    if (stagedFile) {
-        const fd = new FormData();
-        fd.append('file', stagedFile);
-        fd.append('session_id', sessionId);
-        try {
-            const up = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
-            const upData = await up.json().catch(() => ({}));
-            if (!up.ok) throw new Error(upData.detail || 'Upload failed');
-        } catch (err) {
-            addMessage('⚠️ Could not read the attached document.', false);
-            clearStagedFile();
-            return;
-        }
-        clearStagedFile();
-    }
-    const chatGeneration = beginChatGeneration(text);
+
     // Track user message count & trigger feedback window ONCE after 2 prompts
     userMessageCount++;
     if (userMessageCount === FEEDBACK_TRIGGER_COUNT) {
@@ -2756,45 +1821,18 @@ async function sendMessage() {
             document.getElementById('feedback-textarea').value = '';
         }, 800);
     }
-    let loadingMessage = 'Nexa is Thinking...';
-    try {
-        const statusRes = await fetch(CHAT_STATUS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: messageWithoutUrl || text,
-                question: messageWithoutUrl || '',
-                url: pastedUrl || null,
-                user_email: userEmail,
-                user_name: getCurrentDisplayName(),
-                session_id: sessionId,
-                reply_context: replyContext,
-                staged_file_name: stagedFileName,
-                turn_id: chatGeneration.turnId
-            }),
-            signal: chatGeneration.signal
-        });
-        const statusData = await statusRes.json();
-        if (statusRes.ok && statusData?.status_message) {
-            loadingMessage = statusData.status_message;
-        }
-    } catch (err) {
-        if (err?.name === 'AbortError') {
-            markChatGenerationFinished();
-            return;
-        }
-        console.warn('Status preview failed', err);
-    }
+
     // typing indicator
     const typing = document.createElement("div");
     typing.id = "typing-msg";
     typing.innerHTML = `
         <div class="bot-message">
-            ${loadingMessage}
+            ⏳ Nexa is thinking / generating image...
         </div>
     `;
     messagesContainer.appendChild(typing);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
     try {
         const res = await fetch(API_URL, {
             method: "POST",
@@ -2802,36 +1840,30 @@ async function sendMessage() {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                message: messageWithoutUrl || text,
-                question: messageWithoutUrl || '',
-                url: pastedUrl || null,
+                message: text,
                 user_email: userEmail,
-                user_name: getCurrentDisplayName(),
-                session_id: sessionId,
-                reply_context: replyContext,
-                staged_file_name: stagedFileName,
-                turn_id: chatGeneration.turnId
-            }),
-            signal: chatGeneration.signal
+                session_id: sessionId
+            })
         });
+
         const data = await res.json();
+
         document.getElementById("typing-msg")?.remove();
+
         sessionId = data.session_id;
-        if (data.log_id) {
-            logId = data.log_id;
-        }
         localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
         localStorage.setItem("nexa_session_id", sessionId);
         if (data.access_role) {
             updateAccessRoleBadge(data.access_role);
         }
-        const logItem = chatLogStack.find(item => item.log_id === clientLogId || item.log_id === logId);
+
+        const logItem = chatLogStack.find(item => item.log_id === logId);
         if (logItem) {
             logItem.session_id = sessionId;
             logItem.user_email = userEmail;
-            logItem.log_id = logId;
         }
-        const modelText = typeof data.response === 'string' ? data.response : '';
+
+        const modelText = data.response || '';
         if (containsUnsafeModelOutput(modelText)) {
             const blockedModelReply = 'I cannot provide that content. This response was blocked by Nexa student safety guardrails.';
             addMessage(blockedModelReply, false, null, false, pairId, { logId, userName });
@@ -2839,51 +1871,82 @@ async function sendMessage() {
             refreshHistoryIfVisible();
             return;
         }
-        if (data.image_url && data.image_id) {
-            addMessage(data.response, false, null, false, pairId, { logId, userName });
-            await updateLogResponse(logId, data.response || '', data.pdf_url || null);
-            const imageUrl = data.image_url;
-            const imageId = data.image_id;
-            const interval = setInterval(async () => {
-                try {
-                    const statusRes = await fetch(`/image-status/${imageId}`);
-                    const statusData = await statusRes.json();
-                    if (statusData.status === "ready") {
-                        clearInterval(interval);
-                        await saveImageBase64ToDatabase({
-                            logId, userName, imageUrl,
-                            filename: imageUrl.split('/').pop() || `image_${imageId}.png`
-                        });
-                        addMessage("🖼️ Generated Image:", false, imageUrl, false, pairId);
-                    }
-                    if (statusData.status === "failed") {
-                        clearInterval(interval);
-                        addMessage("❌ Image generation failed. Please try again.", false);
-                    }
-                } catch (err) {
-                    console.log("Polling error:", err);
-                }
-            }, 2000);
-            setTimeout(() => clearInterval(interval), 260000);  // stop after ~4.3 min
+
+        // ================= IMAGE HANDLING (FIXED) =================
+	if (data.image_url && data.image_id) {
+
+    addMessage(data.response, false, null, false, pairId, { logId, userName });
+    await updateLogResponse(logId, data.response || '', data.pdf_url || null);
+
+    const imageUrl = data.image_url;
+    const imageId = data.image_id;
+
+    const interval = setInterval(async () => {
+
+        try {
+
+            const statusRes = await fetch(`/image-status/${imageId}`);
+
+            const statusData = await statusRes.json();
+
+            console.log("IMAGE STATUS:", statusData);
+
+            if (statusData.status === "ready") {
+
+                clearInterval(interval);
+
+                await saveImageBase64ToDatabase({
+                    logId,
+                    userName,
+                    imageUrl,
+                    filename: imageUrl.split('/').pop() || `image_${imageId}.png`
+                });
+
+                addMessage(
+                    "🖼️ Generated Image:",
+                    false,
+                    imageUrl,
+                    false,
+                    pairId
+                );
+            }
+
+            if (statusData.status === "failed") {
+
+                clearInterval(interval);
+
+                addMessage(
+                    "❌ Image generation failed.",
+                    false
+                );
+            }
+
+        } catch (err) {
+
+            console.log("Polling error:", err);
+        }
+
+    }, 2000);
+
         } else {
+            // normal text response
             addMessage(data.response, false, data.pdf_url, !!data.pdf_url, pairId, { logId, userName });
             await updateLogResponse(logId, data.response || '');
         }
+
         refreshHistoryIfVisible();
-        markChatGenerationFinished();
+
     } catch (err) {
-        if (err?.name === 'AbortError') {
-            markChatGenerationFinished();
-            return;
-        }
         document.getElementById("typing-msg")?.remove();
+
         console.error(err);
-        addMessage(err?.message ? `⚠️ ${err.message}` : "⚠️ Sorry, I'm having trouble connecting. Please try again.", false);
+
+        addMessage(
+            "⚠️ Sorry, I'm having trouble connecting. Please try again.",
+            false
+        );
+
         await updateLogResponse(logId, 'Connection error: response not received.');
-    } finally {
-        if (chatIsGenerating) {
-            markChatGenerationFinished();
-        }
     }
 }
 
@@ -2925,14 +1988,8 @@ async function shareCurrentChat() {
 
         const fullShareUrl = new URL(data.share_url, window.location.origin).toString();
 
-        window.open(fullShareUrl, '_blank', 'noopener,noreferrer');
-
         try {
-            const copied = await copyTextToClipboard(fullShareUrl);
-            if (!copied) {
-                addMessage(`✅ Share link created:\n\n${fullShareUrl}`, false);
-                return;
-            }
+            await navigator.clipboard.writeText(fullShareUrl);
             addMessage(`✅ Share link created and copied to clipboard:\n\n${fullShareUrl}`, false);
         } catch (copyErr) {
             addMessage(`✅ Share link created:\n\n${fullShareUrl}`, false);
@@ -2951,6 +2008,7 @@ async function shareCurrentChat() {
 sendButton.addEventListener('click', sendMessage);
 shareChatBtn.addEventListener('click', shareCurrentChat);
 userInput.addEventListener('keypress', e => { if (e.key === 'Enter') sendMessage(); });
+chatButton.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
 closeChat.addEventListener('click', () => chatWindow.classList.add('hidden'));
 historyToggleBtn.addEventListener('click', async () => {
     if (historyPanel.classList.contains('hidden')) {
@@ -2960,8 +2018,6 @@ historyToggleBtn.addEventListener('click', async () => {
         closeHistoryPanel();
     }
 });
-document.getElementById('new-chat-btn').addEventListener('click', startNewChat);
-document.getElementById('reply-chip-close').addEventListener('click', clearReplyContext);
 closeHistoryBtn.addEventListener('click', closeHistoryPanel);
 refreshHistoryBtn.addEventListener('click', async () => {
     chatSessionsLoaded = false;
@@ -3013,70 +2069,15 @@ undoLogBtn.addEventListener('click', async () => {
     }
 });
 
-document.getElementById('url-btn').addEventListener('click', async () => {
-    const userEmail = normalizeEmail(userEmailInput.value);
-    if (!userEmail || !userEmail.includes('@')) {
-        addMessage('Please enter your email first.', false);
-        userEmailInput.focus();
-        return;
-    }
-    if (inferAccessRoleFromEmail(userEmail) === 'none') {
-        addMessage('This account does not have access to Nexa.', false);
-        return;
-    }
-
-    const url = prompt('Enter a web page URL for Nexa to read:');
-    if (!url || !url.trim()) return;
-
-    const question = prompt('What should Nexa do with this page?\n(Leave blank for a summary)') || '';
-
-    if (!sessionId) {
-        sessionId = generateSessionId();
-        localStorage.setItem(getSessionStorageKey(userEmail), sessionId);
-    }
-
-    const pairId = 'p' + Date.now();
-    addMessage(`🌐 Read: ${url}${question ? '\n\n' + question : ''}`, true, null, false, pairId);
-
-    const typing = document.createElement('div');
-    typing.id = 'typing-msg';
-    typing.innerHTML = `<div class="bot-message">🌐 Nexa is reading the page...</div>`;
-    messagesContainer.appendChild(typing);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-    try {
-        const res = await fetch('/read-url', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: url.trim(), question: question.trim(), user_email: userEmail, session_id: sessionId })
-        });
-        const data = await res.json();
-        document.getElementById('typing-msg')?.remove();
-        sessionId = data.session_id || sessionId;
-        addMessage(data.response || 'No response.', false, null, false, pairId, { logId: data.log_id, userName: getDisplayNameFromEmail(userEmail) });
-        refreshHistoryIfVisible();
-    } catch (err) {
-        document.getElementById('typing-msg')?.remove();
-        addMessage('⚠️ Could not read that page. Please check the URL and try again.', false);
-    }
-});
-
-
 updateStackSizeLabel();
-if (!isSharedChatPage) {
-    loadChatHistory();
-}
+loadChatHistory();
 
 // Input copy button
 const inputCopyBtn = document.getElementById('input-copy-btn');
 inputCopyBtn.addEventListener('click', () => {
     const text = userInput.value;
     if (!text) return;
-    copyTextToClipboard(text).then(success => {
-        if (!success) {
-            showCopyToast('Copy failed');
-            return;
-        }
+    navigator.clipboard.writeText(text).then(() => {
         const icon = inputCopyBtn.querySelector('i');
         icon.className = 'fa-solid fa-check';
         inputCopyBtn.classList.add('copied');
@@ -3290,32 +2291,6 @@ chatButton.addEventListener('mouseleave', () => {
     doneBtn.addEventListener('click', closeModal);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
 })();
-</script>
-
-
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        renderMathInElement(document.body, {
-            delimiters: [
-                {left: "$$", right: "$$", display: true},
-                {left: "$", right: "$", display: false},
-                {left: "\\(", right: "\\)", display: false},
-                {left: "\\[", right: "\\]", display: true}
-            ],
-            throwOnError: false
-        });
-    });
-
-    // Also re-render after new messages are added
-    const originalAddMessage = window.addMessage;
-    if (originalAddMessage) {
-        window.addMessage = function(...args) {
-            originalAddMessage(...args);
-            setTimeout(() => {
-                //renderMathInElement(document.body, { delimiters: [...] }); // same options
-            }, 100);
-        };
-    }
 </script>
 </body>
 </html>

@@ -1,4 +1,3 @@
-
 import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -79,462 +78,7 @@ except ModuleNotFoundError:
     LANGCHAIN_AVAILABLE = False
 
 
-import json
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-
-_SCIENCE_IMAGE_SYSTEM = (
-    "You convert a teacher's image request into a precise, renderable spec. Output ONLY "
-    "JSON, no prose. Pick the engine that renders the topic ACCURATELY:\n\n"
-    "- \"molecule\": a chemistry structure/bonding topic. Fields: smiles (valid SMILES), caption. "
-    "Examples: water=O, ethanol=CCO, ethene(C=C double bond)=C=C, CO2=O=C=O, methane=C, "
-    "ammonia=N, benzene=c1ccccc1, glucose=OCC1OC(O)C(O)C(O)C1O.\n"
-    "- \"reaction\": a chemical reaction. Fields: reaction_smiles (reactants>>products), caption. "
-    "Example combustion of methane: C.O=O>>O=C=O.O\n"
-    "- \"plot\": a physics/math graph. Fields: plot = {title, xlabel, ylabel, expression "
-    "(numpy in x, e.g. 'x**2' or 'sin(x)'), xmin, xmax}.\n"
-    "- \"flow\": a process/cycle/steps diagram (nitrogen cycle, respiration, food chain). "
-    "Fields: mermaid (a valid Mermaid 'flowchart TD' block), caption.\n"
-    "- \"diffusion\": anything with NO exact renderer — biology anatomy (cell, heart, organs), "
-    "real-world scenes, apparatus, ecosystems. Field: caption.\n\n"
-    "Return {\"engine\": \"...\", ...fields...}. Base facts on standard curriculum; be exact. "
-    "Prefer molecule/reaction/plot/flow whenever the topic fits; use diffusion only when none do."
-)
-
-from docx import Document as DocxDocument
-# s15_cm8912_12.4_Bioenergetics_2_Biomass  Biofuels.docx -> Grade 12 Biology lesson notes
-DOCX_NAME_RE = re.compile(r"^s\d+_cm\d+_(?P<module>1[012]\.\d+)_(?P<topic>.+)$", re.IGNORECASE)
-
-def parse_docx_curriculum_filename(path: str) -> dict:
-    """Grade 12 Biology lesson-note docx: sNN_cmNNNN_12.X_Module_Topic.docx."""
-    stem = os.path.splitext(os.path.basename(path or ""))[0]
-    info = {"file": os.path.basename(path or ""), "subject": "Biology",
-            "grade": "Grade 12", "term": "Unknown", "doctype": "Lesson Notes", "priority": 2}
-    m = DOCX_NAME_RE.match(stem.strip())
-    if m:
-        topic = m.group("topic").replace("_", " ").strip()
-        info["module"] = m.group("module")
-        info["topic"] = topic
-    return info
-
-
-def _load_docx_text(path):
-    try:
-        from docx import Document as _DocxDocument
-        d = _DocxDocument(path)
-        return "\n".join(p.text for p in d.paragraphs if p.text.strip())
-    except Exception as exc:
-        print(f"  [skip docx] {os.path.basename(path)}: {exc}")
-        return ""
-
-def classify_science_image(subject: str, ctx: str = "") -> dict:
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
-        return {"engine": "diffusion", "caption": subject}
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        human = f"Request: {subject}"
-        if ctx:
-            human += f"\n\nCurriculum context (ground facts in this):\n{_clean_pdf_artifacts(ctx)[:1800]}"
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=_SCIENCE_IMAGE_SYSTEM),
-            HumanMessage(content=human),
-        ])
-        raw = (resp.content if hasattr(resp, "content") else str(resp)).strip()
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
-        spec = json.loads(raw)
-        print(f"[image] engine={spec.get('engine')}")
-        return spec
-    except Exception as exc:
-        print(f"[image] classify failed: {exc}")
-        return {"engine": "diffusion", "caption": subject}
-
-_EMPTY_TOPIC_SIGNALS = {"", "questions", "question", "quiz", "them", "it", "these",
-                        "some", "more", "another", "the topic", "this", "that"}
-
-
-
-
-_QTYPE_INSTRUCTIONS = {
-    "mcq": "Write multiple-choice questions, each with a stem and four options A-D, exactly one correct.",
-    "short_answer": "Write short-answer questions, each answerable in 1-3 sentences.",
-    "fill_blank": "Write fill-in-the-blank questions with a _______ where the key term goes.",
-    "true_false": "Write true/false statements, a balanced mix of true and false.",
-    "essay": "Write essay questions asking students to explain, compare, or evaluate; give a brief marking guide.",
-}
-
-_QUESTION_SYSTEM = (
-    "You are a PNG curriculum specialist writing assessment questions for a teacher.\n\n"
-    "RULES:\n"
-    "- Base questions ONLY on the curriculum material provided. Do not test facts not in it.\n"
-    "- Produce EXACTLY {count} questions, numbered 1..{count}.\n"
-    "- {type_instruction}\n"
-    "- After the questions add a '## Answer Key' section with the answer to each.\n"
-    "- Clean Markdown. No preamble, no closing remarks. Begin with a '# ' title.\n\n"
-    "Audience guidance: {audience}"
-)
-
-
-def generate_questions_grounded(message, access_role, spec, curriculum):
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm) and curriculum):
-        return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        system = _QUESTION_SYSTEM.format(
-            count=spec["count"],
-            type_instruction=_QTYPE_INSTRUCTIONS.get(spec["type"], _QTYPE_INSTRUCTIONS["mcq"]),
-            audience=build_role_instruction(access_role))
-        material = _clean_pdf_artifacts(curriculum["context"])
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=f"Request: {message}\n\nCurriculum material (the ONLY source):\n{material}"),
-        ])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[questions] grounded failed: {exc}")
-        return ""
-
-def get_recent_turns_text(session_id: str, n: int = 6) -> str:
-    """Last n turns (user + assistant) as text, for LLM topic resolution."""
-    history = SESSION_CHAT_HISTORY.get(session_id, [])
-    turns = history[-(n + 1):-1] if len(history) > 1 else []
-    lines = []
-    for t in turns:
-        role = "User" if t.get("role") == "user" else "Nexa"
-        content = (t.get("content") or "").strip()
-        if content:
-            lines.append(f"{role}: {content[:400]}")
-    return "\n".join(lines)
-
-def generate_questions_direct(message, access_role, spec):
-    if not (LANGCHAIN_AVAILABLE and llm is not None):
-        return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        system = _QUESTION_SYSTEM.format(
-            count=spec["count"],
-            type_instruction=_QTYPE_INSTRUCTIONS.get(spec["type"], _QTYPE_INSTRUCTIONS["mcq"]),
-            audience=build_role_instruction(access_role))
-        resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=message)])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[questions] direct failed: {exc}")
-        return ""
-
-def extract_question_spec_llm(message: str, reply_context: str = "",
-                              history_topic: str = "", recent_conversation: str = "") -> dict:
-    """LLM extracts question type, count, and topic. Resolves 'this'/'that'/'as well'
-    from the quoted reply or recent conversation. No regex."""
-    fallback = {"type": "mcq", "count": 10, "topic": ""}
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
-        return fallback
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        import json as _json
-        ctx = ""
-        if reply_context:
-            ctx += ("\n\nThe user is replying to this earlier text (use it as the topic if the "
-                    f"message says 'this'/'that'/'it'):\n{reply_context[:1500]}")
-        if recent_conversation:
-            ctx += ("\n\nRecent conversation (use this to resolve the topic when the message says "
-                    "'as well', 'more', 'also', 'same', 'this', or continues a previous request "
-                    f"without naming a new topic):\n{recent_conversation}")
-        if history_topic:
-            ctx += f"\n\nMost recent topic discussed: {history_topic}"
-        system = (
-            "Extract assessment-question details from the user's request. Output ONLY JSON:\n"
-            '{"type": "...", "count": N, "topic": "..."}\n\n'
-            "- type: one of mcq, short_answer, fill_blank, true_false, essay. Default mcq.\n"
-            "- count: the number requested (default 10).\n"
-            "- topic: the subject of the questions. If the request says 'as well', 'more', "
-            "'also', 'this', 'that', or otherwise continues without naming a new topic, use the "
-            "topic from the recent conversation or the quoted reply. Only use empty string if "
-            "there is genuinely no topic anywhere in the request or context.\n"
-            "Output only the JSON object."
-        )
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=f"Request: {message}{ctx}"),
-        ])
-        raw = (resp.content if hasattr(resp, "content") else str(resp)).strip()
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
-        data = _json.loads(raw)
-        t = str(data.get("type", "mcq")).lower().strip()
-        if t not in ("mcq", "short_answer", "fill_blank", "true_false", "essay"):
-            t = "mcq"
-        c = data.get("count", 10)
-        try:
-            c = int(c)
-        except Exception:
-            c = 10
-        c = max(1, min(50, c))
-        return {"type": t, "count": c, "topic": str(data.get("topic", "")).strip()}
-    except Exception as exc:
-        print(f"[questions] spec extract failed: {exc}")
-        return fallback
-
-
-def _looks_topicless(topic: str) -> bool:
-    t = (topic or "").strip().lower()
-    return t in _EMPTY_TOPIC_SIGNALS or len(t) < 3
-
-
-def infer_topic_from_history(session_id: str) -> str:
-    """Most recent substantive topic the user raised this session."""
-    history = SESSION_CHAT_HISTORY.get(session_id, [])
-    for turn in reversed(history[:-1]):
-        if turn.get("role") != "user":
-            continue
-        text = (turn.get("content") or "").strip()
-        if _is_question_request(text) or _is_lesson_request(text.lower()):
-            continue
-        topic = re.sub(
-            r"\b(can you|could you|please|explain|what is|what are|tell me about|"
-            r"describe|define|how does|how do|the)\b", " ", text.lower())
-        topic = re.sub(r"[?.!]", " ", topic)
-        topic = re.sub(r"\s{2,}", " ", topic).strip()
-        if topic and len(topic) >= 3:
-            return topic
-    return ""
-
-
-def _render_molecule(smiles: str, caption: str, out_path: str) -> bool:
-    try:
-        from rdkit import Chem
-        from rdkit.Chem.Draw import rdMolDraw2D
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            print(f"[image] invalid SMILES {smiles!r}")
-            return False
-        d = rdMolDraw2D.MolDraw2DCairo(800, 600)
-        rdMolDraw2D.PrepareAndDrawMolecule(d, mol, legend=caption or "")
-        d.FinishDrawing()
-        with open(out_path, "wb") as f:
-            f.write(d.GetDrawingText())
-        return True
-    except Exception as exc:
-        print(f"[image] molecule render failed: {exc}")
-        return False
-
-def classify_intent(message: str, has_document: bool = False, has_reply_context: bool = False) -> str:
-    """Model decides the message type. Returns one of:
-    smalltalk, curriculum, general, generate_questions, generate_lesson,
-    generate_image, document_or_reply, other."""
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
-        return "curriculum"
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        context_note = ""
-        if has_document:
-            context_note += ("\nNOTE: the user has just uploaded a document this session. "
-                             "If the message refers to 'this document', 'the file', 'this', or "
-                             "asks to explain/summarize it, classify as document_or_reply.")
-        if has_reply_context:
-            context_note += ("\nNOTE: the user is replying to a previous Nexa message (quoted). "
-                             "If the message says 'this', 'that', 'it', 'explain this', 'elaborate', "
-                             "referring to that quoted reply, classify as document_or_reply.")
-        system = (
-            "Classify the user's message into exactly ONE category. Reply with ONLY the "
-            "category word, nothing else.\n\n"
-            "- document_or_reply: the message asks about an uploaded document or a quoted "
-            "previous reply ('explain this', 'what does this document contain', 'elaborate on "
-            "that', 'summarize the file').\n"
-            "- generate_questions: asking to CREATE quiz/test/assessment questions of any kind "
-            "(multiple choice, short answer, fill in the blank, true/false, essay), however phrased.\n"
-            "- generate_lesson: asking to CREATE a lesson plan.\n"
-            "- generate_image: asking to CREATE/draw/generate/show an image, picture, or diagram.\n"
-            "- curriculum: a question about an academic science topic that a school biology, "
-            "chemistry, or physics curriculum would cover.\n"
-            "- general: a factual or general-knowledge question NOT specific to the science "
-            "curriculum (history, geography, current events, people, everyday facts).\n"
-            "- smalltalk: greetings, thanks, 'how are you', chit-chat, or personal questions to "
-            "the assistant — ONLY when the message is not asking for information or content.\n"
-            "- other: none of the above.\n\n"
-            "Decide by the user's actual intent, not by keywords. Reply with one word."
-            + context_note
-        )
-        model = llm_precise or llm
-        resp = model.invoke([SystemMessage(content=system), HumanMessage(content=message)])
-        raw = (resp.content if hasattr(resp, "content") else str(resp)).strip().lower()
-        for cat in ("document_or_reply", "generate_questions", "generate_lesson",
-                    "generate_image", "curriculum", "general", "smalltalk", "other"):
-            if cat in raw:
-                return cat
-        return "curriculum"
-    except Exception as exc:
-        print(f"[intent] classify failed: {exc}")
-        return "curriculum"
-
-
-def build_conversational_reply(message: str, name: str = "") -> str:
-    if not (LANGCHAIN_AVAILABLE and llm is not None):
-        return "I'm doing well, thanks! What would you like to learn about today?"
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        who = f" The student's name is {name}." if name else ""
-        system = (
-            "You are Nexa, a warm, friendly educational assistant for PNG students." + who +
-            " Reply naturally and briefly to casual conversation, then gently invite them to "
-            "ask about their studies. 1-2 sentences. No markdown headings."
-        )
-        resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=message)])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception:
-        return "I'm doing well, thanks for asking! What would you like to learn about today?"
-
-def _render_reaction(reaction_smiles: str, out_path: str) -> bool:
-    try:
-        from rdkit.Chem import AllChem
-        from rdkit.Chem.Draw import rdMolDraw2D
-        rxn = AllChem.ReactionFromSmarts(reaction_smiles, useSmiles=True)
-        d = rdMolDraw2D.MolDraw2DCairo(1000, 400)
-        d.DrawReaction(rxn)
-        d.FinishDrawing()
-        with open(out_path, "wb") as f:
-            f.write(d.GetDrawingText())
-        return True
-    except Exception as exc:
-        print(f"[image] reaction render failed: {exc}")
-        return False
-
-def _clean_pdf_artifacts(text: str) -> str:
-    t = text or ""
-    t = re.sub(r"^\s*\d+\s*\|\s*P\s*a\s*g\s*e\s*$", "", t, flags=re.MULTILINE)
-    t = re.sub(r"\[SOURCE:[^\]]*\]", "", t)
-    t = re.sub(r"https?://\S+", "", t)
-    t = re.sub(r"[ \t]{2,}", " ", t)
-    t = re.sub(r"\n{3,}", "\n\n", t)
-    return t.strip()
-
-_CURRICULUM_FORMAT_SYSTEM = (
-    "You are Nexa, reformatting official curriculum material into a clear answer for a student.\n\n"
-    "RULES:\n"
-    "- Use ONLY the information in the material below. Do NOT add facts or outside knowledge.\n"
-    "- Do NOT omit substantive information; cover every key point.\n"
-    "- Remove PDF artifacts (page markers like '2 | P a g e', footnote numbers, broken spacing, URLs).\n"
-    "- Clean Markdown: a short opening sentence, then headings, bold terms, and bullet lists.\n"
-    "- Do NOT greet or name the student. No preamble or closing question.\n"
-    "- Do NOT mention the source, page numbers, grade, or term. Begin directly with the answer.\n\n"
-    "Audience guidance: {audience}"
-)
-
-def answer_over_context(message: str, context_text: str, access_role: str, kind: str = "document") -> str:
-    """Answer a question using the provided context (uploaded document or a quoted
-    previous reply), not the curriculum. Used for 'explain this', 'what does this
-    document contain', 'elaborate on that', etc."""
-    if not (LANGCHAIN_AVAILABLE and llm is not None) or not context_text.strip():
-        return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        label = "an uploaded document" if kind == "document" else "your previous reply"
-        system = (
-            f"You are Nexa, an educational assistant. The user is asking about {label}, "
-            "provided below. Answer their request using ONLY that content — explain, summarize, "
-            "or elaborate as asked. Clean Markdown. Do not invent facts beyond the content. "
-            f"Audience: {build_role_instruction(access_role)}"
-        )
-        resp = llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=f"Content:\n{context_text[:6000]}\n\nUser request: {message}"),
-        ])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[context-answer] failed: {exc}")
-        return ""
-
-def answer_from_curriculum(message: str, access_role: str) -> dict:
-    query = strip_output_format_noise(message) or message
-    scope = parse_lesson_request_scope(message)
-    curriculum = retrieve_curriculum_context(query, scope)
-    if not curriculum:
-        print(f"[curriculum] NO hit for {query!r}")
-        return None
-    material = _clean_pdf_artifacts(curriculum["context"])
-    if not material:
-        return None
-    if not (LANGCHAIN_AVAILABLE and (llm_precise is not None or llm is not None)):
-        return {"answer": material}
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=_CURRICULUM_FORMAT_SYSTEM.replace("{audience}", build_role_instruction(access_role))),
-            HumanMessage(content=f"Student's question: {message}\n\nCurriculum material:\n{material}"),
-        ])
-        formatted = (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[curriculum] reformat failed: {exc}")
-        return {"answer": material}
-    if not formatted or looks_like_model_refusal(formatted):
-        return {"answer": material}
-    return {"answer": formatted}
-
-
-def _render_plot(spec: dict, out_path: str) -> bool:
-    try:
-        import numpy as np
-        xmin = float(spec.get("xmin", -10)); xmax = float(spec.get("xmax", 10))
-        x = np.linspace(xmin, xmax, 400)
-        expr = spec.get("expression", "x")
-        safe = {"x": x, "np": np, "sin": np.sin, "cos": np.cos, "tan": np.tan,
-                "exp": np.exp, "log": np.log, "sqrt": np.sqrt, "pi": np.pi, "abs": np.abs}
-        y = eval(expr, {"__builtins__": {}}, safe)
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.plot(x, y, linewidth=2)
-        ax.set_title(spec.get("title", "")); ax.set_xlabel(spec.get("xlabel", "x"))
-        ax.set_ylabel(spec.get("ylabel", "y")); ax.grid(True, alpha=0.3)
-        ax.axhline(0, color="black", lw=0.5); ax.axvline(0, color="black", lw=0.5)
-        fig.savefig(out_path, dpi=120, bbox_inches="tight"); plt.close(fig)
-        return True
-    except Exception as exc:
-        print(f"[image] plot render failed: {exc}")
-        return False
-
-
-def _render_flow(mermaid_src: str, out_path: str) -> bool:
-    try:
-        import subprocess, tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".mmd", delete=False) as f:
-            f.write(mermaid_src); mmd = f.name
-        subprocess.run(["mmdc", "-i", mmd, "-o", out_path, "-b", "white"],
-                       check=True, timeout=30, capture_output=True)
-        os.unlink(mmd)
-        return True
-    except Exception as exc:
-        print(f"[image] flow render failed (mmdc installed?): {exc}")
-        return False
-
-
-def render_science_image(subject: str, out_path: str, ctx: str = "") -> dict:
-    """Try an exact renderer; fall back to a curriculum-grounded diffusion prompt.
-
-    Returns {"ready": True, "engine", "caption"}  when a file was written now,
-    or      {"ready": False, "engine": "diffusion", "prompt", "caption"}  to diffuse.
-    """
-    spec = classify_science_image(subject, ctx)
-    engine = spec.get("engine", "diffusion")
-    caption = spec.get("caption", subject)
-
-    ok = False
-    if engine == "molecule":
-        ok = _render_molecule(spec.get("smiles", ""), caption, out_path)
-    elif engine == "reaction":
-        ok = _render_reaction(spec.get("reaction_smiles", ""), out_path)
-    elif engine == "plot":
-        ok = _render_plot(spec.get("plot", spec), out_path)
-    elif engine == "flow":
-        ok = _render_flow(spec.get("mermaid", ""), out_path)
-
-    if ok:
-        return {"ready": True, "engine": engine, "caption": caption}
-
-    # diffusion fallback (engine==diffusion, or an exact renderer failed)
-    prompt = build_curriculum_image_prompt(subject, ctx) if ctx else \
-        build_image_generation_prompt(subject, "no_text", "")
-    return {"ready": False, "engine": "diffusion", "prompt": prompt, "caption": caption}
+IMAGE_DGX_URL = "http://100.92.95.83:9000"
 
 def _clean_md_text(text: str) -> str:
     return re.sub(r"[\*_`~<>]", "", text or "")
@@ -616,115 +160,37 @@ def save_text_to_pdf(path: str, text: str) -> None:
         f.write(b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n' % (len(objects) + 1))
         f.write(f'{xref_offset}\n%%EOF\n'.encode('latin-1'))
 
+# ====================== CONFIG ======================
 WORKSPACE_DIR = os.path.dirname(__file__)
-import glob
 
-CURRICULUM_DIR = WORKSPACE_DIR
+PDF_PATHS = [
+    os.path.join(WORKSPACE_DIR, "gr12Ente3.pdf"),
+    os.path.join(WORKSPACE_DIR, "gr13Phyte3.pdf"),
+    os.path.join(WORKSPACE_DIR, "Gr12te3.pdf"),
 
+    # STEM Biology
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGY-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEMBIOLOGYTG.pdf"),
 
+    # STEM Chemistry
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-CHEMISTRY-Syllabus.pdf"),
 
-# STEMBio-Term1-StudentGuide-Gr12.pdf  ->  subject/term/doctype/grade
-CURRICULUM_NAME_RE = re.compile(
-    r"^STEM[\s_-]*(?P<subject>[A-Za-z]+)"
-    r"[\s_-]*Term[\s_-]*(?P<term>\d+)"
-    r"[\s_-]*(?P<doctype>[A-Za-z]+)"
-    r"[\s_-]*Gr[\s_-]*(?P<grade>\d{1,2})$",
-    re.IGNORECASE,
-)
+    # STEM Engineering
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-ENGINEERING-TG.pdf"),
 
-SUBJECT_CODE_MAP = {
-    "bio": "Biology", "biology": "Biology",
-    "chem": "Chemistry", "chemistry": "Chemistry",
-    "physics": "Physics", "phy": "Physics",
-    "eng": "Engineering", "engineering": "Engineering",
-    "tech": "Technology", "technology": "Technology",
-    "maths": "Mathematics", "math": "Mathematics",
-}
-
-DOCTYPE_MAP = {
-    "studentguide": "Student Guide",
-    "teacherguide": "Teacher Guide",
-    "syllabus": "Syllabus",
-    "syllubus": "Syllabus",   # two files are spelled this way
-    "srb": "Student Guide",
-    "trb": "Teacher Guide",
-    "tg": "Teacher Guide",
-}
-
-# Syllabus defines the outcomes, so it outranks the guides during retrieval.
-DOCTYPE_PRIORITY = {"Syllabus": 3, "Teacher Guide": 2, "Student Guide": 1}
-
-
-def parse_curriculum_filename(path: str) -> dict:
-    """Extract subject/term/grade/doctype from a curriculum filename."""
-    stem = os.path.splitext(os.path.basename(path or ""))[0]
-    info = {"file": os.path.basename(path or ""), "subject": "", "grade": "",
-            "term": "", "doctype": "", "priority": 0}
-
-    match = CURRICULUM_NAME_RE.match(stem.strip())
-    if match:
-        subject_key = match.group("subject").lower()
-        doctype_key = match.group("doctype").lower()
-        info["subject"] = SUBJECT_CODE_MAP.get(subject_key, match.group("subject").title())
-        info["grade"] = f"Grade {int(match.group('grade'))}"
-        info["term"] = f"Term {int(match.group('term'))}"
-        info["doctype"] = DOCTYPE_MAP.get(doctype_key, match.group("doctype").title())
-        info["priority"] = DOCTYPE_PRIORITY.get(info["doctype"], 1)
-        return info
-
-    # Legacy fallbacks (gr12Ente3.pdf, STEMBIOLOGY-SRB.pdf, ...)
-    flat = stem.lower().replace("-", "").replace("_", "").replace(" ", "")
-    m = re.search(r"gr(?:ade)?(9|1[0-3])", flat)
-    if m:
-        info["grade"] = f"Grade {m.group(1)}"
-    for key, subject in SUBJECT_CODE_MAP.items():
-        if key in flat:
-            info["subject"] = subject
-            break
-    for key, doctype in DOCTYPE_MAP.items():
-        if key in flat:
-            info["doctype"] = doctype
-            info["priority"] = DOCTYPE_PRIORITY.get(doctype, 1)
-            break
-    return info
-
-def _is_vague_image_subject(message: str) -> bool:
-    """True when the image request names no concrete subject of its own."""
-    stripped = re.sub(
-        r"\b(generate|create|make|draw|show|an?|image|picture|photo|illustration|diagram|"
-        r"of|for|related|to|the|topic|this|that|it|please|can you|about|above|lesson)\b",
-        " ", (message or "").lower())
-    return len(stripped.strip()) < 4
-
-
-def generate_questions_from_text(message, access_role, spec, source_text):
-    """Generate questions grounded in provided text (a quoted reply), not curriculum retrieval."""
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
-        return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        system = _QUESTION_SYSTEM.format(
-            count=spec["count"],
-            type_instruction=_QTYPE_INSTRUCTIONS.get(spec["type"], _QTYPE_INSTRUCTIONS["mcq"]),
-            audience=build_role_instruction(access_role))
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=f"Request: {message}\n\nBase the questions ONLY on this material:\n{source_text[:4000]}"),
-        ])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[questions] from-text failed: {exc}")
-        return ""
-
-def discover_curriculum_files() -> list:
-    files = sorted(glob.glob(os.path.join(CURRICULUM_DIR, "*.pdf")))
-    return [f for f in files if os.path.isfile(f)]
-
-
-PDF_PATHS = discover_curriculum_files()
-CURRICULUM_INDEX = {p: parse_curriculum_filename(p) for p in PDF_PATHS}
-
+    # STEM Technology
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-SRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-TRB.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-Syllabus.pdf"),
+    os.path.join(WORKSPACE_DIR, "STEM-TECHNOLOGY-TG.pdf"),
+]
 
 INDEX_PATH = os.path.join(WORKSPACE_DIR, "index.html")
 
@@ -745,12 +211,6 @@ IMAGE_STATUS: Dict[str, str] = {}
 USER_MEMORY: Dict[str, Dict[str, str]] = {}
 
 SESSION_DOCUMENT_BUFFER: Dict[str, str] = {}
-
-
-IMAGE_RUNTIME_AVAILABLE = True
-IMAGE_FEATURE_ENABLED = True
-
-IMAGE_DGX_URL = "http://100.92.95.83:9000"
 
 DB_CONFIG = {
     "host": os.getenv("NEXA_DB_HOST", "127.0.0.1"),
@@ -816,484 +276,11 @@ class SharedChatResponse(BaseModel):
     messages: Any
 
 
-
 # Server-side stack to mirror push/pop operations done by the UI.
 chat_stack = []
 CHAT_CANCELLED_TURNS: set[str] = set()
 USER_MEMORY_FILE = os.path.join(os.path.dirname(__file__), "user_memory.json")
 
-SESSION_PENDING_QUESTION = {}
-# ====================== MISSING HELPERS ======================
-
-_LLM_CHATTER_PATTERNS = (
-    r"^\s*(?:sure|certainly|of course|absolutely|great|okay|ok)[!,.]?[^\n]*\n+",
-    r"^\s*here(?:'s| is| are)\b[^\n]*\n+",
-    r"^\s*i(?:'ve| have| will| 'll)?\s*(?:created|prepared|written|drafted|put together|made)\b[^\n]*\n+",
-    r"^\s*below is\b[^\n]*\n+",
-    r"^\s*as (?:an ai|a language model)\b[^\n]*\n+",
-    r"\n+\s*let me know if\b[^\n]*$",
-    r"\n+\s*i hope this helps\b[^\n]*$",
-    r"\n+\s*feel free to\b[^\n]*$",
-    r"\n+\s*would you like me to\b[^\n]*$",
-)
-
-_QTYPE_PATTERNS = [
-    ("mcq",          r"\b(mcq|multiple[-\s]?choice|multiple choice question)\b"),
-    ("fill_blank",   r"\b(fill[-\s]?in[-\s]?the[-\s]?blank|fill[-\s]?ups?|cloze)\b"),
-    ("true_false",   r"\b(true[/\s]?(or)?[/\s]?false|true and false|t/?f)\b"),
-    ("essay",        r"\b(essay|long[-\s]?answer|extended[-\s]?response|discussion question)\b"),
-    ("short_answer", r"\b(short[-\s]?answer|short[-\s]?response|brief answer)\b"),
-]
-
-_QUESTION_TRIGGER = re.compile(
-    r"\b(question|questions|quiz|mcq|multiple choice|fill[-\s]?in|true[/\s]?false|"
-    r"essay|short[-\s]?answer|worksheet|test items?)\b", re.IGNORECASE)
-
-_GENERATE_TRIGGER = re.compile(
-    r"\b(generate|create|make|write|give me|prepare|set|produce|draft|come up with)\b",
-    re.IGNORECASE)
-
-
-def _is_question_request(message: str) -> bool:
-    text = message or ""
-    return bool(_QUESTION_TRIGGER.search(text) and _GENERATE_TRIGGER.search(text))
-
-PDF_LESSON_CSS = """
-body { font-family: sans-serif; font-size: 10.5pt; color: #1f2937; line-height: 1.5; }
-h1 { font-size: 19pt; color: #0f172a; margin-bottom: 10px; }
-h2 { font-size: 13.5pt; color: #1e3a8a; margin-top: 16px; margin-bottom: 6px; }
-h3 { font-size: 11.5pt; color: #334155; margin-top: 12px; margin-bottom: 4px; }
-p  { margin-top: 4px; margin-bottom: 8px; }
-li { margin-top: 2px; margin-bottom: 2px; }
-strong { color: #1e3a8a; }
-table { width: 100%; }
-th { background-color: #dbeafe; color: #1d4ed8; text-align: left; padding: 5px; }
-td { padding: 5px; }
-code { font-family: monospace; font-size: 9.5pt; color: #3730a3; }
-blockquote { color: #475569; margin-left: 12px; }
-"""
-
-
-_GROUNDED_LESSON_SYSTEM = (
-    "You are a PNG curriculum specialist writing a classroom-ready lesson plan.\n\n"
-    "ABSOLUTE RULES:\n"
-    "- Use ONLY the curriculum excerpts supplied below. Do not add outside knowledge or "
-    "activities the excerpts do not support.\n"
-    "- Every objective, key concept, and vocabulary item must be traceable to the excerpts.\n"
-    "- State the grade exactly as the excerpts state it.\n"
-    "- Never ask the user clarifying questions. Never address the user by name. No preamble "
-    "or closing remark. Begin with the # title and nothing else.\n\n"
-    "Structure (clean Markdown):\n"
-    "# [Lesson Title]\n## Overview\n## Learning Objectives\n## Key Concepts and Vocabulary\n"
-    "## Materials\n## Lesson Structure\n### Introduction / Engagement\n"
-    "### Direct Instruction / Explanation\n### Guided Practice\n### Independent Practice\n"
-    "### Closure / Consolidation\n## Differentiation\n## Assessment\n"
-    "## Extension and Homework\n## Teacher Notes\n\n"
-    "Give a time estimate, teacher actions, and student actions for each lesson-structure "
-    "subsection.\n\nAudience guidance: {audience}"
-)
-
-
-def generate_lesson_plan_grounded(message: str, access_role: str, curriculum: dict) -> str:
-    """Lesson plan written strictly from curriculum excerpts."""
-    if not (LANGCHAIN_AVAILABLE and (llm_precise is not None or llm is not None) and curriculum):
-        return ""
-    try:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", _GROUNDED_LESSON_SYSTEM),
-            ("human",
-             "Teacher's request: {request}\n\n"
-             "Curriculum excerpts (the ONLY permitted source of content):\n{excerpts}"),
-        ])
-        model = llm_precise or llm
-        return (prompt | model | StrOutputParser()).invoke({
-            "request": message,
-            "excerpts": curriculum["context"],
-            "audience": build_role_instruction(access_role),
-        }).strip()
-    except Exception as exc:
-        print(f"[info] Grounded lesson plan generation failed: {exc}")
-        return ""
-
-
-_DIRECT_LESSON_SYSTEM = (
-    "You are an expert curriculum designer producing a professional, classroom-ready "
-    "lesson plan in clean Markdown.\n\n"
-    "RULES:\n"
-    "- Never refuse, never mention copyright, never add conversational preamble or closing remarks.\n"
-    "- Never ask the user clarifying questions. If grade, duration, or subject are not stated, "
-    "choose sensible values.\n"
-    "- Never address the user by name. Begin with the # title and nothing else.\n\n"
-    "Structure:\n"
-    "# [Lesson Title]\n## Overview\n## Learning Objectives\n## Key Concepts and Vocabulary\n"
-    "## Materials\n## Lesson Structure\n### Introduction / Engagement\n"
-    "### Direct Instruction / Explanation\n### Guided Practice\n### Independent Practice\n"
-    "### Closure / Consolidation\n## Differentiation\n## Assessment\n"
-    "## Extension and Homework\n## Teacher Notes\n\n"
-    "Give a time estimate, teacher actions, and student actions for each subsection.\n\n"
-    "Audience guidance: {audience}"
-)
-
-
-def generate_lesson_plan_direct(message: str, access_role: str) -> str:
-    """Fallback: LLM-generated lesson plan when the topic is not in the curriculum."""
-    if not (LANGCHAIN_AVAILABLE and llm is not None):
-        return ""
-    try:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", _DIRECT_LESSON_SYSTEM),
-            ("human", "{request}"),
-        ])
-        return (prompt | llm | StrOutputParser()).invoke({
-            "request": message,
-            "audience": build_role_instruction(access_role),
-        }).strip()
-    except Exception as exc:
-        print(f"[info] Direct lesson plan generation failed: {exc}")
-        return ""
-
-
-def strip_output_format_noise(text: str) -> str:
-    """Remove 'in PDF format', 'as a pdf', etc.
- 
-    Without this, 'lesson plan on X in PDF format' extracts a subject of
-    'PDF format??' instead of X.
-    """
-    cleaned = text or ""
-    cleaned = re.sub(
-        r"\b(in|as|to|into)\s+(a\s+|the\s+)?pdf(\s+(format|file|document|version))?\b",
-        " ", cleaned, flags=re.IGNORECASE,
-    )
-    cleaned = re.sub(r"\bpdf\b", " ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(please|can you|could you|generate|create|make|write|prepare)\b",
-                     " ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s{2,}", " ", cleaned)
-    return cleaned.strip(" ?.!,")
-
-
-MODEL_REFUSAL_SIGNALS = (
-    "i can't help", "i cannot help", "i can not help",
-    "copyrighted material", "copyright",
-    "i'm not able to", "i am not able to",
-    "i'm unable to", "i am unable to",
-    "i won't be able", "against my guidelines",
-    "is there anything else i can assist",
-)
- 
-
-def looks_like_model_refusal(text: str) -> bool:
-    body = (text or "").strip().lower()
-    if not body:
-        return True
-    if len(body) < 200 and any(s in body for s in MODEL_REFUSAL_SIGNALS):
-        return True
-    return any(s in body[:400] for s in MODEL_REFUSAL_SIGNALS)
- 
-
-def stamp_pdf_footer(path: str, footer_text: Optional[str] = None) -> bool:
-    """Draw a separator rule, the disclaimer, and 'Page N of M' on each page.
- 
-    Runs after the PDF is written. Returns False (leaving the PDF intact)
-    if PyMuPDF is unavailable or anything fails.
-    """
-    try:
-        import fitz  # PyMuPDF
-    except ModuleNotFoundError:
-        print("[info] PyMuPDF not available - skipping PDF footer")
-        return False
- 
-    text = (footer_text or GENERATION_DISCLAIMER).strip()
-    if text.upper().startswith("DISCLAIMER:"):
-        text = text.split(":", 1)[1].strip()
- 
-    tmp_path = f"{path}.tmp"
- 
-    try:
-        doc = fitz.open(path)
-        total_pages = doc.page_count
- 
-        for index, page in enumerate(doc, start=1):
-            rect = page.rect
-            margin = 36.0
-            baseline = rect.height - 52.0     # top of the footer band
- 
-            # Separator rule
-            page.draw_line(
-                fitz.Point(margin, baseline),
-                fitz.Point(rect.width - margin, baseline),
-                color=(0.78, 0.82, 0.88),
-                width=0.7,
-            )
- 
-            # Disclaimer text - wraps across up to three short lines
-            disclaimer_box = fitz.Rect(
-                margin, baseline + 5,
-                rect.width - margin - 70, rect.height - 14,
-            )
-            page.insert_textbox(
-                disclaimer_box, text,
-                fontsize=6.2, fontname="helv",
-                color=(0.42, 0.46, 0.52),
-                align=fitz.TEXT_ALIGN_LEFT,
-            )
- 
-            # Page number, right-aligned on the first footer line
-            page_box = fitz.Rect(
-                rect.width - margin - 68, baseline + 5,
-                rect.width - margin, baseline + 20,
-            )
-            page.insert_textbox(
-                page_box, f"Page {index} of {total_pages}",
-                fontsize=7.0, fontname="helv",
-                color=(0.30, 0.35, 0.42),
-                align=fitz.TEXT_ALIGN_RIGHT,
-            )
- 
-        doc.save(tmp_path, garbage=3, deflate=True)
-        doc.close()
-        os.replace(tmp_path, path)
-        return True
- 
-    except Exception as exc:
-        print(f"PDF footer stamping failed: {exc}")
-        try:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception:
-            pass
-        return False
- 
-CURRICULUM_MIN_SIMILARITY = float(os.getenv("NEXA_MIN_SIMILARITY", "0.15"))
-
-_TOPIC_STOPWORDS = {
-    "lesson", "plan", "create", "make", "write", "generate", "prepare", "teaching",
-    "grade", "term", "students", "student", "teacher", "about", "with", "from",
-    "that", "this", "have", "need", "want", "please", "topic", "unit", "using",
-    "based", "minutes", "minute", "hour", "hours", "subject", "school", "class",
-    "would", "could", "should", "pdf", "format", "document", "file", "official",
-    "curriculum", "syllabus",
-}
-
-
-def _content_keywords(text: str) -> list:
-    tokens = re.findall(r"[a-z]{4,}", (text or "").lower())
-    seen, out = set(), []
-    for token in tokens:
-        if token in _TOPIC_STOPWORDS or token in seen:
-            continue
-        seen.add(token)
-        out.append(token)
-    return out
-
-
-def _keyword_hits(keywords: list, body: str) -> set:
-    low = (body or "").lower()
-    return {kw for kw in keywords if kw[:6] and kw[:6] in low}
-
-
-def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
-    """Grounded excerpts, narrowed to the requested grade/term/subject.
-
-    Returns None when the curriculum genuinely has nothing on the topic.
-    Coverage is decided by keyword overlap, not by an absolute vector score,
-    because embedding distances vary with the model and distance metric.
-    """
-    if not LANGCHAIN_AVAILABLE:
-        return None
-
-    store = globals().get("vectorstore")
-    if store is None:
-        return None
-
-    scope = scope or {}
-    attempts = [
-        {"grade": scope.get("grade"), "term": scope.get("term"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade")},
-    ]
-    if not scope.get("grade"):
-        attempts.append({"subject": scope.get("subject")})
-        attempts.append({})
-
-    hits, used_filter = [], {}
-    for attempt in attempts:
-        active = {key: value for key, value in attempt.items() if value}
-        try:
-            raw = store.similarity_search_with_score(query, k=k, filter=_chroma_filter(active))
-        except Exception as exc:
-            print(f"[warn] filtered retrieval failed ({active}): {exc}")
-            continue
-        if raw:
-            hits, used_filter = raw, active
-            break
-
-    if not hits:
-        return None
-
-    keywords = _content_keywords(query)
-
-    def _similarity(distance):
-        # Cosine space -> distance in [0, 2]. Anything larger means the
-        # collection is still on L2, so skip the absolute check.
-        if distance is None or distance > 2.0:
-            return None
-        return 1.0 - float(distance)
-
-    scored = []
-    for doc, distance in hits:
-        body = (getattr(doc, "page_content", "") or "").strip()
-        if not body:
-            continue
-        sim = _similarity(distance)
-        if sim is not None and sim < CURRICULUM_MIN_SIMILARITY:
-            continue
-        matched = _keyword_hits(keywords, body)
-        scored.append((doc, distance, sim, matched))
-
-    if not scored:
-        return None
-
-    meta0 = lambda d: (getattr(d, "metadata", {}) or {})
-    print("[retrieval] filter=%s query=%r" % (used_filter, query[:70]))
-    for doc, distance, sim, matched in scored[:5]:
-        m = meta0(doc)
-        print("   %-42s p.%-4s dist=%.3f sim=%s kw=%s"
-              % (m.get("file", "?"), m.get("page", "?"), distance,
-                 f"{sim:.3f}" if sim is not None else "n/a", sorted(matched)[:4]))
-
-    # Coverage gate: the topic must actually appear in the retrieved text.
-    if keywords and not any(matched for _, _, _, matched in scored):
-        print("[retrieval] no keyword overlap -> treating topic as not covered")
-        return None
-
-    # Chunks containing the topic first, then syllabus over guides, then distance.
-    scored.sort(key=lambda item: (
-        0 if item[3] else 1,
-        -DOCTYPE_PRIORITY.get(meta0(item[0]).get("doctype", ""), 0),
-        item[1],
-    ))
-
-    blocks, sources, grades, subjects, terms = [], [], [], [], []
-    for doc, _distance, _sim, _matched in scored[:10]:
-        meta = meta0(doc)
-        page = meta.get("page")
-        page_label = f" p.{int(page) + 1}" if isinstance(page, int) else ""
-        label = f"{meta.get('file', 'curriculum')}{page_label}"
-
-        blocks.append(
-            f"[SOURCE: {label} | {meta.get('subject','')} | {meta.get('grade','')} | "
-            f"{meta.get('term','')} | {meta.get('doctype','')}]\n{doc.page_content.strip()}")
-        if label not in sources:
-            sources.append(label)
-        for value, bucket in ((meta.get("grade"), grades),
-                              (meta.get("subject"), subjects),
-                              (meta.get("term"), terms)):
-            if value and value != "Unknown":
-                bucket.append(value)
-
-    def _most_common(values):
-        return max(set(values), key=values.count) if values else ""
-
-    return {
-        "context": "\n\n---\n\n".join(blocks),
-        "sources": sources,
-        "grade": scope.get("grade") or _most_common(grades),
-        "subject": scope.get("subject") or _most_common(subjects),
-        "term": scope.get("term") or _most_common(terms),
-        "filter_used": used_filter,
-        "chunks": len(blocks),
-    } 
-# ---------------------------------------------------------------------
-# MAIN ENTRY POINT - build a PDF from a Markdown answer
-# ---------------------------------------------------------------------
-def build_answer_pdf(answer: str, filename_prefix: str = "lesson") -> Optional[str]:
-    """Render a model answer to a styled, footered PDF.
- 
-    Returns the public /assets/... URL, or None if generation failed.
-    """
-    body = strip_llm_chatter(answer if isinstance(answer, str) else str(answer or ""))
-    if not body:
-        return None
- 
-    # Derive a real document title from the H1, or add one.
-    doc_title = "Nexa AI Document"
-    title_match = re.search(r"^#\s+(.+)$", body, flags=re.MULTILINE)
-    if title_match:
-        doc_title = title_match.group(1).strip()
-    else:
-        body = f"# {doc_title}\n\n{body}"
- 
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{filename_prefix}_{ts}.pdf"
-    path = os.path.join(IMAGE_OUTPUT_DIR, filename)
- 
-    try:
-        if MarkdownPdf is not None and Section is not None:
-            pdf = MarkdownPdf(toc_level=2)
-            pdf.meta["title"] = doc_title
-            pdf.meta["author"] = "NEXA AI"
-            pdf.meta["subject"] = "EduNeX generated document"
-            pdf.add_section(
-                Section(body, toc=True, borders=(36, 36, -36, -64)),
-                user_css=PDF_LESSON_CSS,
-            )
-            pdf.save(path)
-        else:
-            save_text_to_pdf(path, body)
- 
-        stamp_pdf_footer(path)
-        return f"/assets/{filename}"
- 
-    except Exception as pdf_error:
-        print(f"PDF generation failed: {pdf_error}")
-        try:
-            save_text_to_pdf(path, body)
-            stamp_pdf_footer(path)
-            return f"/assets/{filename}"
-        except Exception as fallback_error:
-            print(f"Fallback PDF generation failed: {fallback_error}")
-            return None
-
-
-def quick_reply(message: str, user_name: str = ""):
-    """Instant answers for greetings and trivial messages — no LLM call."""
-    m = (message or "").lower().strip().rstrip("!.?")
-    name = (user_name or "").strip()
-    first = name.split()[0] if name else ""
-
-    # Name questions — answered instantly when we know the name
-    if first and m in {"do you know my name", "what is my name", "whats my name",
-                       "what's my name", "who am i", "do you remember my name",
-                       "do you know who i am"}:
-        return f"Yes — you're {first}. How can I help you today?"
-
-    greetings = {"hi", "hello", "hey", "yo", "hi nexa", "hello nexa", "good morning",
-                 "good afternoon", "good evening", "morning", "afternoon", "greetings"}
-    thanks = {"thanks", "thank you", "thankyou", "cheers", "tenkyu", "ta", "thx"}
-    acks = {"ok", "okay", "cool", "nice", "good", "great", "alright", "sure", "got it"}
-    byes = {"bye", "goodbye", "see you", "later", "gotta go"}
-
-    # Greetings: exact match, OR a message that STARTS with a greeting and is short
-    # enough to be a pure greeting (so "hello nexa can you help me" greets, but
-    # "hello, explain photosynthesis in detail" falls through to a real answer).
-    greeting_starts = ("hello", "hi nexa", "hey", "good morning",
-                       "good afternoon", "good evening", "greetings")
-    is_greeting = (
-        m in greetings
-        or m in ("hi", "hey", "yo")
-        or (any(m.startswith(g) for g in greeting_starts) and len(m.split()) <= 6)
-    )
-    if is_greeting:
-        return (f"Hello {first}! I'm Nexa. What would you like to learn about today?"
-                if first else "Hello! I'm Nexa. What would you like to learn about today?")
-
-    if m in thanks:
-        return "You're welcome! Ask me anything else."
-    if m in acks:
-        return "👍 What would you like to explore next?"
-    if m in byes:
-        return "Goodbye! Come back anytime you need help with your studies."
-    return None
 
 def wrap_bare_latex(text: str) -> str:
     """Ensure LaTeX the model emitted without $ delimiters gets wrapped so KaTeX renders it.
@@ -1716,82 +703,32 @@ def analyze_image_text_intent(message: str):
     return ("no_text", "")
 
 
-
-_IMAGE_PROMPT_SYSTEM = (
-    "You are an expert at writing prompts for an AI image generator to produce accurate, "
-    "detailed educational illustrations. You are given curriculum material on a topic. "
-    "Write ONE rich, precise image prompt (4-7 sentences) describing exactly what the "
-    "illustration should show.\n\n"
-    "RULES:\n"
-    "- Ground every visual detail in the curriculum material — depict its specific structures, "
-    "parts, stages, and terminology, not a generic version.\n"
-    "- Be concrete and spatial: describe the main subject, each labelled part and where it sits, "
-    "the arrangement/layout, colours, proportions, and any directional flow or connections.\n"
-    "- Name the parts that should be visible and labelled, using the exact terms from the material.\n"
-    "- Specify a clear composition: single central subject on a plain background, viewed head-on, "
-    "everything clearly separated and legible.\n"
-    "- Scientifically correct: correct number of parts, correct relationships, correct proportions.\n"
-    "- Do NOT include unrelated objects, people, or decorative scenery.\n"
-    "- Output ONLY the prompt text — no preamble, no quotes, no explanation."
-)
-
-
-def build_curriculum_image_prompt(subject: str, curriculum_context: str) -> str:
-    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
-        return subject
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        material = _clean_pdf_artifacts(curriculum_context)[:3000]
-        model = llm_precise or llm
-        resp = model.invoke([
-            SystemMessage(content=_IMAGE_PROMPT_SYSTEM),
-            HumanMessage(content=f"Topic: {subject}\n\nCurriculum material:\n{material}"),
-        ])
-        built = (resp.content if hasattr(resp, "content") else str(resp)).strip()
-        # Precision-focused style suffix (positive cues that steer Qwen toward a clean diagram)
-        return (
-            f"{built} "
-            "Highly detailed, accurate scientific educational diagram, textbook illustration "
-            "style, clearly labelled parts, clean flat vector art, plain white background, "
-            "sharp lines, high clarity, correct proportions, well-composed and uncluttered, "
-            "suitable for a secondary school classroom."
-        )
-    except Exception as exc:
-        print(f"[image] curriculum prompt build failed: {exc}")
-        return subject
-
+def build_image_generation_prompt(message: str, intent: str, text: str) -> str:
+    if intent == "wants_text":
+        if text:
+            return (f'{message}. Clean professional design. IMPORTANT: display the exact text '
+                    f'"{text}", spelled correctly, sharp and clearly readable. No other text, '
+                    f'no random letters. High resolution.')
+        return (f"{message}. Clean professional design with the requested wording spelled "
+                f"correctly and clearly readable. No random or extra text. High resolution.")
+    return (f"{message}. Clean, high-quality illustration with NO text, NO words, NO letters, "
+            f"no captions, no labels, no watermark. High resolution.")
 
 def build_general_knowledge_answer(message: str) -> str:
     if looks_like_math(message) or looks_like_reasoning_question(message):
         return ""
 
-    # Explicit wiki/web requests still go to those sources.
-    lowered = (message or "").lower()
     query = build_web_results_query(message)
+    lowered = (message or "").lower()
+
     if "wikipedia" in lowered or "wiki" in lowered:
         return fetch_wikipedia_summary(query)
+
     if looks_like_web_query(message):
         return fetch_web_results(query)
 
-    # Otherwise answer from the LLM's own general knowledge (not web search).
-    if not (LANGCHAIN_AVAILABLE and llm is not None):
-        return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        system = (
-            "You are Nexa, a knowledgeable, friendly educational assistant for PNG students. "
-            "Answer the user's question clearly and accurately from your own knowledge, in clean "
-            "Markdown. Be concise and correct. If you are genuinely unsure of a fact, say so "
-            "briefly rather than inventing details."
-        )
-        resp = llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=message),
-        ])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[general] LLM answer failed: {exc}")
-        return ""
+    return ""
+
 
 def solve_simple_reasoning_question(message: str) -> str:
     text = (message or "").strip()
@@ -1959,181 +896,11 @@ NEXA_FAQ_ANSWERS = {
 
 }
 
-GRADE_RE = re.compile(r"\b(?:grade|gr|year)\s*\.?\s*(9|1[0-3])\b", re.IGNORECASE)
-TERM_RE = re.compile(r"\bterm\s*\.?\s*([1-4])\b", re.IGNORECASE)
-
-
-def parse_lesson_request_scope(message: str) -> dict:
-    """Pull grade / term / subject out of the teacher's request."""
-    text = (message or "")
-    scope = {"grade": "", "term": "", "subject": ""}
-
-    m = GRADE_RE.search(text)
-    if m:
-        scope["grade"] = f"Grade {m.group(1)}"
-    m = TERM_RE.search(text)
-    if m:
-        scope["term"] = f"Term {m.group(1)}"
-
-    lowered = text.lower()
-    for key, subject in SUBJECT_CODE_MAP.items():
-        if re.search(rf"\b{re.escape(key)}\b", lowered):
-            scope["subject"] = subject
-            break
-    return scope
-
-
-def _chroma_filter(pairs: dict):
-    clauses = [{k: {"$eq": v}} for k, v in pairs.items() if v]
-    if not clauses:
-        return None
-    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
-
-
-def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 12,
-                                min_score: float = 0.25):
-    """Grounded excerpts, narrowed to the requested grade/term/subject.
-
-    Returns None when the curriculum has nothing relevant — the caller must
-    refuse rather than let the model invent content.
-    """
-    if not LANGCHAIN_AVAILABLE:
-        return None
-
-    store = globals().get("vectorstore")
-    if store is None:
-        return None
-
-    scope = scope or {}
-    # Grade is a hard constraint when the teacher stated it. Term and subject
-    # relax first, so a Grade 11 request never returns Grade 12 material.
-    attempts = [
-        {"grade": scope.get("grade"), "term": scope.get("term"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade")},
-    ]
-    if not scope.get("grade"):
-        attempts.append({"subject": scope.get("subject")})
-        attempts.append({})
-
-    hits = []
-    used_filter = {}
-    for attempt in attempts:
-        active = {key: value for key, value in attempt.items() if value}
-        try:
-            raw = store.similarity_search_with_relevance_scores(
-                query, k=k, filter=_chroma_filter(active))
-        except Exception as exc:
-            print(f"[warn] filtered retrieval failed ({active}): {exc}")
-            continue
-        candidates = [(d, s) for d, s in raw if s is None or s >= min_score]
-        if candidates:
-            hits, used_filter = candidates, active
-            break
-
-    if not hits:
-        return None
-
-    # Syllabus chunks first, then by relevance.
-    def _rank(item):
-        doc, score = item
-        doctype = (doc.metadata or {}).get("doctype", "")
-        return (-DOCTYPE_PRIORITY.get(doctype, 0), -(score or 0))
-
-    hits.sort(key=_rank)
-
-    blocks, sources, grades, subjects, terms = [], [], [], [], []
-    for doc, _score in hits:
-        meta = doc.metadata or {}
-        body = (doc.page_content or "").strip()
-        if not body:
-            continue
-        page = meta.get("page")
-        page_label = f" p.{int(page) + 1}" if isinstance(page, int) else ""
-        label = f"{meta.get('file', 'curriculum')}{page_label}"
-
-        blocks.append(
-            f"[SOURCE: {label} | {meta.get('subject','')} | {meta.get('grade','')} | "
-            f"{meta.get('term','')} | {meta.get('doctype','')}]\n{body}")
-        if label not in sources:
-            sources.append(label)
-        for value, bucket in ((meta.get("grade"), grades),
-                              (meta.get("subject"), subjects),
-                              (meta.get("term"), terms)):
-            if value and value != "Unknown":
-                bucket.append(value)
-
-    if not blocks:
-        return None
-
-    def _most_common(values):
-        return max(set(values), key=values.count) if values else ""
-
-    return {
-        "context": "\n\n---\n\n".join(blocks),
-        "sources": sources,
-        "grade": scope.get("grade") or _most_common(grades),
-        "subject": scope.get("subject") or _most_common(subjects),
-        "term": scope.get("term") or _most_common(terms),
-        "filter_used": used_filter,
-        "chunks": len(blocks),
-    }
-
-
-def curriculum_coverage_summary() -> str:
-    """Human-readable list of what is actually indexed."""
-    coverage = {}
-    for info in CURRICULUM_INDEX.values():
-        if not info.get("subject") or not info.get("grade"):
-            continue
-        coverage.setdefault((info["subject"], info["grade"]), set()).add(
-            info.get("term") or "Term ?")
-    if not coverage:
-        return "no curriculum documents are currently indexed"
-    lines = []
-    for (subject, grade) in sorted(coverage):
-        terms = ", ".join(sorted(coverage[(subject, grade)]))
-        lines.append(f"- {subject}, {grade}: {terms}")
-    return "\n".join(lines)
-
-
 SESSION_PENDING_IMAGE: Dict[str, str] = {}
 
 def normalize_faq_query(message: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", "", expand_common_contractions(message or "").strip().lower())
 
-_NEXA_FAQ_NORMALIZED_CACHE: Dict[str, str] = {}
-
-
-def get_faq_normalized() -> Dict[str, str]:
-    """Built lazily: normalize_faq_query depends on expand_common_contractions,
-    which is defined further down this file."""
-    if not _NEXA_FAQ_NORMALIZED_CACHE:
-        for question, answer in NEXA_FAQ_ANSWERS.items():
-            _NEXA_FAQ_NORMALIZED_CACHE[normalize_faq_query(question)] = answer
-    return _NEXA_FAQ_NORMALIZED_CACHE
-
-FAQ_SELF_TOKENS = {
-    "nexa", "ai", "you", "your", "yours", "yourself", "u", "ur",
-    "this", "bot", "assistant", "system", "app", "tool", "chatbot",
-}
-
-FAQ_FILLER_TOKENS = {
-    "what", "who", "where", "when", "why", "how", "which", "is", "are",
-    "am", "do", "does", "did", "can", "could", "will", "would", "tell",
-    "me", "about", "a", "an", "the", "of", "for", "and", "to", "in", "on",
-    "made", "make", "created", "create", "built", "build", "owns", "own",
-    "behind", "creation", "from", "called", "name", "named", "really",
-    "good", "hi", "hello", "hey", "please", "so", "ok", "okay", "thanks",
-}
-
-
-def faq_residual_tokens(message: str) -> list:
-    """Words left after removing self-reference and question filler.
-    Anything remaining means the user is asking about a real topic."""
-    text = re.sub(r"[^a-z0-9\s]", " ", (message or "").lower())
-    return [t for t in text.split()
-            if t not in FAQ_SELF_TOKENS and t not in FAQ_FILLER_TOKENS]
 
 FAQ_ALIAS_TO_CANONICAL = {
     "tell me about": "tell me about nexa ai",
@@ -2366,58 +1133,21 @@ def llm_to_sympy(message: str):
         return None
 
 
-FAQ_SELF_TOKENS = {
-    "nexa", "ai", "you", "your", "yours", "yourself", "u", "ur",
-    "this", "bot", "assistant", "system", "app", "tool", "chatbot",
-}
-
-FAQ_FILLER_TOKENS = {
-    "what", "who", "where", "when", "why", "how", "which", "is", "are",
-    "am", "do", "does", "did", "can", "could", "will", "would", "tell",
-    "me", "my", "about", "a", "an", "the", "of", "for", "and", "to",
-    "in", "on", "made", "make", "created", "create", "built", "build",
-    "owns", "own", "behind", "creation", "from", "called", "name",
-    "named", "really", "good", "hi", "hello", "hey", "please", "so",
-    "ok", "okay", "thanks", "there", "any",
-}
-
-NEXA_SELF_QUESTION_PATTERNS = (
-    r"\bnexa\b",
-    r"\bedunex\b",
-    r"\bthis (?:ai|assistant|bot|chatbot|app|tool|system)\b",
-    r"\b(?:what|who) (?:are|is) you\b",
-    r"\bwho (?:made|created|built|owns|designed|developed) you\b",
-    r"\bwho is behind\b",
-    r"\bwhere (?:are you from|were you (?:created|made|built))\b",
-    r"\bwhy (?:were|was) you (?:created|made|built)\b",
-    r"\bwhat(?: is)? your (?:mission|purpose|name|goal|vision)\b",
-    r"\bhow do you work\b",
-)
-
-
-def faq_residual_tokens(message: str) -> list:
-    """Words left after stripping self-reference and question filler.
-    Anything remaining means the user is asking about a real topic."""
-    text = re.sub(r"[^a-z0-9\s]", " ", (message or "").lower())
-    return [t for t in text.split()
-            if t not in FAQ_SELF_TOKENS and t not in FAQ_FILLER_TOKENS]
-
-
 def query_is_about_nexa(message: str) -> bool:
-    """Open the FAQ gate only for genuine questions about the assistant.
-
-    A bare 'you' or 'can' is NOT enough - those appear in almost every
-    student question ('can you explain metabolism'), which is what made
-    curriculum questions return the canned NEXA AI description.
-    """
+    """FAQ entries are all about the assistant itself. Only treat a message as a
+    potential FAQ hit if it references Nexa or the assistant directly. This stops
+    curriculum questions (Newton's laws, photosynthesis, etc.) from being captured."""
     text = expand_common_contractions(message or "").lower()
+    self_reference_signals = (
+        "nexa", "you", "your", "yourself", "who made", "who created",
+        "who built", "who owns", "who is behind", "what are you",
+        "tell me about", "this ai", "this assistant", "this bot",
+    )
+    return any(signal in text for signal in self_reference_signals)
 
-    if any(re.search(pattern, text) for pattern in NEXA_SELF_QUESTION_PATTERNS):
-        return True
-
-    return not faq_residual_tokens(message)
 
 def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str:
+    # Gate: skip FAQ entirely for questions that are not about Nexa.
     if not query_is_about_nexa(message):
         return ""
 
@@ -2425,33 +1155,26 @@ def build_nexa_faq_answer(message: str, session_id: Optional[str] = None) -> str
     if not normalized:
         return ""
 
-    faq_map = get_faq_normalized()
-
-    # Exact match always wins.
-    if normalized in faq_map:
-        return faq_map[normalized]
-
-    residual = faq_residual_tokens(message)
-
-    if residual:
-        # Message carries a real topic (nutrition, metabolism, algebra...).
-        # Only a near-exact FAQ match may answer it. Otherwise hand off to RAG.
-        best_question, best_score = "", 0.0
-        for question in faq_map:
-            score = score_faq_match(normalized, question)
-            if score > best_score:
-                best_score, best_question = score, question
-        if best_question and best_score >= 0.90:
-            return faq_map[best_question]
-        return ""
-
-    # Purely self-referential ("what are you", "who made you") - loose match OK.
-    for question, answer in faq_map.items():
-        if normalized.startswith(question) or question in normalized:
+    # Exact / substring matches against the FAQ keys.
+    for question, answer in NEXA_FAQ_ANSWERS.items():
+        if normalized == question:
+            return answer
+        if normalized.startswith(question):
+            return answer
+        if question in normalized:
+            return answer
+        if normalized in question:
             return answer
 
-    return find_best_faq_answer(normalized, minimum_score=0.82)
+    # Stricter fuzzy match (was 0.68 — too loose, caused false hits).
+    fuzzy_answer = find_best_faq_answer(normalized, minimum_score=0.82)
+    if fuzzy_answer:
+        return fuzzy_answer
 
+    # NOTE: the old LLM fallback was removed. A small local model frequently
+    # returned a wrong FAQ instead of NO_MATCH, which is exactly what made
+    # "explain three laws of Newton" return the image-generation answer.
+    return ""
 
 def record_chat_turn(session_id: str, role: str, content: str) -> None:
     if session_id not in SESSION_CHAT_HISTORY:
@@ -2831,18 +1554,21 @@ def infer_access_role(email: Optional[str]) -> str:
     normalized_email = normalize_email_address(email)
     if not normalized_email or "@" not in normalized_email:
         raise HTTPException(status_code=400, detail="A valid email address is required")
-    _, _, domain = normalized_email.partition("@")
-    domain = domain.lower()
 
-    # Student domain MUST be checked first — it also ends with edunex.edu.pg,
-    # so checking the teacher domain first would misclassify students as teachers.
-    if domain == "stu.edunex.edu.pg" or domain.endswith(".stu.edunex.edu.pg"):
-        return "student"
-    if domain == "edunex.edu.pg" or domain.endswith(".edunex.edu.pg"):
+    local_part, _, domain = normalized_email.partition("@")
+    # Prefer the domain-based EduNex account rules:
+    # - teacher accounts use the education domain marker (e.g. yasaru.rathnasooriya@education.edu.pg)
+    # - student accounts use the edunex domain marker (e.g. yasaru.rathnasooriya@edunex.edu.pg)
+    # Keep the older local-part markers as a fallback so existing accounts still work.
+    if domain.startswith("education.") or ".education" in local_part:
         return "teacher"
+
+    if domain.startswith("edunex.") or ".edunex" in local_part:
+        return "student"
 
     # Fallback: default to student
     return "student"
+
 
 def build_role_instruction(role: str) -> str:
     if role == "teacher":
@@ -2868,323 +1594,182 @@ def extract_lesson_metadata(text: str) -> dict:
     meta: dict = {}
     if not text:
         return meta
- 
-    cleaned = strip_output_format_noise(text)
- 
+
     # Grade
-    m = re.search(r"\bgrade\s*(\d{1,2})\b", cleaned, flags=re.IGNORECASE)
+    m = re.search(r"grade\s*(\d{1,2})", text, flags=re.IGNORECASE)
     if m:
         meta["grade"] = f"Grade {m.group(1)}"
- 
+
     # Duration
-    m = re.search(r"(\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr))",
-                  cleaned, flags=re.IGNORECASE)
+    m = re.search(r"(\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr))", text, flags=re.IGNORECASE)
     if m:
         meta["duration"] = m.group(1)
- 
-    # Topic - now accepts 'related to', 'based on', 'covering', 'for', etc.
-    m = re.search(
-        r"(?:lesson plan|teaching plan|lesson)\s*"
-        r"(?:that is\s+|which is\s+)?"
-        r"(?:related to|relating to|based on|regarding|covering|concerning|about|on|for|in)\s+"
-        r"(.+?)$",
-        cleaned, flags=re.IGNORECASE,
-    )
+
+    # Topic / Subject
+    m = re.search(r"(?:lesson plan|create a lesson|make a lesson)\s*(?:on|about)\s+([^,\.\n]+)", text, flags=re.IGNORECASE)
     if m:
-        topic = m.group(1).strip(" ?.!,")
-        # Trim trailing qualifiers: 'for grade 11', 'for 40 minutes'
-        topic = re.split(r"\s+for\s+(?:grade|year|\d)", topic, flags=re.IGNORECASE)[0]
-        topic = re.sub(r"\s*\d+\s*(?:minutes|minute|mins|min|hours|hour|hrs|hr)\s*$",
-                       "", topic, flags=re.IGNORECASE).strip(" ?.!,")
-        if topic and 2 < len(topic) <= 80:
-            meta["topic"] = topic
+        topic = m.group(1).strip()
+        topic = re.split(r"\s+for\b", topic, flags=re.IGNORECASE)[0].strip()
+        meta["topic"] = topic
+        if len(topic.split()) <= 3:
             meta["subject"] = topic
- 
+    else:
+        m = re.search(r"in\s+([^,\.\n]+)\s*(?:for|grade|$)", text, flags=re.IGNORECASE)
+        if m:
+            meta["subject"] = m.group(1).strip()
+
     # Prerequisite
-    m = re.search(r"prereq(?:uisite)?s?:?\s*([^,\.\n]+)", cleaned, flags=re.IGNORECASE)
+    m = re.search(r"prereq(?:uisite)?s?:?\s*([^,\.\n]+)", text, flags=re.IGNORECASE)
     if m:
         meta["prerequisite"] = m.group(1).strip()
- 
+
     return meta
 
 
-_LEADING_CHATTER_RE = re.compile(
-    r"^\s*(?:"
-    r"(?:sure|certainly|of course|absolutely|great|okay|ok|alright|no problem)\b"
-    r"|here(?:'s| is| are)\b"
-    r"|below (?:is|are)\b"
-    r"|i(?:'ll| will| have|'ve| can)?\s*(?:create|created|prepare|prepared|write|"
-    r"wrote|written|draft|drafted|put together|made|make)\b"
-    r"|(?:based|building) on (?:our|the|your|previous|prior)\b"
-    r"|i think there(?:'s| is)\b"
-    r"|it (?:looks|seems|appears)\b"
-    r"|as (?:an ai|a language model)\b"
-    r"|(?:there(?:'s| is) (?:still )?a )?(?:small |slight |minor )?typo\b"
-    r"|thank(?:s| you)\b"
-    r"|good (?:question|point)\b"
-    r"|let me\b"
-    r"|happy to\b"
-    r")", re.IGNORECASE)
-
-_NAME_ADDRESS_RE = re.compile(r"^\s*[A-Z][A-Za-z'\-]{1,20},\s+")
-
-_CONTENT_START_RE = re.compile(r"^\s*(?:#{1,6}\s|\||[-*+]\s|\d+\.\s|>|\*\*)")
-
-
-def strip_llm_chatter(text) -> str:
-    """Drop preamble/postamble so only the document survives."""
-    body = (text if isinstance(text, str) else str(text or "")).strip()
-    if not body:
-        return ""
-    body = re.sub(r"^```(?:markdown|md)?\s*\n", "", body)
-    body = re.sub(r"\n```\s*$", "", body)
-
-    # Drop leading conversational blocks before any real content starts.
-    blocks = re.split(r"\n\s*\n", body)
-    while blocks:
-        head = blocks[0].strip()
-        if not head:
-            blocks.pop(0)
-            continue
-        if _CONTENT_START_RE.match(head):
-            break
-        candidate = _NAME_ADDRESS_RE.sub("", head)
-        if _LEADING_CHATTER_RE.match(candidate):
-            blocks.pop(0)
-            continue
-        # Short block ending in a colon is an intro line ("Here's a note:").
-        if len(candidate) <= 220 and candidate.rstrip().endswith(":"):
-            blocks.pop(0)
-            continue
-        break
-    body = "\n\n".join(blocks).strip()
-
-    # A leading bold-only line is the real title - promote it to H1.
-    body = re.sub(r"\A\s*\*\*([^*\n]{3,80})\*\*\s*$", r"# \1", body,
-                  count=1, flags=re.MULTILINE)
-
-    # Everything before the first H1 is preamble, unless it's already real markdown
-    match = re.search(r"^#\s+\S.*$", body, flags=re.MULTILINE)
-    if match and match.start() > 0:
-        head = body[:match.start()]
-        if not re.search(r"^\s*(?:#{1,6}\s|\||[-*]\s|\d+\.\s)", head, flags=re.MULTILINE):
-            body = body[match.start():]
-
-    # Trailing sign-off paragraphs
-    tail = re.compile(
-        r"^\s*(?:i hope|hope this|let me know|feel free|if you (?:need|have|want)|"
-        r"please (?:note|let)|would you like|do you (?:need|want)|good luck)\b",
-        re.IGNORECASE,
-    )
-    blocks = re.split(r"\n\s*\n", body)
-    while blocks and (not blocks[-1].strip() or tail.match(blocks[-1])):
-        blocks.pop()
-    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(blocks)).strip()
-
-def _norm_heading(text: str) -> str:
-    return re.sub(r"[^a-z0-9 ]+", "", (text or "").lower()).strip()
-
-
-def split_markdown_sections(md: str) -> dict:
-    """{normalized heading: body} for every ## / ### section in the draft."""
-    sections, current, buf = {}, None, []
-    for line in (md or "").split("\n"):
-        m = re.match(r"^\s*#{2,3}\s+(.+?)\s*$", line)
-        if m:
-            if current:
-                sections.setdefault(current, "\n".join(buf).strip())
-            current, buf = _norm_heading(m.group(1)), []
-        elif current is not None:
-            buf.append(line)
-    if current:
-        sections.setdefault(current, "\n".join(buf).strip())
-    return sections
-
-
-_SECTION_ALIASES = {
-    "overview":        ["overview", "lesson overview", "introduction", "summary"],
-    "objectives":      ["learning objectives", "objectives", "what students will learn", "aims"],
-    "vocabulary":      ["key concepts and vocabulary", "key vocabulary", "vocabulary", "key concepts"],
-    "materials":       ["materials", "resources", "materials and resources", "teaching aids"],
-    "structure":       ["lesson structure", "lesson flow", "procedure", "lesson sequence"],
-    "differentiation": ["differentiation", "support and extension", "differentiation strategies"],
-    "assessment":      ["assessment", "evaluation", "assessment and evaluation"],
-    "homework":        ["extension and homework", "homework", "homework and reflection", "extension"],
-    "notes":           ["teacher notes", "notes", "teacher tips"],
-}
-
-
-def pick_section(sections: dict, key: str) -> str:
-    aliases = [_norm_heading(a) for a in _SECTION_ALIASES.get(key, [])]
-    for alias in aliases:
-        if sections.get(alias, "").strip():
-            return sections[alias].strip()
-    for heading, body in sections.items():
-        if body.strip() and any(alias and alias in heading for alias in aliases):
-            return body.strip()
-    return ""
-
-
-def extract_lesson_body(md: str) -> str:
-    """Model's Lesson Structure section including its ### subsections."""
-    match = re.search(r"^##\s*Lesson Structure\s*$", md or "", flags=re.IGNORECASE | re.MULTILINE)
-    if not match:
-        return ""
-    rest = md[match.end():]
-    nxt = re.search(r"^##\s+\S", rest, flags=re.MULTILINE)
-    return (rest[:nxt.start()] if nxt else rest).strip()
-
 def normalize_lesson_plan_format(answer: str, request_message: str) -> str:
+    """Normalize lesson plan responses into one friendly, consistent template."""
     if not _is_lesson_request(request_message):
         return answer
 
-    draft = strip_llm_chatter(answer)
-    sections = split_markdown_sections(draft)
+    if not isinstance(answer, str):
+        answer = str(answer or "")
 
-    meta = extract_lesson_metadata(strip_output_format_noise(request_message))
+    # Note: generation disclaimer removed from lesson plan output
+
+    meta = extract_lesson_metadata(request_message)
     default_value = "Not specified"
+    grade = meta.get("grade") or default_value
+    subject = meta.get("subject") or default_value
     topic = meta.get("topic") or default_value
     duration_text = meta.get("duration") or "40 minutes"
+    prereq = meta.get("prerequisite") or default_value
 
-    # ---- timing split across the lesson-structure stages ----
-    total = None
+    def cell(value: object) -> str:
+        return str(value if value is not None else "").replace("|", r"\|").replace("\n", " ").replace("\r", " ").strip() or default_value
+
+    # Determine total minutes if possible
+    total_minutes = None
     m = re.search(r"(\d+)", duration_text)
     if m:
-        total = int(m.group(1))
-    if total and total >= 10:
-        intro = max(3, round(total * 0.12))
-        direct = max(8, round(total * 0.30))
-        guided = max(8, round(total * 0.30))
-        independent = max(5, round(total * 0.18))
-        closure = max(3, total - (intro + direct + guided + independent))
+        try:
+            total_minutes = int(m.group(1))
+        except Exception:
+            total_minutes = None
+
+    # Fallback timings (minutes) distribution
+    if total_minutes and total_minutes >= 10:
+        intro = max(3, round(total_minutes * 0.12))
+        direct = max(8, round(total_minutes * 0.30))
+        guided = max(8, round(total_minutes * 0.30))
+        independent = max(5, round(total_minutes * 0.18))
+        closure = total_minutes - (intro + direct + guided + independent)
+        if closure < 3:
+            # adjust
+            closure = 3
     else:
-        intro, direct, guided, independent, closure = 5, 15, 10, 7, 3
+        intro = 5
+        direct = 15
+        guided = 10
+        independent = 7
+        closure = 3
 
-    # ---- title: model H1 if present, else topic ----
-    title_match = re.search(r"^#\s+(.+)$", draft, flags=re.MULTILINE)
-    title = title_match.group(1).strip() if title_match else (
-        topic if topic != default_value else "Lesson Plan")
+    title = f"# {cell(topic) if topic != default_value else 'Lesson Plan'}"
 
-    def block(key: str, fallback: str) -> str:
-        return pick_section(sections, key) or fallback
+    template_parts = []
+    template_parts.append(title)
+    # Removed an unnecessary single-line paragraph that duplicated the header.
 
-    default_flow = (
-        "| Stage | Time | Teacher does | Students do |\n"
-        "|---|---:|---|---|\n"
-        f"| Warm-up | {intro} min | Open with a question or quick review to activate prior knowledge. | Share ideas and recall what they know. |\n"
-        f"| Teach | {direct} min | Explain the main concept with clear examples and checks for understanding. | Listen, note key ideas, answer short questions. |\n"
-        f"| Guided Practice | {guided} min | Model one task and support students through it. | Work with the teacher and complete the guided task. |\n"
-        f"| Independent Practice | {independent} min | Set an application task and monitor progress. | Work alone or in pairs to show understanding. |\n"
-        f"| Wrap-up | {closure} min | Summarise and finish with a quick exit check. | Reflect and answer the closing question. |"
-    )
+    # Quick snapshot table
+    template_parts.append("\n## Quick Snapshot\n")
+    template_parts.append("| Item | Details |\n")
+    template_parts.append("|---|---|\n")
+    template_parts.append(f"| Grade / Level | {cell(grade)} |\n")
+    template_parts.append(f"| Subject | {cell(subject)} |\n")
+    template_parts.append(f"| Topic | {cell(topic)} |\n")
+    template_parts.append(f"| Duration | {cell(duration_text)} |\n")
+    template_parts.append(f"| Prerequisite Knowledge | {cell(prereq)} |\n")
 
-    parts = [
-        f"# {title}",
-        "\n## Lesson Overview\n" + block(
-            "overview",
-            "A short explanation of what this lesson covers, why it matters, and how it "
-            "connects to what students already know."),
-        "\n## What Students Will Learn\n" + block(
-            "objectives",
-            "- Understand the key idea behind the topic\n"
-            "- Use the important vocabulary correctly\n"
-            "- Apply the idea in a guided activity\n"
-            "- Show understanding in a short check for learning"),
-        "\n## Key Concepts and Vocabulary\n" + block(
-            "vocabulary", "- Key terms for this topic, with a short definition for each"),
-        "\n## Materials\n" + block(
-            "materials",
-            "- Whiteboard or slides\n- Markers or pen\n- Student workbook or handout\n"
-            "- Any demonstration items or digital resources"),
-        "\n## Lesson Flow\n" + (extract_lesson_body(draft) or default_flow),
-        "\n## Assessment\n" + block(
-            "assessment",
-            "- Formative: questioning, quick recap, or mini whiteboard check\n"
-            "- Summative: a short task, quiz, or exit ticket covering the main skill\n"
-            "- Success criteria: students can explain the idea and complete the task"),
-        "\n## Support and Extension\n" + block(
-            "differentiation",
-            "- Support: sentence starters, visuals, worked examples, partner support\n"
-            "- Core: scaffolded practice with clear steps\n"
-            "- Extension: challenge questions or an independent task"),
-        "\n## Homework / Reflection\n" + block(
-            "homework",
-            "- One short practice task or reflection question\n"
-            "- Optional extension for students who finish early"),
-        "\n## Teacher Notes\n" + block(
-            "notes",
-            "- Common misconceptions to watch for\n- Pacing and classroom management tips\n"
-            "- Materials, safety notes, or reminders"),
-    ]
+    template_parts.append("\n## Lesson Overview\nA short explanation of what the lesson is about, why it matters, and how it connects to what students already know.\n")
+    template_parts.append("\n## What Students Will Learn\n- Understand the key idea behind the topic\n- Use important vocabulary correctly\n- Apply the idea in a guided activity or example\n- Show understanding in a short check for learning\n")
 
-    return "\n".join(p.strip() for p in parts if p and p.strip())
+    template_parts.append("\n## Materials\n- Whiteboard or slides\n- Markers or pen\n- Student workbook, handout, or notebook\n- Any demonstration items or digital resources\n")
+
+    template_parts.append("\n## Lesson Flow\n")
+    template_parts.append("| Stage | Time | Teacher does | Students do |\n")
+    template_parts.append("|---|---:|---|---|\n")
+    template_parts.append(f"| Warm-up | {intro} min | Open with a question, image, or quick review to activate prior knowledge. | Share ideas, predict the topic, or recall what they already know. |\n")
+    template_parts.append(f"| Teach | {direct} min | Explain the main concept with clear examples and simple checks for understanding. | Listen, note key ideas, and answer short questions. |\n")
+    template_parts.append(f"| Guided Practice | {guided} min | Model one task and support students while they try it together. | Work with the teacher, ask questions, and complete the guided task. |\n")
+    template_parts.append(f"| Independent Practice | {independent} min | Give an application task and monitor progress. | Work independently or in pairs to show understanding. |\n")
+    template_parts.append(f"| Wrap-up | {closure} min | Summarize the lesson and end with a quick exit check. | Reflect on learning and complete the closing question. |\n")
+
+    template_parts.append("\n## Assessment\n")
+    template_parts.append("- Formative: questioning, quick recap, or mini whiteboard check\n")
+    template_parts.append("- Summative: a short task, quiz, worksheet, or exit ticket that shows the main skill\n")
+    template_parts.append("- Success criteria: students can explain the idea, use the vocabulary, and complete the task with support\n")
+
+    template_parts.append("\n## Support and Extension\n- Support: sentence starters, visuals, worked examples, or partner support\n- Core: scaffolded practice with clear steps\n- Extension: challenge questions, deeper reasoning, or an independent task\n")
+
+    template_parts.append("\n## Homework / Reflection\n- One short practice task or reflection question to check understanding\n- Optional extension activity for students who finish early\n")
+
+    template_parts.append("\n## Teacher Notes\n- Common misconceptions to watch for\n- Pacing or classroom management tips\n- Any materials, safety notes, or reminders\n")
+
+    if answer.strip():
+        template_parts.append("\n## Original Draft\n<details>\n<summary>View the model draft used to create this lesson plan</summary>\n\n")
+        template_parts.append(answer.strip() + "\n")
+        template_parts.append("\n</details>\n")
+
+    # Note: removed generation disclaimer per UI requirement
+
+    out = "\n".join(p.strip() for p in template_parts if p is not None)
+    return out
 
 
 GENERATION_DISCLAIMER = (
     "DISCLAIMER: This response was generated by NEXA AI. Please verify important information with your official learning resources and consult your teacher or lecturer if needed. NEXA AI supports learning it does not replace your human teachers."
 )
 
+
 def append_generation_disclaimer(answer: str) -> str:
-    return answer if isinstance(answer, str) else str(answer or "")
+    disclaimer = GENERATION_DISCLAIMER
+    safe_answer = answer if isinstance(answer, str) else str(answer or "")
+    if disclaimer in safe_answer:
+        return safe_answer
+    safe_answer = safe_answer.rstrip()
+    if not safe_answer:
+        return disclaimer
+    # Place the disclaimer after the model answer so the visible response
+    # appears first in the frontend before the separate disclaimer banner.
+    return safe_answer + "\n\n---\n\n" + disclaimer
 
 # ====================== LOAD PDFs ======================
 docs = []
 retriever = None
-vectorstore = None
 llm = None
 rag_chain = None
 conversational_rag_chain = None
 
-class PrefixedOllamaEmbeddings(OllamaEmbeddings):
-    """nomic-embed-text needs task prefixes, or unrelated topics that share a word
-    embed too close and retrieval returns the wrong subject (or nothing)."""
-    def embed_documents(self, texts):
-        return super().embed_documents([f"search_document: {t}" for t in texts])
-    def embed_query(self, text):
-        return super().embed_query(f"search_query: {text}")
-
 if LANGCHAIN_AVAILABLE:
-    print(f"Loading {len(PDF_PATHS)} curriculum PDFs...")
+    print("Loading PDFs...")
     for pdf in PDF_PATHS:
-        if not os.path.exists(pdf):
-            continue
-        info = CURRICULUM_INDEX.get(pdf) or parse_curriculum_filename(pdf)
-        try:
-            loaded = PyPDFLoader(pdf).load()
-        except Exception as exc:
-            print(f"  [skip] {os.path.basename(pdf)}: {exc}")
-            continue
-
-        for page in loaded:
-            page.metadata = dict(page.metadata or {})
-            page.metadata.update({
-                "file": info["file"],
-                "subject": info["subject"] or "Unknown",
-                "grade": info["grade"] or "Unknown",
-                "term": info["term"] or "Unknown",
-                "doctype": info["doctype"] or "Unknown",
-            })
-        docs.extend(loaded)
-        print(f"  [ok] {info['file']} -> {info['subject']} / {info['grade']} / "
-              f"{info['term']} / {info['doctype']} ({len(loaded)} pages)")
+        if os.path.exists(pdf):
+            loader = PyPDFLoader(pdf)
+            docs.extend(loader.load())
 
     if docs:
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
         splits = text_splitter.split_documents(docs)
 
-        embeddings = PrefixedOllamaEmbeddings(model=EMBED_MODEL)
+        embeddings = OllamaEmbeddings(model=EMBED_MODEL)
         vectorstore = Chroma.from_documents(
             documents=splits,
             embedding=embeddings,
-            collection_name="curriculum_db",
-		collection_metadata={"hnsw:space": "cosine"},
+            collection_name="curriculum_db"
         )
+
         retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
+
         llm = ChatOllama(model=MODEL_NAME, temperature=0.4)
-        llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1)   # grounded work
-        print(f"Indexed {len(splits)} chunks from {len(docs)} pages.")
-    else:
-        llm_precise = None
 
 # ====================== HISTORY RETRIEVER ======================
 if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
@@ -3289,61 +1874,28 @@ if LANGCHAIN_AVAILABLE and rag_chain is not None:
 pipe = None  # image gen runs remotely on the Ilaibu DGX — never load Qwen on Canada
 print("Image generation: remote mode (Ilaibu DGX).")
 
-
 import requests as _rq
 import time
 
-def generate_image_task(prompt: str, out_path: str, image_id: str, allow_text: bool = False):
-    """Submit to the DGX, poll until ready, download the PNG to out_path."""
+def generate_image_task(prompt, path, image_id, allow_text=False):
     try:
-        # 1) submit
-        r = requests.post(
-            f"{IMAGE_DGX_URL}/generate",
-            json={"prompt": prompt, "allow_text": bool(allow_text)},
-            timeout=(15, 30),
-        )
-        r.raise_for_status()
-        job_id = r.json().get("job_id")
-        if not job_id:
-            print("[image] DGX gave no job_id")
-            IMAGE_STATUS[image_id] = "failed"
-            return
-
-        # 2) poll status (best-quality gen can take a while; poll up to ~4 min)
-        deadline = time.time() + 240
-        while time.time() < deadline:
-            try:
-                s = requests.get(f"{IMAGE_DGX_URL}/status/{job_id}", timeout=(15, 20))
-                st = s.json().get("status")
-            except requests.exceptions.RequestException as exc:
-                print(f"[image] status poll error: {exc}")
-                time.sleep(3)
-                continue
-
-            if st == "ready":
-                # 3) download the PNG
-                img = requests.get(f"{IMAGE_DGX_URL}/image/{job_id}", timeout=(15, 60))
-                img.raise_for_status()
-                with open(out_path, "wb") as f:
+        r = _rq.post(f"{IMAGE_DGX_URL}/generate",
+                     json={"prompt": prompt, "allow_text": allow_text}, timeout=30)
+        job_id = r.json()["job_id"]
+        for _ in range(300):
+            s = _rq.get(f"{IMAGE_DGX_URL}/status/{job_id}", timeout=10).json()
+            if s["status"] == "ready":
+                img = _rq.get(f"{IMAGE_DGX_URL}/image/{job_id}", timeout=60)
+                with open(path, "wb") as f:
                     f.write(img.content)
                 IMAGE_STATUS[image_id] = "ready"
-                print(f"[image] {image_id} ready -> {out_path}")
                 return
-            if st == "failed":
-                print(f"[image] DGX reported failed for {job_id}")
-                IMAGE_STATUS[image_id] = "failed"
-                return
-
-            time.sleep(2)
-
-        print(f"[image] timed out waiting for {job_id}")
+            if s["status"] == "failed":
+                IMAGE_STATUS[image_id] = "failed"; return
+            time.sleep(1)
         IMAGE_STATUS[image_id] = "failed"
-
-    except requests.exceptions.RequestException as exc:
-        print(f"[image] DGX request failed: {exc}")
-        IMAGE_STATUS[image_id] = "failed"
-    except Exception as exc:
-        print(f"[image] generate_image_task error: {exc}")
+    except Exception as e:
+        print("IMAGE THREAD ERROR (remote DGX):", e)
         IMAGE_STATUS[image_id] = "failed"
 
 # ====================== FASTAPI ======================
@@ -3668,12 +2220,11 @@ class ChatRequest(BaseModel):
     message: str
     question: Optional[str] = None
     user_email: Optional[str] = None
-    user_name: Optional[str] = None          # ← add
     session_id: Optional[str] = None
     turn_id: Optional[str] = None
     reply_context: Optional[str] = None
     staged_file_name: Optional[str] = None
-    url: Optional[str] = None
+    url: Optional[str] = None   # NEW: web page to read
 
 class ChatResponse(BaseModel):
     response: str
@@ -3956,41 +2507,39 @@ def gather_web_context(query: str, limit: int = 5) -> str:
 
 def synthesize_web_answer(message: str, access_role: str) -> str:
     """Fetch web context and have the LLM write a direct, student-friendly answer.
-    Returns '' if nothing usable was found or the context is off-topic."""
+    Returns '' if nothing usable was found."""
     query = build_web_results_query(message)
     context = gather_web_context(query)
     if not context:
         return ""
-    # No LLM available - degrade gracefully to the cleaned link list.
+
+    # No LLM available — degrade gracefully to the cleaned link list.
     if not (LANGCHAIN_AVAILABLE and llm is not None):
         return fetch_web_results(query)
+
     synth_prompt = ChatPromptTemplate.from_messages([
         (
             "system",
             "You are Nexa, an educational assistant for Papua New Guinea. "
-            "Answer the user's question using the web context below. "
-            "If the context is about a different subject that merely shares a "
-            "name with something in the question, IGNORE it and reply with "
-            "exactly: UNKNOWN. Never describe unrelated companies, products, "
-            "crypto wallets or software. Do not invent facts beyond the context. "
-            "Write a clear explanation in your own words in clean Markdown, then "
-            "one final line exactly like: 'Source: <url>'. "
+            "Answer the user's question directly and accurately using ONLY the web "
+            "context provided below. Write a clear explanation in your own words in "
+            "clean Markdown. Do NOT invent facts beyond the context. If the topic is "
+            "relevant to Papua New Guinea, mention that relevance. "
+            "Finish with one line exactly like: 'Source: <url>'. "
             "Audience guidance: {audience}"
         ),
         ("human", "Question: {question}\n\nWeb context:\n{context}"),
     ])
+
     try:
-        result = (synth_prompt | llm | StrOutputParser()).invoke({
+        return (synth_prompt | llm | StrOutputParser()).invoke({
             "question": message,
             "context": context,
             "audience": build_role_instruction(access_role),
         }).strip()
-        if not result or result.upper().startswith("UNKNOWN"):
-            return ""
-        return result
     except Exception as exc:
         print(f"Web synthesis failed: {exc}")
-        return ""
+        return fetch_web_results(query)
 
 @app.get("/api/chat-history/{session_id}", response_model=ChatHistoryResponse)
 def get_chat_history(session_id: str):
@@ -4058,26 +2607,16 @@ async def image_status(image_id: str):
         "status": status
     }
 
-
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
 
-    # ---------- ROLE RESOLUTION ----------
     try:
         access_role = infer_access_role(request.user_email)
-        normalized_email = normalize_email_address(request.user_email)
     except HTTPException:
-        prior = SESSION_ACCESS_PROFILE.get(request.session_id or "", {})
-        access_role = prior.get("role", "student")
-        normalized_email = prior.get("email", "")
-
+        access_role = "student"
+    normalized_email = normalize_email_address(request.user_email)
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
-
-    student_name = (request.user_name or "").strip()
-
-    def _log_name() -> str:
-        return student_name or normalized_email or TEST_USER_NAME
 
     if is_chat_turn_cancelled(request.turn_id):
         return ChatResponse(
@@ -4088,18 +2627,19 @@ async def chat_endpoint(request: ChatRequest):
 
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
+
     capture_user_fact(normalized_email, request.message)
 
     page_url = (request.url or "").strip()
     page_question = (request.question or "").strip() or (request.message or "").strip()
 
-    # ---------- URL READING ----------
+    # ================= URL READING =================
     if page_url:
         page_text = fetch_page_text(page_url)
         if page_text.startswith("__ERROR__"):
+            answer = page_text.replace("__ERROR__", "").strip()
             return ChatResponse(
-                response=page_text.replace("__ERROR__", "").strip(),
-                session_id=session_id, access_role=access_role,
+                response=answer, session_id=session_id, access_role=access_role,
                 status_message="Nexa is Searching ...", pdf_url=None,
                 image_url=None, image_id=None, log_id=str(uuid.uuid4()),
             )
@@ -4107,6 +2647,7 @@ async def chat_endpoint(request: ChatRequest):
         existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
         combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
         SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
+
         question = page_question or "Summarize this web page clearly for a student."
 
         if LANGCHAIN_AVAILABLE and llm is not None:
@@ -4126,31 +2667,33 @@ async def chat_endpoint(request: ChatRequest):
                 print(f"URL read synthesis failed: {exc}")
                 answer = "I read the page but could not process it just now. Please try again."
         else:
-            answer = f"I read the page **{page_url}** but the language model is unavailable."
+            answer = f"I read the page **{page_url}** but the language model is unavailable to summarize it."
 
-        url_log_id = str(uuid.uuid4())
+        answer = append_generation_disclaimer(answer)
         record_chat_turn(session_id, "assistant", answer)
         try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
             persist_chat_log(
-                log_id=url_log_id, session_id=session_id, user_email=normalized_email,
-                user_name=_log_name(), user_prompt=f"[Read URL] {page_url} — {question}",
+                log_id=str(uuid.uuid4()), session_id=session_id, user_email=normalized_email,
+                user_name=user_name, user_prompt=f"[Read URL] {page_url} — {question}",
                 nexa_response=answer, pdf_url=None, stars=0,
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
         except Exception:
             pass
+
         return ChatResponse(
             response=answer, session_id=session_id, access_role=access_role,
             status_message="Nexa is Searching ...", pdf_url=None,
-            image_url=None, image_id=None, log_id=url_log_id,
+            image_url=None, image_id=None, log_id=str(uuid.uuid4()),
         )
 
-    # ---------- placeholder log ----------
     user_log_id = str(uuid.uuid4())
     try:
+        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
         persist_chat_log(
             log_id=user_log_id, session_id=session_id, user_email=normalized_email,
-            user_name=_log_name(), user_prompt=(request.message or "").strip(),
+            user_name=user_name, user_prompt=(request.message or "").strip(),
             nexa_response="", pdf_url=None, stars=0,
             timestamp=datetime.datetime.now(datetime.timezone.utc),
         )
@@ -4159,37 +2702,28 @@ async def chat_endpoint(request: ChatRequest):
 
     lower_msg = (request.message or "").lower()
     status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
-    pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
-    pending_question = SESSION_PENDING_QUESTION.get(session_id)
-
-    def _finish(answer_text: str, pdf_url=None, image_url=None, image_id=None):
-        record_chat_turn(session_id, "assistant", answer_text)
+    if any(phrase in lower_msg for phrase in ("lesson plan", "create lesson", "create a lesson", "make a lesson")) and access_role != "teacher":
+        answer = "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
+        record_chat_turn(session_id, "assistant", answer)
         try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
             persist_chat_log(
                 log_id=user_log_id, session_id=session_id, user_email=normalized_email,
-                user_name=_log_name(), user_prompt=(request.message or "").strip(),
-                nexa_response=(answer_text or "").strip(), pdf_url=pdf_url,
-                image_filename=(image_url.split("/")[-1] if image_url else None),
-                image_mime_type=("image/png" if image_url else None),
-                image_base64=None, stars=0,
+                user_name=user_name, user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(), pdf_url=None, stars=0,
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
         except Exception:
             pass
         return ChatResponse(
-            response=answer_text, session_id=session_id, access_role=access_role,
-            status_message=status_message, pdf_url=pdf_url,
-            image_url=image_url, image_id=image_id, log_id=user_log_id,
+            response=answer, session_id=session_id, access_role=access_role,
+            status_message=status_message, pdf_url=None,
+            image_url=None, image_id=None, log_id=user_log_id,
         )
 
-    # ---------- FAST PATH: exact greetings (instant, no LLM) ----------
-    if not pending_image_request and not pending_question:
-        qr = quick_reply(request.message, student_name)
-        if qr:
-            status_message = None
-            return _finish(qr)
-
     try:
+        config = {"configurable": {"session_id": session_id}}
+
         if is_chat_turn_cancelled(request.turn_id):
             return ChatResponse(
                 response="", session_id=session_id, access_role=access_role,
@@ -4197,265 +2731,284 @@ async def chat_endpoint(request: ChatRequest):
                 image_url=None, image_id=None, log_id=None,
             )
 
-        pdf_url = None
-        reply_ctx = (request.reply_context or "").strip()
-        doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+        pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
 
-        # ================= REPLY-CONTEXT PDF SHORTCUT =================
-        if reply_ctx and "pdf" in lower_msg and len(request.message.strip()) < 80:
-            kind = "lesson" if _is_lesson_request(reply_ctx.lower()) else "nexa"
-            pdf_url = build_answer_pdf(reply_ctx, kind)
-            return _finish("Here's that as a PDF.", pdf_url=pdf_url)
-
-        # ================= PENDING QUESTION CLARIFICATION =================
-        if pending_question and not pending_image_request:
-            SESSION_PENDING_QUESTION.pop(session_id, None)
-            reply = (request.message or "").strip()
-            if reply.lower() in ("cancel", "never mind", "nevermind", "stop", "no"):
-                return _finish("No problem — cancelled. What else can I help with?")
-            spec = {
-                "type": pending_question.get("type", "mcq"),
-                "count": pending_question.get("count", 10),
-                "topic": reply,
-                "scope": parse_lesson_request_scope(reply),
-            }
-            return _generate_questions_and_finish(spec, reply, access_role, lower_msg, _finish)
-
-        # ================= INTENT CLASSIFICATION (context-aware) =================
-        intent = classify_intent(
-            request.message,
-            has_document=bool(doc_context),
-            has_reply_context=bool(reply_ctx),
-        )
-        print(f"[intent] {intent!r} for: {request.message[:60]!r}")
-
-        # ---- DOCUMENT / QUOTED-REPLY QUESTIONS ----
-        if intent == "document_or_reply":
-            source = doc_context if doc_context else reply_ctx
-            kind = "document" if doc_context else "reply"
-            answer = answer_over_context(request.message, source, access_role, kind=kind)
-            if answer:
-                if "pdf" in lower_msg:
-                    pdf_url = build_answer_pdf(answer, "nexa")
-                return _finish(answer, pdf_url=pdf_url)
-            intent = "general"
-
-        # ---- LESSON PLAN (teacher only) ----
-        if intent == "generate_lesson":
-            if access_role != "teacher":
-                return _finish("Only teachers can create full lesson plans. "
-                               "Please sign in with a teacher EduNex account.")
-            lesson_query = strip_output_format_noise(request.message) or request.message
-            scope = parse_lesson_request_scope(request.message)
-            curriculum = retrieve_curriculum_context(lesson_query, scope)
+        if pending_image_request:
             answer = ""
-            try:
-                if curriculum:
-                    grounded = generate_lesson_plan_grounded(request.message, access_role, curriculum)
-                    if grounded and not looks_like_model_refusal(grounded):
-                        answer = grounded
-                else:
-                    print("[lesson] not in curriculum -> LLM fallback")
-                    direct = generate_lesson_plan_direct(request.message, access_role)
-                    if direct and not looks_like_model_refusal(direct):
-                        answer = direct
-            except Exception as exc:
-                print(f"Lesson plan failed: {exc}")
-            if not (answer or "").strip():
-                return _finish("I could not draft the lesson plan just now. Please try again.")
-            try:
-                answer = normalize_lesson_plan_format(answer, request.message)
-            except Exception as exc:
-                print(f"Lesson format failed: {exc}")
-            if "pdf" in lower_msg:
-                pdf_url = build_answer_pdf(answer, "lesson")
-            return _finish(answer, pdf_url=pdf_url)
+        else:
+            reasoning_answer = solve_simple_reasoning_question(request.message)
+            if reasoning_answer:
+                answer = reasoning_answer
 
-        # ---- QUESTION GENERATION (teacher only) ----
-        if intent == "generate_questions":
-            if access_role != "teacher":
-                return _finish("Only teachers can generate assessment questions. "
-                               "Please sign in with a teacher EduNex account.")
-            history_topic = infer_topic_from_history(session_id)
-            recent = get_recent_turns_text(session_id, n=6)
-            spec = extract_question_spec_llm(request.message, reply_ctx, history_topic, recent)
-
-            # If the user quoted a reply, generate FROM that quoted content directly —
-            # the exact material they want questions on, so no retrieval that could drift.
-            if reply_ctx and len(reply_ctx.split()) > 15:
-                print(f"[questions] grounding on quoted reply ({len(reply_ctx)} chars)")
-                answer = generate_questions_from_text(
-                    request.message, access_role, spec, reply_ctx)
-                if answer and not looks_like_model_refusal(answer):
-                    if "pdf" in lower_msg:
-                        pdf_url = build_answer_pdf(answer, "questions")
-                    return _finish(answer, pdf_url=pdf_url)
-
-            spec["scope"] = parse_lesson_request_scope(
-                request.message + " " + (spec.get("topic") or ""))
-
-            if not (spec.get("topic") or "").strip():
-                SESSION_PENDING_QUESTION[session_id] = {
-                    "type": spec["type"], "count": spec["count"]}
-                status_message = None
-                label = {"mcq": "multiple-choice", "short_answer": "short-answer",
-                         "fill_blank": "fill-in-the-blank", "true_false": "true/false",
-                         "essay": "essay"}.get(spec["type"], "")
-                return _finish(
-                    f"Sure — I'll make {spec['count']} {label} questions. Which topic or "
-                    f"lesson should they cover?")
-            return _generate_questions_and_finish(spec, request.message, access_role, lower_msg, _finish)
-
-        # ---- IMAGE GENERATION ----
-        if intent == "generate_image" or pending_image_request:
-            return _handle_image_generation(
-                request, session_id, pending_image_request, lower_msg, _finish)
-
-        # ---- SMALLTALK ----
-        if intent == "smalltalk":
-            return _finish(build_conversational_reply(request.message, student_name))
-
-        # ================= INFORMATIONAL: math / FAQ / curriculum / general =================
-        answer = solve_simple_reasoning_question(request.message) or None
-
-        if answer is None and looks_like_math(request.message):
-            computed = solve_with_sympy(request.message) or llm_to_sympy(request.message)
-            if computed:
-                latex_result, plain = computed
-                if LANGCHAIN_AVAILABLE and llm is not None:
-                    try:
-                        explain = ChatPromptTemplate.from_messages([
-                            ("system",
-                             "You are a maths tutor. The verified correct answer is provided and is "
-                             "CORRECT. Explain how to reach it step by step. Do NOT change the final "
-                             "answer. Wrap maths in $...$/$$...$$. Use '## Problem', '### Step 1', then "
-                             "'## Final Answer'. Audience: {audience}"),
-                            ("human", "Problem: {problem}\n\nVerified answer: {result}"),
-                        ])
-                        body = (explain | llm | StrOutputParser()).invoke({
-                            "problem": request.message, "result": plain,
-                            "audience": build_role_instruction(access_role),
-                        }).strip()
-                        answer = f"{body}\n\n## Final Answer\n{latex_result}"
-                    except Exception:
+            elif looks_like_math(request.message):
+                computed = solve_with_sympy(request.message) or llm_to_sympy(request.message)
+                if computed:
+                    latex_result, plain = computed
+                    if LANGCHAIN_AVAILABLE and llm is not None:
+                        try:
+                            explain = ChatPromptTemplate.from_messages([
+                                ("system",
+                                 "You are a maths tutor. The verified correct answer is provided; it was "
+                                 "computed by a maths engine and is CORRECT. Explain how to reach it, step "
+                                 "by step. Do NOT recalculate or change the final answer. Do NOT produce a "
+                                 "lesson plan.\n"
+                                 "Wrap every mathematical expression in dollar signs ($...$ inline, $$...$$ "
+                                 "displayed). Use '## Problem', numbered '### Step 1', '### Step 2', then "
+                                 "'## Final Answer'. Audience: {audience}"),
+                                ("human", "Problem: {problem}\n\nVerified answer: {result}"),
+                            ])
+                            body = (explain | llm | StrOutputParser()).invoke({
+                                "problem": request.message, "result": plain,
+                                "audience": build_role_instruction(access_role),
+                            }).strip()
+                            answer = f"{body}\n\n## Final Answer\n{latex_result}"
+                        except Exception as exc:
+                            print(f"Math explain failed: {exc}")
+                            answer = f"## Answer\n{latex_result}"
+                    else:
                         answer = f"## Answer\n{latex_result}"
                 else:
-                    answer = f"## Answer\n{latex_result}"
-
-        if answer is None:
-            answer = build_nexa_faq_answer(request.message, session_id=session_id) or None
-
-        if answer is None and intent == "curriculum":
-            try:
-                hit = answer_from_curriculum(request.message, access_role)
-            except Exception as exc:
-                print(f"Curriculum lookup failed: {exc}")
-                hit = None
-            if hit:
-                answer = hit["answer"]
-                print("[answer] served from curriculum")
+                    if LANGCHAIN_AVAILABLE and llm is not None:
+                        try:
+                            math_prompt = ChatPromptTemplate.from_messages([
+                                ("system",
+                                 "You are a careful maths tutor. Solve step by step, wrapping ALL maths in "
+                                 "dollar signs ($...$ inline, $$...$$ displayed). Do NOT produce a lesson plan. "
+                                 "Use '## Problem', numbered '### Step 1', '### Step 2', then '## Final Answer'. "
+                                 "After the final answer add exactly this line: "
+                                 "'> Please double-check this result with a calculator.'\n"
+                                 "Audience: {audience}"),
+                                ("human", "{problem}"),
+                            ])
+                            answer = (math_prompt | llm | StrOutputParser()).invoke({
+                                "problem": request.message,
+                                "audience": build_role_instruction(access_role),
+                            }).strip()
+                        except Exception as exc:
+                            print(f"Math format failed: {exc}")
+                            answer = None
+                    else:
+                        answer = None
             else:
-                print("[answer] curriculum miss -> general")
-                answer = build_general_knowledge_answer(request.message) or None
+                answer = None
 
-        if answer is None:
-            answer = build_general_knowledge_answer(request.message) or None
+            if answer is None:
+                faq_answer = build_nexa_faq_answer(request.message, session_id=session_id)
+                if faq_answer:
+                    answer = faq_answer
+                else:
+                    explicit_web = build_general_knowledge_answer(request.message)
+                    if explicit_web:
+                        answer = explicit_web
+                    elif conversational_rag_chain is None:
+                        answer = synthesize_web_answer(request.message, access_role) or (
+                            "Chat is available, but the curriculum model dependencies are not installed in this workspace."
+                        )
+                    else:
+                        doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
+                        augmented_input = request.message
 
-        if answer is None:
-            answer = "I'm here to help with your studies. Tell me the topic you'd like to explore."
+                        user_facts = USER_MEMORY.get(normalized_email, {})
+                        if user_facts:
+                            facts_str = "; ".join(f"{k} = {v}" for k, v in user_facts.items())
+                            augmented_input = (
+                                f"Known facts for this user (use when relevant): {facts_str}\n\n"
+                                f"{augmented_input}"
+                            )
 
-        if "pdf" in lower_msg and (answer or "").strip():
-            pdf_url = build_answer_pdf(answer, "nexa")
+                        if request.reply_context:
+                            augmented_input = (
+                                f"The user is replying to your previous message: \"{request.reply_context}\"\n\n"
+                                f"Their follow-up: {augmented_input}"
+                            )
 
-        return _finish(answer, pdf_url=pdf_url)
+                        if doc_context:
+                            augmented_input = (
+                                f"Use the following document the user uploaded in this session when relevant:\n"
+                                f"{doc_context}\n\n"
+                                f"User question: {augmented_input}"
+                            )
+
+                        try:
+                            result = conversational_rag_chain.invoke(
+                                {"input": augmented_input, "audience": build_role_instruction(access_role)},
+                                config=config
+                            )
+                            rag_answer = (result.get("answer") or "").strip()
+                        except Exception as model_error:
+                            print(f"RAG/LLM call failed: {model_error}")
+                            rag_answer = ""
+
+                        if rag_answer_is_weak(rag_answer) and not doc_context:
+                            web_answer = synthesize_web_answer(request.message, access_role)
+                            answer = web_answer or rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
+                        else:
+                            answer = rag_answer or (
+                                "I'm having trouble reaching the language model right now (it may be low on memory). "
+                                "Please try again in a moment."
+                            )
+
+        try:
+            if _is_lesson_request(lower_msg) and access_role == "teacher":
+                answer = normalize_lesson_plan_format(answer, request.message)
+        except Exception:
+            pass
+
+        answer = append_generation_disclaimer(answer)
+
+        pdf_url = None
+        image_url = None
+        image_id = None
+
+        # ================= PDF GENERATION =================
+        if "pdf" in request.message.lower():
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"lesson_{ts}.pdf"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            safe_answer = answer if isinstance(answer, str) else str(answer or "")
+            stripped = safe_answer.lstrip()
+            if not stripped.startswith("# "):
+                safe_answer = "# Nexa AI Document\n\n" + safe_answer
+            try:
+                if MarkdownPdf is not None and Section is not None:
+                    pdf = MarkdownPdf(toc_level=0)
+                    pdf.add_section(Section(safe_answer))
+                    pdf.save(path)
+                    pdf_url = f"/assets/{filename}"
+                else:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+            except Exception as pdf_error:
+                print(f"PDF generation failed: {pdf_error}")
+                try:
+                    save_text_to_pdf(path, safe_answer)
+                    pdf_url = f"/assets/{filename}"
+                except Exception as fallback_error:
+                    print(f"Fallback PDF generation failed: {fallback_error}")
+                    pdf_url = None
+
+        # ================= IMAGE GENERATION =================
+        is_image_request = looks_like_image_generation_request(request.message) or bool(pending_image_request)
+
+        if is_image_request:
+
+            if not IMAGE_RUNTIME_AVAILABLE:
+                SESSION_PENDING_IMAGE.pop(session_id, None)
+                answer = "Your image request was received, but image generation is unavailable in this workspace."
+                record_chat_turn(session_id, "assistant", answer)
+                try:
+                    user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                    persist_chat_log(
+                        log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                        user_name=user_name, user_prompt=(request.message or "").strip(),
+                        nexa_response=(answer or "").strip(), pdf_url=pdf_url, stars=0,
+                        timestamp=datetime.datetime.now(datetime.timezone.utc),
+                    )
+                except Exception:
+                    pass
+                return ChatResponse(
+                    response=answer, session_id=session_id, access_role=access_role,
+                    pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                )
+
+            if pending_image_request:
+                SESSION_PENDING_IMAGE.pop(session_id, None)
+                message_for_image = pending_image_request
+                reply = request.message.lower().strip()
+                if reply in ("no", "none", "nope") or any(
+                    w in reply for w in ("no text", "without", "no words", "don't", "dont")
+                ):
+                    intent, text = "no_text", ""
+                else:
+                    q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,80})["\u201d\u2019\']', request.message)
+                    if q:
+                        intent, text = "wants_text", q.group(1).strip()
+                    else:
+                        intent, text = "wants_text", request.message.strip()
+            else:
+                intent, text = analyze_image_text_intent(request.message)
+                message_for_image = request.message
+
+                if intent == "ambiguous":
+                    SESSION_PENDING_IMAGE[session_id] = request.message
+                    answer = append_generation_disclaimer(
+                        "I can create that for you. Quick question first: should the image "
+                        "include any text or wording?\n\n"
+                        "- If **yes**, reply with the exact words to show (for example: \"Welcome On Board\").\n"
+                        "- If **no**, reply \"no text\" and I'll keep it clean with no writing."
+                    )
+                    record_chat_turn(session_id, "assistant", answer)
+                    try:
+                        user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                        persist_chat_log(
+                            log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                            user_name=user_name, user_prompt=(request.message or "").strip(),
+                            nexa_response=answer, pdf_url=pdf_url, stars=0,
+                            timestamp=datetime.datetime.now(datetime.timezone.utc),
+                        )
+                    except Exception:
+                        pass
+                    return ChatResponse(
+                        response=answer, session_id=session_id, access_role=access_role,
+                        pdf_url=pdf_url, image_url=None, image_id=None, log_id=user_log_id,
+                    )
+
+            final_prompt = build_image_generation_prompt(message_for_image, intent, text)
+            answer = append_generation_disclaimer("Generating image...")
+
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"image_{ts}.png"
+            path = os.path.join(IMAGE_OUTPUT_DIR, filename)
+            image_id = ts
+
+            try:
+                user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+                persist_chat_log(
+                    log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                    user_name=user_name, user_prompt=(request.message or "").strip(),
+                    nexa_response="Generating image...", pdf_url=pdf_url,
+                    image_filename=filename, image_mime_type="image/png", image_base64=None,
+                    stars=0, timestamp=datetime.datetime.now(datetime.timezone.utc),
+                )
+            except Exception:
+                pass
+
+            threading.Thread(
+                target=generate_image_task,
+                args=(final_prompt, path, image_id, intent == "wants_text")
+            ).start()
+            image_url = f"/assets/{filename}"
+
+        record_chat_turn(session_id, "assistant", answer)
+
+        try:
+            user_name = SESSION_ACCESS_PROFILE.get(session_id, {}).get('email') or TEST_USER_NAME
+            persist_chat_log(
+                log_id=user_log_id, session_id=session_id, user_email=normalized_email,
+                user_name=user_name, user_prompt=(request.message or "").strip(),
+                nexa_response=(answer or "").strip(), pdf_url=pdf_url, stars=0,
+                timestamp=datetime.datetime.now(datetime.timezone.utc),
+            )
+        except Exception:
+            pass
+
+        return ChatResponse(
+            response=answer, session_id=session_id, access_role=access_role,
+            status_message=status_message, pdf_url=pdf_url,
+            image_url=image_url, image_id=image_id, log_id=user_log_id,
+        )
 
     except Exception as e:
-        print(f"Chat endpoint failed: {e}")
+        print(e)
         raise HTTPException(status_code=500, detail="Server error")
-
 
 @app.get("/health")
 def health():
     
     return {"status": "ok"}
-
-def _generate_questions_and_finish(spec, source_message, access_role, lower_msg, _finish):
-    curriculum = retrieve_curriculum_context(spec["topic"], spec.get("scope") or {})
-    answer = ""
-    try:
-        if curriculum:
-            print(f"[questions] type={spec['type']} count={spec['count']} topic={spec['topic']!r} -> curriculum")
-            grounded = generate_questions_grounded(source_message, access_role, spec, curriculum)
-            if grounded and not looks_like_model_refusal(grounded):
-                answer = grounded
-        else:
-            print(f"[questions] topic {spec['topic']!r} not in curriculum -> LLM")
-            direct = generate_questions_direct(source_message, access_role, spec)
-            if direct and not looks_like_model_refusal(direct):
-                answer = direct
-    except Exception as exc:
-        print(f"Question generation failed: {exc}")
-    if not (answer or "").strip():
-        return _finish("I couldn't generate those questions just now. Please try again.")
-    pdf_url = build_answer_pdf(answer, "questions") if "pdf" in lower_msg else None
-    return _finish(answer, pdf_url=pdf_url)
-
-
-def _handle_image_generation(request, session_id, pending_image_request, lower_msg, _finish):
-    if not (IMAGE_RUNTIME_AVAILABLE and IMAGE_FEATURE_ENABLED):
-        SESSION_PENDING_IMAGE.pop(session_id, None)
-        return _finish("Image generation is unavailable right now.")
-
-    if pending_image_request:
-        SESSION_PENDING_IMAGE.pop(session_id, None)
-        message_for_image = pending_image_request
-        reply = request.message.lower().strip()
-        if reply in ("no", "none", "nope") or any(
-            w in reply for w in ("no text", "without", "no words", "don't", "dont")):
-            intent_img, text = "no_text", ""
-        else:
-            q = re.search(r'["\u201c\u2018\']([^"\u201d\u2019\']{1,80})["\u201d\u2019\']', request.message)
-            intent_img, text = ("wants_text", q.group(1).strip()) if q else ("wants_text", request.message.strip())
-    else:
-        message_for_image = request.message
-        if _is_vague_image_subject(request.message):
-            inherited = infer_topic_from_history(session_id)
-            if inherited:
-                message_for_image = inherited
-            else:
-                return _finish('Sure — what should the image show? Name the topic, e.g. "the water cycle".')
-        intent_img, text = analyze_image_text_intent(message_for_image)
-        if intent_img == "ambiguous":
-            SESSION_PENDING_IMAGE[session_id] = message_for_image
-            return _finish("Should the image include any text? Reply with the words to show, or \"no text\".")
-
-    ctx = ""
-    try:
-        hit = retrieve_curriculum_context(message_for_image, parse_lesson_request_scope(message_for_image))
-        if hit:
-            ctx = hit.get("context", "")
-    except Exception:
-        pass
-
-    final_prompt = build_curriculum_image_prompt(message_for_image, ctx) if ctx \
-        else build_image_generation_prompt(message_for_image, intent_img, text)
-    if intent_img == "wants_text" and text:
-        final_prompt += f' Include the text label: "{text}".'
-    elif intent_img == "no_text":
-        final_prompt += " No text or words in the image."
-
-    print("=" * 70)
-    print(f"[image] ORIGINAL REQUEST : {message_for_image}")
-    print(f"[image] DETAILED PROMPT  : {final_prompt}")
-    print("=" * 70)
-
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"image_{ts}.png"
-    path = os.path.join(IMAGE_OUTPUT_DIR, filename)
-    IMAGE_STATUS[ts] = "processing"
-    threading.Thread(target=generate_image_task,
-                     args=(final_prompt, path, ts, intent_img == "wants_text")).start()
-    return _finish("Generating image...", image_url=f"/assets/{filename}", image_id=ts)
 
 # ====================== RUN ======================
 if __name__ == "__main__":
