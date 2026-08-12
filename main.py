@@ -118,6 +118,18 @@ def parse_docx_curriculum_filename(path: str) -> dict:
         info["topic"] = topic
     return info
 
+import os
+try:
+    from langchain_openai import ChatOpenAI
+    _openai_key = os.environ.get("OPENAI_API_KEY")
+    llm_general = ChatOpenAI(model="gpt-4o", temperature=0.3, api_key=_openai_key) if _openai_key else None
+    if llm_general:
+        print("General-knowledge model: OpenAI gpt-4o")
+    else:
+        print("OPENAI_API_KEY not set — general knowledge will use local model")
+except Exception as exc:
+    print(f"OpenAI init failed: {exc}")
+    llm_general = None
 
 def _load_docx_text(path):
     try:
@@ -1764,8 +1776,6 @@ def build_curriculum_image_prompt(subject: str, curriculum_context: str) -> str:
 def build_general_knowledge_answer(message: str) -> str:
     if looks_like_math(message) or looks_like_reasoning_question(message):
         return ""
-
-    # Explicit wiki/web requests still go to those sources.
     lowered = (message or "").lower()
     query = build_web_results_query(message)
     if "wikipedia" in lowered or "wiki" in lowered:
@@ -1773,25 +1783,33 @@ def build_general_knowledge_answer(message: str) -> str:
     if looks_like_web_query(message):
         return fetch_web_results(query)
 
-    # Otherwise answer from the LLM's own general knowledge (not web search).
-    if not (LANGCHAIN_AVAILABLE and llm is not None):
+    model = llm_general or llm   # prefer GPT-4o, fall back to local
+    if model is None:
         return ""
     try:
         from langchain_core.messages import SystemMessage, HumanMessage
+        wants_detail = any(w in lowered for w in
+                           ("in detail", "detailed", "in depth", "comprehensive",
+                            "full", "explain fully", "elaborate", "thorough"))
+        depth = ("Give a COMPLETE, thorough, well-structured answer with Markdown headings, "
+                 "covering background, key concepts, examples, and a short summary. Finish "
+                 "every section fully." if wants_detail
+                 else "Answer clearly and accurately in a few well-organized paragraphs.")
         system = (
-            "You are Nexa, a knowledgeable, friendly educational assistant for PNG students. "
-            "Answer the user's question clearly and accurately from your own knowledge, in clean "
-            "Markdown. Be concise and correct. If you are genuinely unsure of a fact, say so "
-            "briefly rather than inventing details."
+            "You are Nexa, a knowledgeable educational assistant for PNG students. "
+            "Answer accurately from your own knowledge in clean Markdown. " + depth +
+            " If genuinely unsure of a fact, say so briefly rather than inventing details."
         )
-        resp = llm.invoke([
-            SystemMessage(content=system),
-            HumanMessage(content=message),
-        ])
+        resp = model.invoke([SystemMessage(content=system), HumanMessage(content=message)])
         return (resp.content if hasattr(resp, "content") else str(resp)).strip()
     except Exception as exc:
-        print(f"[general] LLM answer failed: {exc}")
-        return ""
+        print(f"[general] answer failed: {exc}")
+        # fall back to local model on any OpenAI error
+        try:
+            resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=message)])
+            return (resp.content if hasattr(resp, "content") else str(resp)).strip()
+        except Exception:
+            return ""
 
 def solve_simple_reasoning_question(message: str) -> str:
     text = (message or "").strip()
@@ -3180,8 +3198,8 @@ if LANGCHAIN_AVAILABLE:
 		collection_metadata={"hnsw:space": "cosine"},
         )
         retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.4)
-        llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1)   # grounded work
+        llm = ChatOllama(model=MODEL_NAME, temperature=0.4, num_predict=2048, num_ctx=8192)
+        llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1,num_predict=2048,  num_ctx=8192)   # grounded work
         print(f"Indexed {len(splits)} chunks from {len(docs)} pages.")
     else:
         llm_precise = None
