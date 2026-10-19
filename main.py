@@ -1496,7 +1496,7 @@ DB_CONFIG = {
     "host": os.getenv("NEXA_DB_HOST", "127.0.0.1"),
     "port": int(os.getenv("NEXA_DB_PORT", "3306")),
     "user": os.getenv("NEXA_DB_USER", "nexa_user"),
-    "password": os.getenv("NEXA_DB_PASSWORD", "NexaPass123!"),
+    "password": os.environ["NEXA_DB_PASSWORD"],
     "database": os.getenv("NEXA_DB_NAME", "nexa_ai"),
 }
 
@@ -4170,7 +4170,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*edunex\.edu\.pg$",
     allow_methods=["*"],
     allow_headers=["*"]
 )
