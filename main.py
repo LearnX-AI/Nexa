@@ -1,4 +1,3 @@
-
 import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -22,7 +21,10 @@ import threading
 import json
 import sympy
 from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
+from fastapi import UploadFile, File, Form
+import tempfile
 
+INGEST_TOKEN = os.environ.get("NEXA_INGEST_TOKEN", "")
 
 try:
     import mysql.connector
@@ -50,7 +52,7 @@ try:
     from langchain_community.chat_models import ChatOllama
     from langchain_community.document_loaders import PyPDFLoader
     from langchain_community.embeddings import OllamaEmbeddings
-    from langchain_community.vectorstores import Chroma
+    from langchain_chroma import Chroma
     from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -101,6 +103,59 @@ _SCIENCE_IMAGE_SYSTEM = (
     "Return {\"engine\": \"...\", ...fields...}. Base facts on standard curriculum; be exact. "
     "Prefer molecule/reaction/plot/flow whenever the topic fits; use diffusion only when none do."
 )
+
+_CURRICULUM_FORMAT_SYSTEM = (
+    "You are Nexa, reformatting official curriculum material into a clear answer for a student.\n\n"
+    "RULES:\n"
+    "- Use ONLY the information in the material below. Do NOT add facts or outside knowledge.\n"
+    "- Do NOT omit substantive information; cover every key point.\n"
+    "- NEVER mention the material, the source, the excerpts, the curriculum, page numbers, "
+    "grade, or term. The student must never learn that source material exists. Write as if "
+    "the knowledge is simply yours.\n"
+    "- NEVER comment on what the material does or does not contain. Phrases such as 'there "
+    "is no coverage of', 'the material only mentions', 'not directly mentioned in the "
+    "provided material', 'this can be inferred from related concepts', or any variant of "
+    "them are failures.\n"
+    "- If the material does not answer the question, your ENTIRE reply must be the "
+    "single token NO_COVERAGE. Do not write a sentence explaining that. Do not add "
+    "a heading. Do not write anything else. Any sentence about what the material "
+    "contains, covers, mentions, or lacks is a failure.\n"
+    "- Remove PDF artifacts (page markers like '2 | P a g e', footnote numbers, broken "
+    "spacing, URLs).\n"
+    "- Clean Markdown: a short opening sentence, then headings, bold terms, and bullet lists.\n"
+    "- Do NOT greet or name the student. No preamble or closing question.\n"
+    "- Begin directly with the answer.\n\n"
+    "Audience guidance: {audience}"
+)
+
+_DOC_REFERENCE_RE = re.compile(
+    r"\b(document|file|pdf|attachment|upload(?:ed)?|paper|report|handout|notes)\b",
+    re.IGNORECASE)
+
+
+_QTYPE_LABELS = {
+    "mcq": "multiple-choice", "short_answer": "short-answer",
+    "fill_blank": "fill-in-the-blank", "true_false": "true/false",
+    "essay": "essay",
+}
+
+def build_question_request(spec: dict) -> str:
+    """A standalone instruction built from the spec, so the generator never
+    receives an unresolved 'from this' with no topic attached."""
+    topic = (spec.get("topic") or "").strip()
+    label = _QTYPE_LABELS.get(spec.get("type", "mcq"), "")
+    count = spec.get("count", 10)
+    if not topic:
+        return f"Write {count} {label} questions."
+    scope = spec.get("scope") or {}
+    parts = [f"Write {count} {label} questions on {topic}"]
+    if scope.get("grade"):
+        parts.append(f"for {scope['grade']}")
+    if scope.get("subject"):
+        parts.append(f"in {scope['subject']}")
+    return " ".join(parts) + "."
+
+
 
 from docx import Document as DocxDocument
 # s15_cm8912_12.4_Bioenergetics_2_Biomass  Biofuels.docx -> Grade 12 Biology lesson notes
@@ -166,7 +221,143 @@ _EMPTY_TOPIC_SIGNALS = {"", "questions", "question", "quiz", "them", "it", "thes
                         "some", "more", "another", "the topic", "this", "that"}
 
 
+_NEW_REQUEST_RE = re.compile(
+    r"\b(create|make|generate|write|prepare|draft|give me|show me|produce|"
+    r"explain|describe|define|summari[sz]e|translate|solve|calculate|"
+    r"lesson plan|quiz|questions?|mcqs?|worksheet|image|diagram)\b",
+    re.IGNORECASE)
 
+
+def extract_lesson_spec_llm(message: str, recent_conversation: str = "") -> dict:
+    """Topic, grade, subject, and duration for a lesson plan. Missing values are ''."""
+    empty = {"topic": "", "grade": "", "subject": "", "duration": ""}
+    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
+        return empty
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        import json as _json
+        ctx = f"\n\nRecent conversation:\n{recent_conversation}" if recent_conversation else ""
+        model = llm_precise or llm
+        resp = model.invoke([
+            SystemMessage(content=(
+                "Extract lesson plan details. Output ONLY JSON:\n"
+                '{"topic": "...", "grade": "...", "subject": "...", "duration": "..."}\n\n'
+                "- topic: the SUBJECT MATTER to teach. A grade, a subject name, or a "
+                "duration is NOT a topic. 'a Grade 11 Biology lesson' has no topic; "
+                "'a lesson on photosynthesis' has topic 'photosynthesis'.\n"
+                "- grade: e.g. 'Grade 11'. Empty if not stated.\n"
+                "- subject: e.g. 'Biology'. Empty if not stated.\n"
+                "- duration: e.g. '40 minutes'. Empty if not stated.\n"
+                "Use the recent conversation only to resolve references like 'that' or "
+                "'the same topic'. Output only the JSON object.")),
+            HumanMessage(content=f"Request: {message}{ctx}"),
+        ])
+        raw = (resp.content if hasattr(resp, "content") else str(resp)).strip()
+        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw).strip()
+        data = _json.loads(raw)
+        return {k: str(data.get(k, "")).strip() for k in empty}
+    except Exception as exc:
+        print(f"[lesson] spec extract failed: {exc}")
+        return empty
+
+
+_LESSON_SLOTS = [
+    ("topic",    "Which topic should the lesson cover?"),
+    ("grade",    "Which grade is it for?"),
+    ("subject",  "Which subject is it for?"),
+    ("duration", "How long is the lesson? (for example 40 minutes)"),
+]
+
+
+def next_missing_lesson_slot(spec: dict):
+    """First unfilled slot and the question to ask for it."""
+    for key, question in _LESSON_SLOTS:
+        if not (spec.get(key) or "").strip():
+            return key, question
+    return None, ""
+
+def _extract_uploaded_text(path: str, filename: str) -> str:
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    try:
+        if ext == "pdf":
+            return "\n".join(p.page_content for p in PyPDFLoader(path).load())
+        if ext == "docx":
+            from docx import Document as _Docx
+            return "\n".join(p.text for p in _Docx(path).paragraphs if p.text.strip())
+        if ext == "pptx":
+            from pptx import Presentation
+            out = []
+            for slide in Presentation(path).slides:
+                for shape in slide.shapes:
+                    if shape.has_text_frame and shape.text_frame.text.strip():
+                        out.append(shape.text_frame.text)
+            return "\n".join(out)
+    except Exception as exc:
+        print(f"[ingest] extract failed for {filename}: {exc}")
+    return ""
+
+
+
+
+
+
+def build_lesson_request(spec: dict) -> str:
+    """Turn a filled spec into a clean standalone request string."""
+    topic = (spec.get("topic") or "").strip()
+    if not topic:
+        # No topic: fall back to what the user actually said. Never emit
+        # "Create a lesson plan on " with nothing after it.
+        return (spec.get("request") or "Create a lesson plan").strip()
+
+    parts = [f"Create a lesson plan on {topic}"]
+    if spec.get("grade"):
+        parts.append(f"for {spec['grade']}")
+    if spec.get("subject"):
+        parts.append(f"in {spec['subject']}")
+    if spec.get("duration"):
+        parts.append(f"lasting {spec['duration']}")
+    return " ".join(parts)
+
+
+def topic_from_material(source_text: str) -> str:
+    """The subject of a quoted passage, used when the request itself names none."""
+    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)) or not source_text.strip():
+        return ""
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        model = llm_precise or llm
+        resp = model.invoke([
+            SystemMessage(content=(
+                "Name the single academic topic this passage teaches, in five words or "
+                "fewer. Output only the topic, no punctuation, no explanation.")),
+            HumanMessage(content=source_text[:2000]),
+        ])
+        topic = (resp.content if hasattr(resp, "content") else str(resp)).strip().strip('".')
+        return topic if 0 < len(topic) <= 60 else ""
+    except Exception as exc:
+        print(f"[lesson] topic-from-material failed: {exc}")
+        return ""
+
+
+def looks_like_new_request(message: str) -> bool:
+    """A clarification reply is a short value: 'photosynthesis', 'Grade 12',
+    '40 minutes'. Anything that reads like a fresh instruction is not."""
+    text = (message or "").strip()
+    if not text:
+        return False
+    if len(text.split()) > 8:
+        return True
+    return bool(_NEW_REQUEST_RE.search(text))
+
+def looks_like_question_set(text: str, count: int) -> bool:
+    body = text or ""
+    numbered = len(re.findall(r"^\s*\d+[\.\)]\s+\S", body, re.MULTILINE))
+    has_key = "answer key" in body.lower()
+    structure_words = ("lesson structure", "learning objectives", "guided practice",
+                       "teacher action", "differentiation", "closure")
+    if sum(w in body.lower() for w in structure_words) >= 2:
+        return False
+    return numbered >= max(1, min(count, 3)) and has_key
 
 _QTYPE_INSTRUCTIONS = {
     "mcq": "Write multiple-choice questions, each with a stem and four options A-D, exactly one correct.",
@@ -187,6 +378,112 @@ _QUESTION_SYSTEM = (
     "Audience guidance: {audience}"
 )
 
+SESSION_PENDING_LESSON: Dict[str, Dict[str, str]] = {}
+
+
+# The curriculum reformat is forbidden from mentioning its source, so ANY
+# reference to the material means the model ignored the prompt and the answer
+# must be discarded. Note the deliberate absence of a bare "the material":
+# chemistry and physics answers legitimately say "the material conducts heat".
+_SOURCE_REFERENCE_RE = re.compile(
+    r"curriculum material|provided material|given material|supplied material|"
+    r"source material|the provided (?:text|content|excerpt|document)|"
+    r"the excerpts?\b|the documents provided|"
+    r"no coverage|does not cover|doesn'?t cover|not covered|"
+    r"not (?:directly |explicitly |specifically )?(?:mentioned|found|included|discussed|addressed)\b|"
+    r"only mentions|only covers|"
+    r"no information (?:is )?(?:provided|available|found)|"
+    r"can be inferred from related concepts|no_coverage",
+    re.IGNORECASE)
+
+# Kept as the alias the rest of the file already imports.
+_CURRICULUM_META_RE = _SOURCE_REFERENCE_RE
+
+
+def curriculum_answer_is_evasive(text: str) -> bool:
+    body = (text or "").strip()
+    if len(body) < 150:          # a real curriculum answer is never this short
+        return True
+    return bool(_SOURCE_REFERENCE_RE.search(body))
+
+
+def strip_curriculum_meta(text: str) -> str:
+    blocks = re.split(r"\n\s*\n", text or "")
+    kept = [b for b in blocks if not _SOURCE_REFERENCE_RE.search(b)]
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(kept)).strip()
+
+def build_message_history(session_id: str, max_turns: int = 10,
+                          max_chars: int = 1500) -> list:
+    """Prior turns as real Human/AI messages. This is what lets the answering
+    model resolve 'that', 'the second one', and 'in simpler language' itself."""
+    if not LANGCHAIN_AVAILABLE:
+        return []
+    from langchain_core.messages import HumanMessage, AIMessage
+
+    msgs = []
+    # [:-1] drops the message currently being handled; it is sent separately.
+    for turn in SESSION_CHAT_HISTORY.get(session_id, [])[:-1][-max_turns:]:
+        content = (turn.get("content") or "").strip()
+        if not content:
+            continue
+        content = content[:max_chars]
+        if turn.get("role") == "user":
+            msgs.append(HumanMessage(content=content))
+        else:
+            msgs.append(AIMessage(content=content))
+    return msgs
+
+
+
+def answer_with_history(system_text: str, user_message: str, session_id: str,
+                        reply_ctx: str = "", extra_material: str = "",
+                        model=None, history_turns: int = None) -> str:
+    """Answer with the conversation as real prior turns.
+
+    When reply_ctx is present the quote goes INSIDE the current message and the
+    history window shrinks, so an older topic cannot outweigh what the user
+    explicitly pointed at.
+    """
+    if not LANGCHAIN_AVAILABLE:
+        return ""
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    model = model or llm_general or llm
+    if model is None:
+        return ""
+
+    if history_turns is None:
+        history_turns = 2 if reply_ctx else 10
+
+    messages = [SystemMessage(content=system_text)]
+    if history_turns > 0:
+        messages.extend(build_message_history(session_id, max_turns=history_turns))
+
+    if reply_ctx:
+        human = (
+            "The user is replying to this exact passage, quoted from your earlier "
+            "answer. It is the ONLY subject of their message. Ignore every other "
+            "topic discussed earlier in the conversation.\n\n"
+            "--- QUOTED PASSAGE ---\n"
+            f"{reply_ctx[:6000]}\n"
+            "--- END QUOTED PASSAGE ---\n\n"
+            f"The user's message about that passage: {user_message}"
+        )
+    else:
+        human = user_message
+
+    if extra_material:
+        human = f"{human}\n\nRelevant reference material:\n{extra_material[:6000]}"
+
+    messages.append(HumanMessage(content=human))
+
+    try:
+        resp = model.invoke(messages)
+        text = (resp.content if hasattr(resp, "content") else str(resp)).strip()
+        return "" if looks_like_model_refusal(text) else text
+    except Exception as exc:
+        print(f"[history-answer] failed: {exc}")
+        return ""
 
 def generate_questions_grounded(message, access_role, spec, curriculum):
     if not (LANGCHAIN_AVAILABLE and (llm_precise or llm) and curriculum):
@@ -208,6 +505,10 @@ def generate_questions_grounded(message, access_role, spec, curriculum):
         print(f"[questions] grounded failed: {exc}")
         return ""
 
+
+
+
+
 def get_recent_turns_text(session_id: str, n: int = 6) -> str:
     """Last n turns (user + assistant) as text, for LLM topic resolution."""
     history = SESSION_CHAT_HISTORY.get(session_id, [])
@@ -219,6 +520,199 @@ def get_recent_turns_text(session_id: str, n: int = 6) -> str:
         if content:
             lines.append(f"{role}: {content[:400]}")
     return "\n".join(lines)
+
+_STRUCTURE_WORDS = (
+    "key concept", "overview", "learning objective", "objectives", "materials",
+    "lesson structure", "lesson flow", "assessment", "teacher note",
+    "differentiation", "answer key", "introduction", "closure", "conclusion",
+    "definition and process", "summary", "homework", "extension", "vocabulary",
+)
+
+_REFERENCE_MARKERS = re.compile(
+    r"\b(first|second|third|fourth|fifth|last|next|previous|former|latter|"
+    r"one|ones|that|this|those|these|it|them|same|above)\b", re.IGNORECASE)
+
+_MODIFIERS = ("simpler", "simple", "brief", "briefly", "short", "shorter",
+              "detail", "detailed", "table", "bullet", "example", "examples",
+              "step by step", "grade", "easier", "summary")
+
+
+def _clean_for_resolution(text: str) -> str:
+    """Strip Markdown noise but KEEP list markers: numbering is what ordinal
+    references ('the second one') point at."""
+    t = text or ""
+    t = re.sub(r"^\s*#{1,6}\s*", "", t, flags=re.MULTILINE)
+    t = re.sub(r"[*_`>|]", " ", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+
+def get_last_user_message(session_id: str) -> str:
+    """The user's previous turn, excluding the message being handled now."""
+    history = SESSION_CHAT_HISTORY.get(session_id, [])
+    for turn in reversed(history[:-1]):
+        if turn.get("role") == "user":
+            content = (turn.get("content") or "").strip()
+            if content:
+                return content[:300]
+    return ""
+
+
+def get_thread_topic(session_id: str) -> str:
+    """The subject the conversation opened on."""
+    history = SESSION_CHAT_HISTORY.get(session_id, [])
+    for turn in history[:-1]:
+        if turn.get("role") == "user":
+            content = (turn.get("content") or "").strip()
+            if content and not is_conversation_meta_question(content):
+                return content[:200]
+    return ""
+
+
+def get_last_exchange_text(session_id: str, message: str = "") -> str:
+    """Antecedent context for pronoun and ordinal resolution."""
+    history = SESSION_CHAT_HISTORY.get(session_id, [])
+    prior = history[:-1]
+    last_user = get_last_user_message(session_id)
+
+    # An ordinal reference needs the whole list, not just its opening.
+    limit = 1500 if _REFERENCE_MARKERS.search(message or "") else 400
+
+    last_assistant = ""
+    for turn in reversed(prior):
+        if turn.get("role") == "assistant":
+            last_assistant = _clean_for_resolution(turn.get("content") or "")[:limit]
+            break
+
+    if not last_user and not last_assistant:
+        return ""
+
+    parts = []
+    topic = get_thread_topic(session_id)
+    if topic and topic != last_user:
+        parts.append(f"This conversation started with: {topic}")
+    if last_user:
+        parts.append(f"The user's previous question was: {last_user}")
+    if last_assistant:
+        parts.append(f"Your previous answer was:\n{last_assistant}")
+    return "\n\n".join(parts)
+
+
+def _fallback_resolution(text: str, session_id: str) -> str:
+    """When the rewrite is unusable, append the previous question verbatim so the
+    topic words still reach classification and retrieval."""
+    last_user = get_last_user_message(session_id)
+    if not last_user:
+        return text
+    return f"{text} (in the context of: {last_user})"
+
+_FOLLOWUP_REFERENCE_RE = re.compile(
+    r"\b(it|its|this|that|these|those|them|they|the same|the second|the first|"
+    r"the last|the next|the previous|the other|the one|above|below|earlier|"
+    r"more|again|also|as well|further)\b", re.IGNORECASE)
+
+
+def _needs_followup_resolution(message: str) -> bool:
+    """Only rewrite when the message actually depends on prior context.
+    A short reference ('explain that', 'the second one', 'tell me more') needs
+    resolution; a self-contained question with its own subject does not."""
+    m = (message or "").strip()
+    if not m:
+        return False
+    words = m.split()
+    has_reference = bool(_FOLLOWUP_REFERENCE_RE.search(m))
+    starts_standalone = bool(re.match(
+        r"^(what|which|who|when|where|why|how)\b.*\b(is|are|was|were|do|does|"
+        r"did|can|could|explain|mean)\b", m, re.IGNORECASE))
+    # A wh-question with its own subject and no pronoun reference stands alone.
+    if starts_standalone and not has_reference:
+        return False
+    # Short pure-reference messages ("explain that", "the second one") -> rewrite.
+    if has_reference and len(words) <= 12:
+        return True
+    return has_reference
+
+
+def resolve_followup_message(message: str, session_id: str) -> str:
+    """Rewrite a follow-up into a standalone SEARCH string. Used only for
+    retrieval and classification; generation always gets the raw message."""
+    text = (message or "").strip()
+    if not text or len(text.split()) > 30:
+        return message
+    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
+        return message
+
+    recent = get_last_exchange_text(session_id, text)
+    if not recent:
+        return message
+
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        model = llm_precise or llm
+        resp = model.invoke([
+            SystemMessage(content=(
+                "Rewrite the user's latest message as a STANDALONE REQUEST that makes full "
+                "sense with no conversation history. Your output must be a question or an "
+                "instruction, never an answer or a statement of fact.\n\n"
+                "ANTECEDENT RULE: 'this', 'that', 'it', 'the same' refer to the SUBJECT "
+                "MATTER of the previous exchange. Ordinals ('the second one', 'the last "
+                "one') refer to the correspondingly numbered item in your previous answer, "
+                "shown below. Name that item explicitly.\n"
+                "NEVER resolve a reference to a section heading such as 'key concepts', "
+                "'overview', 'learning objectives', 'materials', or 'summary'.\n\n"
+                "PRESERVE EVERY INSTRUCTION the user gave, word for word: 'in simpler "
+                "language', 'briefly', 'in detail', 'for Grade 8', 'as a table'.\n"
+                "KEEP THE THREAD: if the item only makes sense within the topic under "
+                "discussion, say so, e.g. 'Explain <item> in simpler language, in the "
+                "context of <topic>'.\n\n"
+                "Keep any maths expression EXACTLY as it appears. If the message is ABOUT "
+                "the conversation itself, or already stands alone, return it exactly as "
+                "written. Output only the rewritten request, nothing else.")),
+            HumanMessage(content=f"{recent}\n\nLatest message: {text}"),
+        ])
+        out = (resp.content if hasattr(resp, "content") else str(resp)).strip().strip('"')
+
+        if not out or len(out) > 400:
+            return _fallback_resolution(text, session_id)
+        if len(out) > max(200, len(text) * 4):
+            return _fallback_resolution(text, session_id)
+        if re.match(r"^(i'd|i would|i'll|i can|i am|sure|certainly|of course|"
+                    r"here(?:'s| is)|yes|no)\b", out, re.IGNORECASE):
+            return _fallback_resolution(text, session_id)
+
+        low_out, low_in = out.lower(), text.lower()
+
+        lost = [m for m in _MODIFIERS if m in low_in and m not in low_out]
+        if lost:
+            print(f"[followup] rewrite dropped {lost} -> using fallback")
+            return _fallback_resolution(text, session_id)
+
+        if any(w in low_out and w not in low_in for w in _STRUCTURE_WORDS):
+            print(f"[followup] rejected structural rewrite: {out[:60]!r}")
+            return _fallback_resolution(text, session_id)
+
+        request_start = re.match(
+            r"^(what|which|who|when|where|why|how|explain|describe|define|give|"
+            r"list|show|tell|create|make|write|generate|compare|summari[sz]e|"
+            r"can you|could you|please|expand|shorten|simplify|solve)\b",
+            out, re.IGNORECASE)
+        if not request_start and not out.rstrip().endswith("?"):
+            print(f"[followup] rewrite is not a request: {out[:60]!r}")
+            return _fallback_resolution(text, session_id)
+
+        return out
+    except Exception as exc:
+        print(f"[followup] resolve failed: {exc}")
+        return _fallback_resolution(text, session_id)
+
+
+def _fallback_resolution(text: str, session_id: str) -> str:
+    """When the rewrite is unusable, append the previous question verbatim so the
+    topic words still reach classification and retrieval."""
+    last_user = get_last_user_message(session_id)
+    if not last_user:
+        return text
+    return f"{text} (in the context of: {last_user})"
 
 def generate_questions_direct(message, access_role, spec):
     if not (LANGCHAIN_AVAILABLE and llm is not None):
@@ -234,6 +728,34 @@ def generate_questions_direct(message, access_role, spec):
     except Exception as exc:
         print(f"[questions] direct failed: {exc}")
         return ""
+
+
+def extract_lesson_topic_llm(message: str, recent_conversation: str = "") -> str:
+    """The topic a lesson plan should cover. Empty string when the request names none."""
+    if not (LANGCHAIN_AVAILABLE and (llm_precise or llm)):
+        return ""
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        ctx = f"\n\nRecent conversation:\n{recent_conversation}" if recent_conversation else ""
+        model = llm_precise or llm
+        resp = model.invoke([
+            SystemMessage(content=(
+                "Extract the SUBJECT MATTER the lesson plan should teach. Output only the "
+                "topic, nothing else. A grade, a subject name, a duration, or a term is NOT "
+                "a topic: 'a Grade 11 Biology lesson' has no topic, 'a lesson on photosynthesis' "
+                "has the topic 'photosynthesis'. If the request continues an earlier "
+                "discussion ('turn that into a lesson plan'), use the topic from the recent "
+                "conversation. If there is genuinely no topic anywhere, output exactly: NONE")),
+            HumanMessage(content=f"Request: {message}{ctx}"),
+        ])
+        topic = (resp.content if hasattr(resp, "content") else str(resp)).strip().strip('"')
+        if not topic or topic.upper().startswith("NONE") or len(topic) > 120:
+            return ""
+        return topic
+    except Exception as exc:
+        print(f"[lesson] topic extract failed: {exc}")
+        return ""
+
 
 def extract_question_spec_llm(message: str, reply_context: str = "",
                               history_topic: str = "", recent_conversation: str = "") -> dict:
@@ -341,30 +863,54 @@ def classify_intent(message: str, has_document: bool = False, has_reply_context:
         from langchain_core.messages import SystemMessage, HumanMessage
         context_note = ""
         if has_document:
-            context_note += ("\nNOTE: the user has just uploaded a document this session. "
-                             "If the message refers to 'this document', 'the file', 'this', or "
-                             "asks to explain/summarize it, classify as document_or_reply.")
+            context_note += (
+                "\nNOTE: the user has uploaded a document in this session. If the message "
+                "asks ABOUT that document ('what is this document about', 'summarize the "
+                "file', 'what does it say about X', 'explain this'), classify as "
+                "document_or_reply. Any mention of 'this document', 'the file', 'the PDF', "
+                "'the upload', or 'the notes' points at that document.")
         if has_reply_context:
-            context_note += ("\nNOTE: the user is replying to a previous Nexa message (quoted). "
-                             "If the message says 'this', 'that', 'it', 'explain this', 'elaborate', "
-                             "referring to that quoted reply, classify as document_or_reply.")
+            context_note += (
+                "\nNOTE: the user is replying to a previous Nexa message (quoted). "
+                "If they are asking ABOUT that quoted text ('explain this', 'elaborate on "
+                "that', 'what does this mean'), classify as document_or_reply.")
+        if has_document or has_reply_context:
+            context_note += (
+                "\nIMPORTANT: creating something NEW always wins over document_or_reply. "
+                "If the message asks you to CREATE a lesson plan, quiz or assessment "
+                "questions, or an image FROM the quoted text or the document (for example "
+                "'make a lesson plan for this', 'generate 10 MCQs on this', 'draw a diagram "
+                "of this'), classify it as generate_lesson, generate_questions, or "
+                "generate_image, NOT document_or_reply. Mentions of output format such as "
+                "'in PDF format' are irrelevant to the category, ignore them when deciding.")
         system = (
             "Classify the user's message into exactly ONE category. Reply with ONLY the "
             "category word, nothing else.\n\n"
             "- document_or_reply: the message asks about an uploaded document or a quoted "
-            "previous reply ('explain this', 'what does this document contain', 'elaborate on "
-            "that', 'summarize the file').\n"
-            "- generate_questions: asking to CREATE quiz/test/assessment questions of any kind "
-            "(multiple choice, short answer, fill in the blank, true/false, essay), however phrased.\n"
-            "- generate_lesson: asking to CREATE a lesson plan.\n"
-            "- generate_image: asking to CREATE/draw/generate/show an image, picture, or diagram.\n"
-            "- curriculum: a question about an academic science topic that a school biology, "
-            "chemistry, or physics curriculum would cover.\n"
+            "previous reply ('explain this', 'what does this document contain', 'elaborate "
+            "on that', 'summarize the file').\n"
+            "- generate_questions: asking to CREATE quiz/test/assessment questions of any "
+            "kind (multiple choice, short answer, fill in the blank, true/false, essay), "
+            "however phrased.\n"
+            "- generate_lesson: asking to CREATE a lesson plan or teaching plan.\n"
+            "- generate_image: asking to CREATE/draw/generate/show an image, picture, or "
+            "diagram.\n"
+            "- curriculum: a question about an academic science topic that a school "
+            "biology, chemistry, or physics curriculum would cover.\n"
             "- general: a factual or general-knowledge question NOT specific to the science "
-            "curriculum (history, geography, current events, people, everyday facts).\n"
-            "- smalltalk: greetings, thanks, 'how are you', chit-chat, or personal questions to "
-            "the assistant — ONLY when the message is not asking for information or content.\n"
+            "curriculum (history, geography, computing, current events, people, everyday "
+            "facts).\n"
+            "- smalltalk: greetings, thanks, 'how are you', chit-chat, or personal questions "
+            "to the assistant, ONLY when the message is not asking for information or "
+            "content.\n"
             "- other: none of the above.\n\n"
+            "CRITICAL: only choose a generate_* category when the user is ASKING you to "
+            "produce something now. A statement about the user's own situation, plans, or "
+            "work is NOT a request. 'I am preparing a Grade 11 Biology lesson this week', "
+            "'I teach Grade 10 Chemistry', 'we have exams next month' are smalltalk, not "
+            "generate_lesson. Look for an actual instruction or question (create, make, "
+            "write, give me, can you, how do I, what is). If there is no instruction and no "
+            "question, the category is smalltalk or other.\n\n"
             "Decide by the user's actual intent, not by keywords. Reply with one word."
             + context_note
         )
@@ -380,6 +926,71 @@ def classify_intent(message: str, has_document: bool = False, has_reply_context:
         print(f"[intent] classify failed: {exc}")
         return "curriculum"
 
+_LESSON_FROM_TEXT_SYSTEM = (
+    "You are a PNG curriculum specialist writing a classroom-ready lesson plan.\n\n"
+    "RULES:\n"
+    "- Build the lesson around the material supplied below. It is the topic the "
+    "teacher is pointing at. You may add standard pedagogy (activities, timings, "
+    "assessment) but do not change the subject matter.\n"
+    "- If the material is only a fragment, infer the full topic it belongs to and "
+    "teach that topic properly.\n"
+    "- Never ask clarifying questions. Never address the user by name. No preamble "
+    "or closing remark. Begin with the # title and nothing else.\n\n"
+    "Structure (clean Markdown):\n"
+    "# [Lesson Title]\n## Overview\n## Learning Objectives\n## Key Concepts and Vocabulary\n"
+    "## Materials\n## Lesson Structure\n### Introduction / Engagement\n"
+    "### Direct Instruction / Explanation\n### Guided Practice\n### Independent Practice\n"
+    "### Closure / Consolidation\n## Differentiation\n## Assessment\n"
+    "## Extension and Homework\n## Teacher Notes\n\n"
+    "Give a time estimate, teacher actions, and student actions for each "
+    "lesson-structure subsection.\n\nAudience guidance: {audience}"
+)
+
+
+def generate_lesson_plan_from_text(message: str, access_role: str, source_text: str) -> str:
+    """Lesson plan built from a quoted reply or uploaded document."""
+    if not (LANGCHAIN_AVAILABLE and (llm_precise is not None or llm is not None)):
+        return ""
+    if not (source_text or "").strip():
+        return ""
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        model = llm_precise or llm
+        resp = model.invoke([
+            SystemMessage(content=_LESSON_FROM_TEXT_SYSTEM.replace(
+                "{audience}", build_role_instruction(access_role))),
+            HumanMessage(content=(
+                f"Teacher's request: {message}\n\n"
+                f"Material the teacher is pointing at:\n{source_text[:6000]}")),
+        ])
+        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
+    except Exception as exc:
+        print(f"[lesson] from-text failed: {exc}")
+        return ""
+
+_CURRICULUM_META_RE = re.compile(
+    r"not\s+(?:directly\s+|explicitly\s+|specifically\s+)?"
+    r"(?:mentioned|covered|found|included|stated|discussed|addressed)"
+    r"|(?:the\s+)?(?:provided\s+|given\s+|available\s+|supplied\s+)*"
+    r"(?:curriculum\s+)?(?:material|materials|excerpts?|content|text|documents?|sources?)"
+    r"\s+(?:does|do|did)\s+not"
+    r"|(?:material|materials|excerpts?|curriculum|information)\s+only\s+(?:mentions|covers|includes)"
+    r"|can\s+be\s+inferred\s+from\s+related\s+concepts"
+    r"|no\s+information\s+(?:is\s+)?(?:provided|available|found)"
+    r"|based\s+on\s+the\s+(?:provided\s+)?(?:curriculum\s+)?(?:material|excerpts)"
+    r"|no_coverage",
+    re.IGNORECASE)
+
+
+def curriculum_answer_is_evasive(text: str) -> bool:
+    body = (text or "").strip()
+    return (not body) or bool(_CURRICULUM_META_RE.search(body))
+
+
+def strip_curriculum_meta(text: str) -> str:
+    blocks = re.split(r"\n\s*\n", text or "")
+    kept = [b for b in blocks if not _CURRICULUM_META_RE.search(b)]
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(kept)).strip()
 
 def build_conversational_reply(message: str, name: str = "") -> str:
     if not (LANGCHAIN_AVAILABLE and llm is not None):
@@ -426,6 +1037,11 @@ _CURRICULUM_FORMAT_SYSTEM = (
     "RULES:\n"
     "- Use ONLY the information in the material below. Do NOT add facts or outside knowledge.\n"
     "- Do NOT omit substantive information; cover every key point.\n"
+    "- NEVER comment on what the material does or does not contain. Do not write phrases "
+    "like 'there is no information provided in the curriculum material', 'the material only "
+    "mentions', 'the excerpts do not cover', or 'not stated in the source'. The student must "
+    "never see any reference to the material, the excerpts, or their limits.\n"
+    "- If the material does not actually answer the question, reply with exactly: NO_COVERAGE\n"
     "- Remove PDF artifacts (page markers like '2 | P a g e', footnote numbers, broken spacing, URLs).\n"
     "- Clean Markdown: a short opening sentence, then headings, bold terms, and bullet lists.\n"
     "- Do NOT greet or name the student. No preamble or closing question.\n"
@@ -457,32 +1073,145 @@ def answer_over_context(message: str, context_text: str, access_role: str, kind:
         print(f"[context-answer] failed: {exc}")
         return ""
 
+_CURRICULUM_META_SIGNALS = (
+    "no information provided in the curriculum",
+    "not provided in the curriculum",
+    "the curriculum material does not",
+    "the curriculum does not",
+    "the material only mentions",
+    "the material does not",
+    "the provided material",
+    "the provided excerpts",
+    "the excerpts do not",
+    "in the given material",
+    "not mentioned in the",
+    "is not covered in the",
+    "no_coverage",
+)
+
+
+def curriculum_answer_is_evasive(text: str) -> bool:
+    """True when the reformat is talking about the PDFs instead of answering."""
+    body = (text or "").strip().lower()
+    if not body:
+        return True
+    return any(signal in body for signal in _CURRICULUM_META_SIGNALS)
+
+
+def strip_curriculum_meta(text: str) -> str:
+    """Drop any paragraph that comments on the curriculum material itself."""
+    blocks = re.split(r"\n\s*\n", text or "")
+    kept = [b for b in blocks
+            if not any(signal in b.lower() for signal in _CURRICULUM_META_SIGNALS)]
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(kept)).strip()
+
+
+_CONVERSATION_META_PHRASES = (
+    "first question", "last question", "previous question", "what did i ask",
+    "what i asked", "what we discussed", "we have discussed", "we've discussed",
+    "our conversation", "this conversation", "this chat", "chat history",
+    "earlier in this", "so far", "recap", "what have we", "what did we",
+)
+
+
+def is_conversation_meta_question(message: str) -> bool:
+    """True when the user is asking ABOUT the conversation, not about a topic."""
+    m = (message or "").lower()
+    return any(p in m for p in _CONVERSATION_META_PHRASES)
+
+
+def answer_about_conversation(message: str, session_id: str, access_role: str) -> str:
+    """Answer using the session transcript itself: 'what was my first question',
+    'summarize what we discussed'."""
+    transcript = get_recent_turns_text(session_id, n=20)
+    if not transcript or not (LANGCHAIN_AVAILABLE and llm is not None):
+        return ""
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        resp = llm.invoke([
+            SystemMessage(content=(
+                "You are Nexa. The user is asking about THIS conversation, not about a "
+                "school topic. Answer using ONLY the transcript below: name what they "
+                "asked, in what order, or summarise what was covered. Be brief and "
+                "concrete. Do NOT re-teach the topic and do NOT produce a lesson or "
+                "study notes. Do not invent turns that are not in the transcript. "
+                f"Audience guidance: {build_role_instruction(access_role)}")),
+            HumanMessage(content=f"Transcript:\n{transcript}\n\nUser's question: {message}"),
+        ])
+        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
+    except Exception as exc:
+        print(f"[conversation] meta answer failed: {exc}")
+        return ""
+
 def answer_from_curriculum(message: str, access_role: str) -> dict:
+    """Answer strictly from indexed curriculum material.
+
+    Returns None whenever the curriculum cannot genuinely answer the question, so
+    the caller falls through to general knowledge. Never returns text that
+    comments on what the material does or does not contain, and never dumps raw
+    PDF text into the chat.
+    """
     query = strip_output_format_noise(message) or message
     scope = parse_lesson_request_scope(message)
+
     curriculum = retrieve_curriculum_context(query, scope)
     if not curriculum:
         print(f"[curriculum] NO hit for {query!r}")
         return None
+
     material = _clean_pdf_artifacts(curriculum["context"])
     if not material:
+        print("[curriculum] retrieved chunks were empty after cleaning")
         return None
+
     if not (LANGCHAIN_AVAILABLE and (llm_precise is not None or llm is not None)):
-        return {"answer": material}
+        # No model to reformat with. Raw PDF text is worse than no answer,
+        # so hand the question to the caller instead.
+        print("[curriculum] no model available to reformat -> treating as miss")
+        return None
+
     try:
         from langchain_core.messages import SystemMessage, HumanMessage
         model = llm_precise or llm
         resp = model.invoke([
-            SystemMessage(content=_CURRICULUM_FORMAT_SYSTEM.replace("{audience}", build_role_instruction(access_role))),
-            HumanMessage(content=f"Student's question: {message}\n\nCurriculum material:\n{material}"),
+            SystemMessage(content=_CURRICULUM_FORMAT_SYSTEM.replace(
+                "{audience}", build_role_instruction(access_role))),
+            HumanMessage(content=(
+                f"Student's question: {message}\n\nCurriculum material:\n{material}")),
         ])
         formatted = (resp.content if hasattr(resp, "content") else str(resp)).strip()
     except Exception as exc:
         print(f"[curriculum] reformat failed: {exc}")
-        return {"answer": material}
+        return None
+
     if not formatted or looks_like_model_refusal(formatted):
-        return {"answer": material}
-    return {"answer": formatted}
+        print("[curriculum] empty or refused reformat -> treating as miss")
+        return None
+
+    if curriculum_answer_is_evasive(formatted):
+        first_block = re.split(r"\n\s*\n", formatted, maxsplit=1)[0]
+
+        # A disclaimer in the opening paragraph means the retrieval was wrong.
+        # Nothing after it is trustworthy, so do not salvage any of it.
+        if _CURRICULUM_META_RE.search(first_block):
+            print("[curriculum] answer opens with a coverage disclaimer -> treating as miss")
+            return None
+
+        salvaged = strip_curriculum_meta(formatted)
+        if len(salvaged) < 120:
+            print("[curriculum] evasive/meta answer -> treating as miss")
+            return None
+
+        print("[curriculum] stripped curriculum-gap commentary")
+        formatted = salvaged
+
+    return {
+        "answer": formatted,
+        "sources": curriculum.get("sources", []),
+        "grade": curriculum.get("grade", ""),
+        "subject": curriculum.get("subject", ""),
+        "term": curriculum.get("term", ""),
+    }
 
 
 def _render_plot(spec: dict, out_path: str) -> bool:
@@ -664,8 +1393,7 @@ DOCTYPE_MAP = {
 }
 
 # Syllabus defines the outcomes, so it outranks the guides during retrieval.
-DOCTYPE_PRIORITY = {"Syllabus": 3, "Teacher Guide": 2, "Student Guide": 1}
-
+DOCTYPE_PRIORITY = {"LMS Material": 5, "Syllabus": 3, "Teacher Guide": 2, "Student Guide": 1}
 
 def parse_curriculum_filename(path: str) -> dict:
     """Extract subject/term/grade/doctype from a curriculum filename."""
@@ -1075,59 +1803,57 @@ def stamp_pdf_footer(path: str, footer_text: Optional[str] = None) -> bool:
             pass
         return False
  
-CURRICULUM_MIN_SIMILARITY = float(os.getenv("NEXA_MIN_SIMILARITY", "0.15"))
-
-_TOPIC_STOPWORDS = {
-    "lesson", "plan", "create", "make", "write", "generate", "prepare", "teaching",
-    "grade", "term", "students", "student", "teacher", "about", "with", "from",
-    "that", "this", "have", "need", "want", "please", "topic", "unit", "using",
-    "based", "minutes", "minute", "hour", "hours", "subject", "school", "class",
-    "would", "could", "should", "pdf", "format", "document", "file", "official",
-    "curriculum", "syllabus",
-}
+CURRICULUM_MIN_SIMILARITY = float(os.getenv("NEXA_MIN_SIMILARITY", "0.10"))
 
 
-def _content_keywords(text: str) -> list:
-    tokens = re.findall(r"[a-z]{4,}", (text or "").lower())
-    seen, out = set(), []
-    for token in tokens:
-        if token in _TOPIC_STOPWORDS or token in seen:
-            continue
-        seen.add(token)
-        out.append(token)
-    return out
-
-
-def _keyword_hits(keywords: list, body: str) -> set:
-    low = (body or "").lower()
-    return {kw for kw in keywords if kw[:6] and kw[:6] in low}
+def _chroma_filter(pairs: dict):
+    clauses = [{k: {"$eq": v}} for k, v in pairs.items() if v]
+    if not clauses:
+        return None
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
 
 
 def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
-    """Grounded excerpts, narrowed to the requested grade/term/subject.
-
-    Returns None when the curriculum genuinely has nothing on the topic.
-    Coverage is decided by keyword overlap, not by an absolute vector score,
-    because embedding distances vary with the model and distance metric.
+    """Grounded curriculum excerpts, narrowed to the requested grade/term/subject.
+    Returns None when the curriculum genuinely has nothing on the topic, so the
+    caller falls through to general knowledge instead of forcing an answer out of
+    unrelated chunks.
     """
     if not LANGCHAIN_AVAILABLE:
         return None
-
     store = globals().get("vectorstore")
     if store is None:
         return None
-
     scope = scope or {}
+    grade = scope.get("grade")
+    term = scope.get("term")
+    subject = scope.get("subject")
+    # Subject is a hard constraint when stated. Relaxing it turns a Physics
+    # request into whatever Biology material exists for that grade.
     attempts = [
-        {"grade": scope.get("grade"), "term": scope.get("term"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade")},
+        {"grade": grade, "term": term, "subject": subject},
+        {"grade": grade, "subject": subject},
     ]
-    if not scope.get("grade"):
-        attempts.append({"subject": scope.get("subject")})
+    if subject:
+        attempts.append({"subject": subject})
+    elif grade:
+        attempts.append({"grade": grade})
+    if not grade and not subject:
         attempts.append({})
 
     hits, used_filter = [], {}
+    seen_ids = set()
+
+    def _merge(raw):
+        """Add new results, de-duplicating by content so grade-filtered and
+        subject-only passes don't double-count the same chunk."""
+        for doc, dist in raw:
+            key = (getattr(doc, "page_content", "") or "")[:120]
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            hits.append((doc, dist))
+
     for attempt in attempts:
         active = {key: value for key, value in attempt.items() if value}
         try:
@@ -1136,17 +1862,54 @@ def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
             print(f"[warn] filtered retrieval failed ({active}): {exc}")
             continue
         if raw:
-            hits, used_filter = raw, active
+            _merge(raw)
+            if not used_filter:
+                used_filter = active
+            # LMS content is tagged grade=Unknown, so a grade filter excludes it.
+            # When this successful attempt used a grade filter, do one more
+            # subject-only pass so Unknown-grade LMS material is included too.
+            if active.get("grade"):
+                subj_only = {"subject": active["subject"]} if active.get("subject") else {}
+                try:
+                    raw2 = store.similarity_search_with_score(
+                        query, k=k, filter=_chroma_filter(subj_only))
+                    if raw2:
+                        _merge(raw2)
+                except Exception:
+                    pass
             break
 
+    # Fallback: if the long-lived store handle returned nothing, retry once with a
+    # freshly-opened handle. Works around a stale in-process search index after
+    # documents were added by the ingest endpoint since this process started.
     if not hits:
+        try:
+            fresh = Chroma(
+                collection_name="curriculum_db",
+                embedding_function=globals().get("embeddings"),
+                persist_directory=os.path.expanduser("~/Nexa/chroma_store"),
+                collection_metadata={"hnsw:space": "cosine"},
+            )
+            raw = fresh.similarity_search_with_score(query, k=k, filter=None)
+            if raw:
+                _merge(raw)
+                used_filter = {}
+                globals()["vectorstore"] = fresh
+                print(f"[retrieval] fresh-handle fallback returned {len(raw)} (adopted)")
+        except Exception as exc:
+            print(f"[retrieval] fresh-handle fallback failed: {exc}")
+
+    if not hits:
+        print(f"[retrieval] no chunks for {query[:60]!r}")
         return None
+
+    # Re-rank the merged pool by distance so the best chunks (LMS or PDF) lead.
+    hits.sort(key=lambda item: item[1])
+    hits = hits[:k]
 
     keywords = _content_keywords(query)
 
     def _similarity(distance):
-        # Cosine space -> distance in [0, 2]. Anything larger means the
-        # collection is still on L2, so skip the absolute check.
         if distance is None or distance > 2.0:
             return None
         return 1.0 - float(distance)
@@ -1161,37 +1924,59 @@ def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
             continue
         matched = _keyword_hits(keywords, body)
         scored.append((doc, distance, sim, matched))
-
     if not scored:
+        print(f"[retrieval] all chunks below similarity floor for {query[:60]!r}")
         return None
 
-    meta0 = lambda d: (getattr(d, "metadata", {}) or {})
+    def _meta(doc):
+        return getattr(doc, "metadata", {}) or {}
+
     print("[retrieval] filter=%s query=%r" % (used_filter, query[:70]))
     for doc, distance, sim, matched in scored[:5]:
-        m = meta0(doc)
-        print("   %-42s p.%-4s dist=%.3f sim=%s kw=%s"
-              % (m.get("file", "?"), m.get("page", "?"), distance,
+        m = _meta(doc)
+        src_tag = "LMS" if m.get("doctype") == "LMS Material" else "PDF"
+        # PDFs carry a page; LMS docx/pptx carry a chunk index instead.
+        if src_tag == "LMS":
+            locator = f"chunk {m.get('chunk', '?')}"
+        else:
+            pg = m.get("page")
+            locator = f"p.{int(pg) + 1}" if isinstance(pg, int) else "p.?"
+        course = m.get("course", "")
+        print("   [%s] %-38s subj=%-10s grade=%-8s course=%-20s %-9s dist=%.3f sim=%s kw=%s"
+              % (src_tag, str(m.get("file", "?"))[:38],
+                 m.get("subject", "?"), m.get("grade", "?"),
+                 (str(course)[:20] if course else "-"),
+                 locator, distance,
                  f"{sim:.3f}" if sim is not None else "n/a", sorted(matched)[:4]))
 
-    # Coverage gate: the topic must actually appear in the retrieved text.
-    if keywords and not any(matched for _, _, _, matched in scored):
-        print("[retrieval] no keyword overlap -> treating topic as not covered")
-        return None
+    # COVERAGE GATE. One loose hit is not coverage: a single shared word like
+    # "water" matched acid-base chemistry to a question about basalt.
+    if keywords:
+        needed = 2 if len(keywords) >= 2 else 1
+        covered = any(len(matched) >= needed for _, _, _, matched in scored)
+        # A strong-similarity chunk that matches at least one real keyword is
+        # genuine coverage even for a single-word topic like "photosynthesis",
+        # where the count can never reach two.
+        if not covered:
+            covered = any(
+                (sim is not None and sim >= 0.70 and len(matched) >= 1)
+                for _, _, sim, matched in scored)
+        if not covered:
+            print(f"[retrieval] weak keyword overlap (needed {needed}) -> not covered")
+            return None
 
-    # Chunks containing the topic first, then syllabus over guides, then distance.
     scored.sort(key=lambda item: (
         0 if item[3] else 1,
-        -DOCTYPE_PRIORITY.get(meta0(item[0]).get("doctype", ""), 0),
+        -DOCTYPE_PRIORITY.get(_meta(item[0]).get("doctype", ""), 0),
         item[1],
     ))
 
     blocks, sources, grades, subjects, terms = [], [], [], [], []
     for doc, _distance, _sim, _matched in scored[:10]:
-        meta = meta0(doc)
+        meta = _meta(doc)
         page = meta.get("page")
         page_label = f" p.{int(page) + 1}" if isinstance(page, int) else ""
         label = f"{meta.get('file', 'curriculum')}{page_label}"
-
         blocks.append(
             f"[SOURCE: {label} | {meta.get('subject','')} | {meta.get('grade','')} | "
             f"{meta.get('term','')} | {meta.get('doctype','')}]\n{doc.page_content.strip()}")
@@ -1202,6 +1987,16 @@ def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
                               (meta.get("term"), terms)):
             if value and value != "Unknown":
                 bucket.append(value)
+    if not blocks:
+        return None
+
+    # Summary of where the answer's material came from, tagged LMS vs PDF.
+    src_summary = set()
+    for doc, _d, _s, _m in scored[:10]:
+        meta = _meta(doc)
+        tag = "LMS" if meta.get("doctype") == "LMS Material" else "PDF"
+        src_summary.add(f"{tag}:{meta.get('subject','?')}/{meta.get('grade','?')}")
+    print(f"[retrieval] answer drawn from: {', '.join(sorted(src_summary))}")
 
     def _most_common(values):
         return max(set(values), key=values.count) if values else ""
@@ -1209,12 +2004,12 @@ def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 14):
     return {
         "context": "\n\n---\n\n".join(blocks),
         "sources": sources,
-        "grade": scope.get("grade") or _most_common(grades),
-        "subject": scope.get("subject") or _most_common(subjects),
-        "term": scope.get("term") or _most_common(terms),
+        "grade": grade or _most_common(grades),
+        "subject": subject or _most_common(subjects),
+        "term": term or _most_common(terms),
         "filter_used": used_filter,
         "chunks": len(blocks),
-    } 
+    }
 # ---------------------------------------------------------------------
 # MAIN ENTRY POINT - build a PDF from a Markdown answer
 # ---------------------------------------------------------------------
@@ -1307,33 +2102,8 @@ def quick_reply(message: str, user_name: str = ""):
         return "Goodbye! Come back anytime you need help with your studies."
     return None
 
-def wrap_bare_latex(text: str) -> str:
-    """Ensure LaTeX the model emitted without $ delimiters gets wrapped so KaTeX renders it.
-    Applied to math answers before they are sent to the frontend."""
-    if not text:
-        return text
 
-    # \boxed{...} (may contain one level of nested braces) -> $$...$$ if not already wrapped
-    text = re.sub(
-        r'(?<!\$)(\\boxed\{(?:[^{}]|\{[^{}]*\})*\})(?!\$)',
-        r'$$\1$$',
-        text,
-    )
 
-    # \int ... dt / dx  -> $$...$$
-    text = re.sub(
-        r'(?<!\$)(\\int[^\n]*?\bd[a-z]\b)(?!\$)',
-        r'$$\1$$',
-        text,
-    )
-
-    # Inline tokens like V_{total}, e^{-0.2t}, 120t^2, \frac{a}{b} -> $...$
-    text = re.sub(
-        r'(?<!\$)([A-Za-z0-9]*(?:\\[a-zA-Z]+|[_^]\{[^}]*\}|[_^][A-Za-z0-9])[A-Za-z0-9{}^_\\\-\.]*)(?!\$)',
-        r'$\1$',
-        text,
-    )
-    return text
 
 def load_user_memory():
     global USER_MEMORY
@@ -1352,6 +2122,49 @@ def save_user_memory():
 
 load_user_memory()
 
+_TOPIC_STOPWORDS = {
+    "lesson", "plan", "create", "make", "write", "generate", "prepare", "teaching",
+    "grade", "term", "students", "student", "teacher", "about", "with", "from",
+    "that", "this", "have", "need", "want", "please", "topic", "unit", "using",
+    "based", "minutes", "minute", "hour", "hours", "subject", "school", "class",
+    "would", "could", "should", "pdf", "format", "document", "file", "official",
+    "curriculum", "syllabus",
+    # Request scaffolding, never a topic. Without these, "give me three examples
+    # of that" matches any chunk containing "three" or "examples".
+    "examples", "example", "three", "four", "five", "give", "simpler", "simple",
+    "shorter", "language", "another", "more", "explain", "expand", "second",
+    "third", "first", "last", "next", "again", "instead", "different",
+    # Question words and generic nouns — never the topic itself. Without these,
+    # "what is photosynthesis" keeps "what" as a keyword and the coverage gate
+    # wrongly demands two matches for a single-topic question.
+    "what", "when", "where", "which", "whom", "whose", "does", "types", "type",
+    "kind", "kinds", "various", "list", "tell", "discuss", "outline", "describe",
+    "define", "definition", "meaning",
+}
+
+def _content_keywords(text: str) -> list:
+    tokens = re.findall(r"[a-z]{4,}", (text or "").lower())
+    seen, out = set(), []
+    for token in tokens:
+        if token in _TOPIC_STOPWORDS or token in seen:
+            continue
+        seen.add(token)
+        out.append(token)
+    return out
+
+
+def _keyword_hits(keywords: list, body: str) -> set:
+    low = (body or "").lower()
+    return {kw for kw in keywords if kw[:6] and kw[:6] in low}
+
+
+def _material_covers_topic(topic: str, context: str) -> bool:
+    """Retrieved chunks must actually mention the topic before we answer from them."""
+    kws = _content_keywords(topic or "")
+    if not kws:
+        return True
+    hits = _keyword_hits(kws, context or "")
+    return len(hits) >= (2 if len(kws) >= 2 else 1)
 
 import re
 
@@ -1527,6 +2340,47 @@ from sympy.parsing.sympy_parser import (
 )
 
 _SYMPY_TF = standard_transformations + (implicit_multiplication_application,)
+
+
+_MATH_CHAR_MAP = str.maketrans({
+    "⁰": "^0", "¹": "^1", "²": "^2", "³": "^3", "⁴": "^4",
+    "⁵": "^5", "⁶": "^6", "⁷": "^7", "⁸": "^8", "⁹": "^9",
+    "−": "-", "–": "-", "—": "-", "×": "*", "÷": "/",
+})
+
+def _latex_to_math_text(t: str) -> str:
+    """Convert MathLive LaTeX into text solve_with_sympy understands."""
+    s = t
+    m = re.search(r'\\int_\{?([^{}]+?)\}?\^\{?([^{}]+?)\}?\s*(.+?)\s*(?:\\,)?\s*d\s*x', s)
+    if m:
+        return f"integrate {m.group(3)} from {m.group(1)} to {m.group(2)}"
+    m = re.search(r'\\int\s*(.+?)\s*(?:\\,)?\s*d\s*x', s)
+    if m:
+        return f"integrate {m.group(1)}"
+    s = re.sub(r'\\frac\{([^{}]+)\}\{([^{}]+)\}', r'(\1)/(\2)', s)
+    s = s.replace('\\sqrt', 'sqrt').replace('\\pi', 'pi').replace('\\theta', 'theta')
+    s = s.replace('\\cdot', '*').replace('\\times', '*').replace('\\div', '/')
+    s = s.replace('\\left', '').replace('\\right', '').replace('\\,', ' ')
+    s = re.sub(r'\^\{([^{}]+)\}', r'^(\1)', s)
+    s = re.sub(r'\\[a-zA-Z]+', '', s)
+    return s.strip()
+
+
+def normalize_math_input(text: str) -> str:
+    """Repair maths pasted from a page: Unicode superscripts and lost carets.
+    'f(x)=3x4-5x3+2x2-7x+4' becomes 'f(x)=3x^4-5x^3+2x^2-7x+4'."""
+    # MathLive sends LaTeX (contains backslashes) — convert it to plain math text first.
+    if "\\" in (text or ""):
+        text = _latex_to_math_text(text)
+    t = (text or "").translate(_MATH_CHAR_MAP)
+    t = re.sub(r"\^(\d)\s*\^(\d)", r"^\1\2", t)
+    # A digit stuck to a variable is a superscript the copy/paste dropped.
+    # Only applied when the text carries no carets already, so properly typed
+    # input is never touched.
+    if "^" not in t and re.search(r"[a-zA-Z]\d", t):
+        t = re.sub(r"(?<=[a-zA-Z])(\d+)", r"^\1", t)
+    return re.sub(r"\^{2,}", "^", t)
+
 
 def solve_with_sympy(message: str):
     """Compute an exact answer with SymPy. Returns (latex_result, plain) or None."""
@@ -1773,43 +2627,62 @@ def build_curriculum_image_prompt(subject: str, curriculum_context: str) -> str:
         return subject
 
 
-def build_general_knowledge_answer(message: str) -> str:
-    if looks_like_math(message) or looks_like_reasoning_question(message):
-        return ""
+def build_general_knowledge_answer(message: str, history_text: str = "") -> str:
+    """Answer from the model's own knowledge. Never returns empty just because the
+    question is a reasoning or maths question, and uses the session transcript so
+    follow-up questions resolve."""
     lowered = (message or "").lower()
     query = build_web_results_query(message)
+
     if "wikipedia" in lowered or "wiki" in lowered:
         return fetch_wikipedia_summary(query)
     if looks_like_web_query(message):
         return fetch_web_results(query)
 
-    model = llm_general or llm   # prefer GPT-4o, fall back to local
-    if model is None:
+    if not LANGCHAIN_AVAILABLE:
         return ""
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
-        wants_detail = any(w in lowered for w in
-                           ("in detail", "detailed", "in depth", "comprehensive",
-                            "full", "explain fully", "elaborate", "thorough"))
-        depth = ("Give a COMPLETE, thorough, well-structured answer with Markdown headings, "
-                 "covering background, key concepts, examples, and a short summary. Finish "
-                 "every section fully." if wants_detail
-                 else "Answer clearly and accurately in a few well-organized paragraphs.")
-        system = (
-            "You are Nexa, a knowledgeable educational assistant for PNG students. "
-            "Answer accurately from your own knowledge in clean Markdown. " + depth +
-            " If genuinely unsure of a fact, say so briefly rather than inventing details."
-        )
-        resp = model.invoke([SystemMessage(content=system), HumanMessage(content=message)])
-        return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-    except Exception as exc:
-        print(f"[general] answer failed: {exc}")
-        # fall back to local model on any OpenAI error
+
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    wants_detail = any(w in lowered for w in
+                       ("in detail", "detailed", "in depth", "comprehensive",
+                        "full", "explain fully", "elaborate", "thorough"))
+    depth = ("Give a COMPLETE, thorough, well-structured answer with Markdown headings, "
+             "covering background, key concepts, examples, and a short summary. Finish "
+             "every section fully." if wants_detail
+             else "Answer clearly and accurately in a few well-organized paragraphs.")
+
+    system = (
+        "You are Nexa, a knowledgeable educational assistant for PNG students. "
+        "Answer accurately from your own knowledge in clean Markdown. " + depth +
+        " Wrap any maths in $...$ or $$...$$ and write every power in LaTeX as x^{n}, "
+        "never as x4 or x**4. "
+        "NEVER comment on what any curriculum material, document, or excerpt does or "
+        "does not contain. The student must never see phrases like 'the material only "
+        "mentions' or 'there is no information provided in the curriculum'. "
+        "If genuinely unsure of a fact, say so briefly rather than inventing details."
+    )
+
+    human = message
+    if history_text:
+        human = (f"Conversation so far (for context only):\n{history_text}\n\n"
+                 f"Current question: {message}")
+
+    # Try the OpenAI model first, then the local model. A reasoning or maths
+    # question is answered here like any other, never refused.
+    for model in (llm_general, llm):
+        if model is None:
+            continue
         try:
-            resp = llm.invoke([SystemMessage(content=system), HumanMessage(content=message)])
-            return (resp.content if hasattr(resp, "content") else str(resp)).strip()
-        except Exception:
-            return ""
+            resp = model.invoke([SystemMessage(content=system),
+                                 HumanMessage(content=human)])
+            text = (resp.content if hasattr(resp, "content") else str(resp)).strip()
+            if text and not looks_like_model_refusal(text):
+                return strip_curriculum_meta(text) or text
+        except Exception as exc:
+            print(f"[general] model call failed: {exc}")
+    return ""
+
 
 def solve_simple_reasoning_question(message: str) -> str:
     text = (message or "").strip()
@@ -2000,102 +2873,6 @@ def parse_lesson_request_scope(message: str) -> dict:
             break
     return scope
 
-
-def _chroma_filter(pairs: dict):
-    clauses = [{k: {"$eq": v}} for k, v in pairs.items() if v]
-    if not clauses:
-        return None
-    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
-
-
-def retrieve_curriculum_context(query: str, scope: dict = None, k: int = 12,
-                                min_score: float = 0.25):
-    """Grounded excerpts, narrowed to the requested grade/term/subject.
-
-    Returns None when the curriculum has nothing relevant — the caller must
-    refuse rather than let the model invent content.
-    """
-    if not LANGCHAIN_AVAILABLE:
-        return None
-
-    store = globals().get("vectorstore")
-    if store is None:
-        return None
-
-    scope = scope or {}
-    # Grade is a hard constraint when the teacher stated it. Term and subject
-    # relax first, so a Grade 11 request never returns Grade 12 material.
-    attempts = [
-        {"grade": scope.get("grade"), "term": scope.get("term"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade"), "subject": scope.get("subject")},
-        {"grade": scope.get("grade")},
-    ]
-    if not scope.get("grade"):
-        attempts.append({"subject": scope.get("subject")})
-        attempts.append({})
-
-    hits = []
-    used_filter = {}
-    for attempt in attempts:
-        active = {key: value for key, value in attempt.items() if value}
-        try:
-            raw = store.similarity_search_with_relevance_scores(
-                query, k=k, filter=_chroma_filter(active))
-        except Exception as exc:
-            print(f"[warn] filtered retrieval failed ({active}): {exc}")
-            continue
-        candidates = [(d, s) for d, s in raw if s is None or s >= min_score]
-        if candidates:
-            hits, used_filter = candidates, active
-            break
-
-    if not hits:
-        return None
-
-    # Syllabus chunks first, then by relevance.
-    def _rank(item):
-        doc, score = item
-        doctype = (doc.metadata or {}).get("doctype", "")
-        return (-DOCTYPE_PRIORITY.get(doctype, 0), -(score or 0))
-
-    hits.sort(key=_rank)
-
-    blocks, sources, grades, subjects, terms = [], [], [], [], []
-    for doc, _score in hits:
-        meta = doc.metadata or {}
-        body = (doc.page_content or "").strip()
-        if not body:
-            continue
-        page = meta.get("page")
-        page_label = f" p.{int(page) + 1}" if isinstance(page, int) else ""
-        label = f"{meta.get('file', 'curriculum')}{page_label}"
-
-        blocks.append(
-            f"[SOURCE: {label} | {meta.get('subject','')} | {meta.get('grade','')} | "
-            f"{meta.get('term','')} | {meta.get('doctype','')}]\n{body}")
-        if label not in sources:
-            sources.append(label)
-        for value, bucket in ((meta.get("grade"), grades),
-                              (meta.get("subject"), subjects),
-                              (meta.get("term"), terms)):
-            if value and value != "Unknown":
-                bucket.append(value)
-
-    if not blocks:
-        return None
-
-    def _most_common(values):
-        return max(set(values), key=values.count) if values else ""
-
-    return {
-        "context": "\n\n---\n\n".join(blocks),
-        "sources": sources,
-        "grade": scope.get("grade") or _most_common(grades),
-        "subject": scope.get("subject") or _most_common(subjects),
-        "term": scope.get("term") or _most_common(terms),
-        "filter_used": used_filter,
-        "chunks": len(blocks),
-    }
 
 
 def curriculum_coverage_summary() -> str:
@@ -3161,48 +3938,72 @@ class PrefixedOllamaEmbeddings(OllamaEmbeddings):
     def embed_query(self, text):
         return super().embed_query(f"search_query: {text}")
 
+CHROMA_DIR = os.path.expanduser("~/Nexa/chroma_store")
+
 if LANGCHAIN_AVAILABLE:
-    print(f"Loading {len(PDF_PATHS)} curriculum PDFs...")
-    for pdf in PDF_PATHS:
-        if not os.path.exists(pdf):
-            continue
-        info = CURRICULUM_INDEX.get(pdf) or parse_curriculum_filename(pdf)
+    embeddings = PrefixedOllamaEmbeddings(model=EMBED_MODEL)
+
+    # If a persisted store already exists, load it — it contains the base PDFs
+    # AND every LMS document ingested since, so a restart keeps all of them.
+    if os.path.isdir(CHROMA_DIR) and os.listdir(CHROMA_DIR):
+        print("Loading persisted vector store (base PDFs + ingested LMS materials)...")
         try:
-            loaded = PyPDFLoader(pdf).load()
+            vectorstore = Chroma(
+                collection_name="curriculum_db",
+                embedding_function=embeddings,
+                persist_directory=CHROMA_DIR,
+                collection_metadata={"hnsw:space": "cosine"},
+            )
+            count = vectorstore._collection.count()
+            print(f"Loaded persisted store: {count} chunks from {CHROMA_DIR}")
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
+            llm = ChatOllama(model=MODEL_NAME, temperature=0.4, num_predict=2048, num_ctx=8192)
+            llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1, num_predict=2048, num_ctx=8192)
         except Exception as exc:
-            print(f"  [skip] {os.path.basename(pdf)}: {exc}")
-            continue
+            print(f"Persisted store load failed ({exc}) -> rebuilding from PDFs")
+            vectorstore = None
 
-        for page in loaded:
-            page.metadata = dict(page.metadata or {})
-            page.metadata.update({
-                "file": info["file"],
-                "subject": info["subject"] or "Unknown",
-                "grade": info["grade"] or "Unknown",
-                "term": info["term"] or "Unknown",
-                "doctype": info["doctype"] or "Unknown",
-            })
-        docs.extend(loaded)
-        print(f"  [ok] {info['file']} -> {info['subject']} / {info['grade']} / "
-              f"{info['term']} / {info['doctype']} ({len(loaded)} pages)")
+    # First run (or load failed): build from the curriculum PDFs and persist.
+    if vectorstore is None:
+        print(f"Loading {len(PDF_PATHS)} curriculum PDFs...")
+        for pdf in PDF_PATHS:
+            if not os.path.exists(pdf):
+                continue
+            info = CURRICULUM_INDEX.get(pdf) or parse_curriculum_filename(pdf)
+            try:
+                loaded = PyPDFLoader(pdf).load()
+            except Exception as exc:
+                print(f"  [skip] {os.path.basename(pdf)}: {exc}")
+                continue
+            for page in loaded:
+                page.metadata = dict(page.metadata or {})
+                page.metadata.update({
+                    "file": info["file"],
+                    "subject": info["subject"] or "Unknown",
+                    "grade": info["grade"] or "Unknown",
+                    "term": info["term"] or "Unknown",
+                    "doctype": info["doctype"] or "Unknown",
+                })
+            docs.extend(loaded)
+            print(f"  [ok] {info['file']} -> {info['subject']} / {info['grade']} / "
+                  f"{info['term']} / {info['doctype']} ({len(loaded)} pages)")
 
-    if docs:
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
-        splits = text_splitter.split_documents(docs)
-
-        embeddings = PrefixedOllamaEmbeddings(model=EMBED_MODEL)
-        vectorstore = Chroma.from_documents(
-            documents=splits,
-            embedding=embeddings,
-            collection_name="curriculum_db",
-		collection_metadata={"hnsw:space": "cosine"},
-        )
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
-        llm = ChatOllama(model=MODEL_NAME, temperature=0.4, num_predict=2048, num_ctx=8192)
-        llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1,num_predict=2048,  num_ctx=8192)   # grounded work
-        print(f"Indexed {len(splits)} chunks from {len(docs)} pages.")
-    else:
-        llm_precise = None
+        if docs:
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+            splits = text_splitter.split_documents(docs)
+            vectorstore = Chroma.from_documents(
+                documents=splits,
+                embedding=embeddings,
+                collection_name="curriculum_db",
+                collection_metadata={"hnsw:space": "cosine"},
+                persist_directory=CHROMA_DIR,
+            )
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
+            llm = ChatOllama(model=MODEL_NAME, temperature=0.4, num_predict=2048, num_ctx=8192)
+            llm_precise = ChatOllama(model=MODEL_NAME, temperature=0.1, num_predict=2048, num_ctx=8192)
+            print(f"Built and persisted {len(splits)} chunks from {len(docs)} pages to {CHROMA_DIR}.")
+        else:
+            llm_precise = None
 
 # ====================== HISTORY RETRIEVER ======================
 if LANGCHAIN_AVAILABLE and retriever is not None and llm is not None:
@@ -3740,6 +4541,51 @@ class UrlReadRequest(BaseModel):
     user_email: Optional[str] = None
     session_id: Optional[str] = None
 
+_LATEX_COMMAND_RE = re.compile(r"\\[a-zA-Z]+")
+
+
+def normalize_latex_delimiters(text: str) -> str:
+    r"""Convert \[ \] and \( \) to $$ and $. Markdown strips the backslash from
+    \[ before KaTeX runs, which is why display blocks arrive as bare brackets."""
+    t = text or ""
+    t = re.sub(r"\\\[\s*", "\n$$\n", t)
+    t = re.sub(r"\s*\\\]", "\n$$\n", t)
+    t = re.sub(r"\\\(\s*", "$", t)
+    t = re.sub(r"\s*\\\)", "$", t)
+    return re.sub(r"\n{3,}", "\n\n", t)
+
+
+def wrap_bare_latex(text: str) -> str:
+    """Ensure LaTeX reaches KaTeX with usable delimiters.
+
+    If the model already delimited its maths, only normalise the delimiter style.
+    Inserting dollars into an already-delimited expression is what produced
+    "$\\frac{-7$ $\\pm$ $\\sqrt{97}}{2}$".
+    """
+    if not text:
+        return text
+
+    t = normalize_latex_delimiters(text)
+
+    if "$" in t:
+        return t
+
+    # Whole-line expressions only. No inline token wrapping: that rule also
+    # mangled filenames like import_materials.php.
+    t = re.sub(r"(?m)^\s*(\\boxed\{(?:[^{}]|\{[^{}]*\})*\})\s*$", r"$$\1$$", t)
+    t = re.sub(r"(?m)^\s*(\\int[^\n]*?\bd[a-z]\b)\s*$", r"$$\1$$", t)
+
+    def _wrap_line(m):
+        line = m.group(0).strip()
+        if not _LATEX_COMMAND_RE.search(line):
+            return m.group(0)
+        return f"$${line}$$"
+
+    # A line that is nothing but a LaTeX expression.
+    t = re.sub(r"(?m)^\s*[\\{}\[\]()a-zA-Z0-9+\-*/=^_.,\s]*\\[a-zA-Z]+"
+               r"[\\{}\[\]()a-zA-Z0-9+\-*/=^_.,\s]*$", _wrap_line, t)
+    return t
+
 
 def infer_chat_status(message: str, access_role: str, staged_file_name: Optional[str] = None) -> tuple[str, str]:
     lower_msg = (message or "").lower()
@@ -3854,6 +4700,62 @@ async def chat_status_endpoint(request: ChatRequest):
 
     status_message, action = infer_chat_status(request.message, access_role, request.staged_file_name)
     return ChatStatusResponse(status_message=status_message, action=action)
+
+
+@app.post("/ingest-material")
+async def ingest_material(
+    file: UploadFile = File(...),
+    course: str = Form(""),
+    subject: str = Form(""),
+    grade: str = Form(""),
+    token: str = Form(""),
+):
+    if INGEST_TOKEN and token != INGEST_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid ingest token")
+    if not (LANGCHAIN_AVAILABLE and globals().get("vectorstore") is not None):
+        raise HTTPException(status_code=503, detail="Vector store unavailable")
+
+    filename = file.filename or "material"
+    suffix = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        text = _extract_uploaded_text(tmp_path, filename)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    if not text.strip():
+        return {"status": "empty", "filename": filename, "chunks": 0}
+
+    subj = SUBJECT_CODE_MAP.get((subject or "").lower(), (subject or "Unknown").title() or "Unknown")
+    g = re.search(r"(\d{1,2})", str(grade or ""))
+    grade_norm = f"Grade {int(g.group(1))}" if g else "Unknown"
+
+    from langchain.schema import Document as LCDocument
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+    chunks = splitter.split_text(text)
+    docs = [LCDocument(page_content=c, metadata={
+        "file": filename, "subject": subj, "grade": grade_norm,
+        "term": "Unknown", "doctype": "LMS Material", "course": course,
+        "chunk": i + 1,
+    }) for i, c in enumerate(chunks) if c.strip()]
+
+    if not docs:
+        return {"status": "empty", "filename": filename, "chunks": 0}
+
+    try:
+        globals()["vectorstore"].add_documents(docs)
+        print(f"[ingest] +{len(docs)} chunks from {filename} ({subj} {grade_norm}, course={course!r})")
+    except Exception as exc:
+        print(f"[ingest] add_documents failed: {exc}")
+        raise HTTPException(status_code=500, detail="Index update failed")
+
+    return {"status": "ok", "filename": filename, "subject": subj,
+            "grade": grade_norm, "chunks": len(docs)}
 
 
 @app.post("/api/chat-stop")
@@ -4077,9 +4979,42 @@ async def image_status(image_id: str):
     }
 
 
+# Words that mean "make something new", not "reformat what you just said".
+# Used to stop the reply-context PDF shortcut from swallowing generation requests.
+_NEW_CONTENT_WORDS = (
+    "lesson plan", "teaching plan", "quiz", "question", "mcq", "worksheet",
+    "test", "essay", "image", "diagram", "picture", "explain", "expand",
+    "rewrite", "shorten", "translate", "summar", "notes",
+)
+
+# Shared maths formatting rule. Every prompt that can emit maths uses this, so
+# the delimiters the frontend renders are the only ones the model produces.
+_MATH_FORMAT_RULE = (
+    "Use ONLY $...$ for inline maths and $$...$$ for display maths. NEVER use "
+    "\\[ \\], \\( \\), or bare brackets. Write every power as x^{n}, never as x4 "
+    "or x**4. Keep each complete expression inside ONE pair of delimiters: write "
+    "$x = \\frac{-7 \\pm \\sqrt{97}}{2}$, never split a fraction or a root across "
+    "several dollar signs."
+)
+
+def _is_explain_request(message: str) -> bool:
+    """True when the user is asking to explain / guide / clarify / walk through,
+    not to explicitly create a lesson, quiz, or image."""
+    m = (message or "").lower().strip()
+    # Explicit content-creation requests are NOT explain requests.
+    if re.search(r"\b(lesson plan|make a lesson|create a lesson|quiz|"
+                 r"mcq|worksheet|generate .*questions|create .*questions|"
+                 r"image|diagram|picture)\b", m):
+        return False
+    return bool(re.search(
+        r"\b(explain|elaborate|clarify|describe|expand|tell me more|"
+        r"what (is|are|does)|in detail|simpler|break (it|this) down|"
+        r"guide me|guide us|how (to|do i|do we|can i|can we|does|is)|"
+        r"walk me through|walk us through|steps to|step by step|"
+        r"help me (with|understand|implement)|show me how)\b", m))
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-
     # ---------- ROLE RESOLUTION ----------
     try:
         access_role = infer_access_role(request.user_email)
@@ -4088,29 +5023,22 @@ async def chat_endpoint(request: ChatRequest):
         prior = SESSION_ACCESS_PROFILE.get(request.session_id or "", {})
         access_role = prior.get("role", "student")
         normalized_email = prior.get("email", "")
-
     session_id = request.session_id or str(uuid.uuid4())
     SESSION_ACCESS_PROFILE[session_id] = {"email": normalized_email, "role": access_role}
-
     student_name = (request.user_name or "").strip()
-
     def _log_name() -> str:
         return student_name or normalized_email or TEST_USER_NAME
-
     if is_chat_turn_cancelled(request.turn_id):
         return ChatResponse(
             response="", session_id=session_id, access_role=access_role,
             status_message="Nexa is Thinking...", pdf_url=None,
             image_url=None, image_id=None, log_id=None,
         )
-
     hydrate_session_history(session_id)
     record_chat_turn(session_id, "user", request.message)
-    capture_user_fact(normalized_email, request.message)
-
+    capture_user_fact(session_id, request.message)
     page_url = (request.url or "").strip()
     page_question = (request.question or "").strip() or (request.message or "").strip()
-
     # ---------- URL READING ----------
     if page_url:
         page_text = fetch_page_text(page_url)
@@ -4121,37 +5049,25 @@ async def chat_endpoint(request: ChatRequest):
                 status_message="Nexa is Searching ...", pdf_url=None,
                 image_url=None, image_id=None, log_id=str(uuid.uuid4()),
             )
-
         existing = SESSION_DOCUMENT_BUFFER.get(session_id, "")
         combined = (existing + f"\n\n--- Web page: {page_url} ---\n{page_text}").strip()
         SESSION_DOCUMENT_BUFFER[session_id] = combined[:MAX_DOC_CHARS]
         question = page_question or "Summarize this web page clearly for a student."
-
-        if LANGCHAIN_AVAILABLE and llm is not None:
-            prompt = ChatPromptTemplate.from_messages([
-                ("system",
-                 "You are Nexa, an educational assistant. Read the web page content provided and "
-                 "answer the user's request accurately in clean Markdown, using only that content. "
-                 "Do not invent details. Audience guidance: {audience}"),
-                ("human", "User request: {question}\n\nWeb page content:\n{page}"),
-            ])
-            try:
-                answer = (prompt | llm | StrOutputParser()).invoke({
-                    "question": question, "page": page_text,
-                    "audience": build_role_instruction(access_role),
-                }).strip()
-            except Exception as exc:
-                print(f"URL read synthesis failed: {exc}")
-                answer = "I read the page but could not process it just now. Please try again."
-        else:
-            answer = f"I read the page **{page_url}** but the language model is unavailable."
-
+        url_system = (
+            "You are Nexa, an educational assistant. Read the web page content provided "
+            "and answer the user's request accurately in clean Markdown, using only that "
+            f"content. Do not invent details. {_MATH_FORMAT_RULE} "
+            f"Audience guidance: {build_role_instruction(access_role)}")
+        answer = answer_with_history(
+            url_system, question, session_id, extra_material=page_text) or \
+            f"I read the page **{page_url}** but could not process it just now."
+        answer = wrap_bare_latex(answer)
         url_log_id = str(uuid.uuid4())
         record_chat_turn(session_id, "assistant", answer)
         try:
             persist_chat_log(
                 log_id=url_log_id, session_id=session_id, user_email=normalized_email,
-                user_name=_log_name(), user_prompt=f"[Read URL] {page_url} — {question}",
+                user_name=_log_name(), user_prompt=f"[Read URL] {page_url} : {question}",
                 nexa_response=answer, pdf_url=None, stars=0,
                 timestamp=datetime.datetime.now(datetime.timezone.utc),
             )
@@ -4162,7 +5078,6 @@ async def chat_endpoint(request: ChatRequest):
             status_message="Nexa is Searching ...", pdf_url=None,
             image_url=None, image_id=None, log_id=url_log_id,
         )
-
     # ---------- placeholder log ----------
     user_log_id = str(uuid.uuid4())
     try:
@@ -4174,12 +5089,19 @@ async def chat_endpoint(request: ChatRequest):
         )
     except Exception:
         pass
-
     lower_msg = (request.message or "").lower()
     status_message, _ = infer_chat_status(request.message, access_role, request.staged_file_name)
     pending_image_request = SESSION_PENDING_IMAGE.get(session_id)
     pending_question = SESSION_PENDING_QUESTION.get(session_id)
-
+    pending_lesson = SESSION_PENDING_LESSON.get(session_id)
+    if pending_lesson and looks_like_new_request(request.message):
+        print("[pending] new request -> abandoning lesson clarification")
+        SESSION_PENDING_LESSON.pop(session_id, None)
+        pending_lesson = None
+    if pending_question and looks_like_new_request(request.message):
+        print("[pending] new request -> abandoning question clarification")
+        SESSION_PENDING_QUESTION.pop(session_id, None)
+        pending_question = None
     def _finish(answer_text: str, pdf_url=None, image_url=None, image_id=None):
         record_chat_turn(session_id, "assistant", answer_text)
         try:
@@ -4199,14 +5121,12 @@ async def chat_endpoint(request: ChatRequest):
             status_message=status_message, pdf_url=pdf_url,
             image_url=image_url, image_id=image_id, log_id=user_log_id,
         )
-
     # ---------- FAST PATH: exact greetings (instant, no LLM) ----------
-    if not pending_image_request and not pending_question:
+    if not pending_image_request and not pending_question and not pending_lesson:
         qr = quick_reply(request.message, student_name)
         if qr:
             status_message = None
             return _finish(qr)
-
     try:
         if is_chat_turn_cancelled(request.turn_id):
             return ChatResponse(
@@ -4214,23 +5134,77 @@ async def chat_endpoint(request: ChatRequest):
                 status_message=status_message, pdf_url=None,
                 image_url=None, image_id=None, log_id=None,
             )
-
         pdf_url = None
-        reply_ctx = (request.reply_context or "").strip()
+        reply_ctx = (request.reply_context or "").strip()[:MAX_DOC_CHARS]
         doc_context = SESSION_DOCUMENT_BUFFER.get(session_id, "")
-
+        print(f"[context] reply_ctx={len(reply_ctx)} chars, doc={len(doc_context)} chars")
+        doc_referenced = bool(doc_context) and bool(
+            _DOC_REFERENCE_RE.search(request.message)
+            or re.search(r'\b(this|that|it|the|these|those)\b', request.message, re.IGNORECASE))
+        # ================= QUESTIONS ABOUT THE CONVERSATION =================
+        if is_conversation_meta_question(request.message) and not doc_referenced:
+            meta_answer = answer_about_conversation(request.message, session_id, access_role)
+            if meta_answer:
+                print("[answer] served from conversation transcript")
+                return _finish(meta_answer)
+            print("[conversation] meta answer unavailable, continuing to normal routing")
+        if reply_ctx or doc_referenced or doc_context:
+            search_message = request.message
+            print("[search-rewrite] skipped: context present (quote/document)")
+        elif _needs_followup_resolution(request.message):
+            search_message = resolve_followup_message(request.message, session_id)
+            if search_message != request.message:
+                print(f"[search-rewrite] {request.message[:50]!r} -> {search_message[:70]!r}")
+        else:
+            search_message = request.message
+            print("[search-rewrite] skipped: message is self-contained")
         # ================= REPLY-CONTEXT PDF SHORTCUT =================
-        if reply_ctx and "pdf" in lower_msg and len(request.message.strip()) < 80:
+        if (reply_ctx and "pdf" in lower_msg
+                and len(request.message.strip()) < 80
+                and not any(w in lower_msg for w in _NEW_CONTENT_WORDS)):
             kind = "lesson" if _is_lesson_request(reply_ctx.lower()) else "nexa"
             pdf_url = build_answer_pdf(reply_ctx, kind)
             return _finish("Here's that as a PDF.", pdf_url=pdf_url)
-
-        # ================= PENDING QUESTION CLARIFICATION =================
+        # ================= MATHS FIRST =================
+        if looks_like_math(search_message) and not doc_referenced:
+            math_input = normalize_math_input(search_message)
+            computed = solve_with_sympy(math_input) or llm_to_sympy(math_input)
+            if computed:
+                latex_result, plain = computed
+                math_answer = f"## Answer\n{latex_result}"
+                explain_system = (
+                    "You are a maths tutor. The verified correct answer is provided and is "
+                    "CORRECT. Explain how to reach it step by step. Do NOT change the final "
+                    f"answer. {_MATH_FORMAT_RULE} Use '## Problem', '### Step 1', then "
+                    f"'## Final Answer'. Audience: {build_role_instruction(access_role)}")
+                body = answer_with_history(
+                    explain_system,
+                    f"Problem: {math_input}\n\nVerified answer: {plain}",
+                    session_id, model=(llm or llm_general))
+                if body:
+                    math_answer = f"{body}\n\n## Final Answer\n{latex_result}"
+                math_answer = wrap_bare_latex(math_answer)
+                pdf_url = build_answer_pdf(math_answer, "nexa") if "pdf" in lower_msg else None
+                return _finish(math_answer, pdf_url=pdf_url)
+            print("[maths] no exact solution -> LLM math tutor")
+            tutor_system = (
+                "You are a maths tutor. Solve the problem step by step, showing all "
+                f"working. Do NOT produce a lesson plan. {_MATH_FORMAT_RULE} Use "
+                "'## Problem', '### Step 1', '### Step 2', then '## Final Answer'. "
+                f"Audience: {build_role_instruction(access_role)}")
+            body = answer_with_history(
+                tutor_system, search_message, session_id, model=(llm or llm_general))
+            if body:
+                body = wrap_bare_latex(body)
+                pdf_url = build_answer_pdf(body, "nexa") if "pdf" in lower_msg else None
+                return _finish(body, pdf_url=pdf_url)
+            print("[maths] tutor produced nothing, continuing to normal routing")
+        # ================= PENDING CLARIFICATIONS =================
         if pending_question and not pending_image_request:
             SESSION_PENDING_QUESTION.pop(session_id, None)
             reply = (request.message or "").strip()
             if reply.lower() in ("cancel", "never mind", "nevermind", "stop", "no"):
-                return _finish("No problem — cancelled. What else can I help with?")
+                return _finish("No problem, cancelled. What else can I help with?")
             spec = {
                 "type": pending_question.get("type", "mcq"),
                 "count": pending_question.get("count", 10),
@@ -4238,80 +5212,128 @@ async def chat_endpoint(request: ChatRequest):
                 "scope": parse_lesson_request_scope(reply),
             }
             return _generate_questions_and_finish(spec, reply, access_role, lower_msg, _finish)
-
-        # ================= INTENT CLASSIFICATION (context-aware) =================
+        if pending_lesson and not pending_image_request:
+            reply = (request.message or "").strip()
+            if reply.lower() in ("cancel", "never mind", "nevermind", "stop", "no"):
+                SESSION_PENDING_LESSON.pop(session_id, None)
+                return _finish("No problem, cancelled. What else can I help with?")
+            spec = dict(pending_lesson)
+            slot, _ = next_missing_lesson_slot(spec)
+            if slot:
+                spec[slot] = reply
+            next_slot, next_question = next_missing_lesson_slot(spec)
+            if next_slot:
+                SESSION_PENDING_LESSON[session_id] = spec
+                status_message = None
+                return _finish(next_question)
+            SESSION_PENDING_LESSON.pop(session_id, None)
+            print(f"[lesson] spec complete: {spec}")
+            source_text = reply_ctx if reply_ctx else doc_context
+            return _generate_lesson_and_finish(
+                build_lesson_request(spec), access_role, source_text,
+                spec.get("topic", ""), lower_msg, _finish)
+        # ================= INTENT CLASSIFICATION =================
         intent = classify_intent(
-            request.message,
+            search_message,
             has_document=bool(doc_context),
             has_reply_context=bool(reply_ctx),
         )
-        print(f"[intent] {intent!r} for: {request.message[:60]!r}")
-
+        print(f"[intent] {intent!r} for: {search_message[:60]!r}")
+        if intent == "document_or_reply" and not (reply_ctx or doc_context):
+            print("[intent] document_or_reply with no context -> general")
+            intent = "general"
+        if doc_referenced and intent not in (
+                "generate_lesson", "generate_questions", "generate_image"):
+            if intent != "document_or_reply":
+                print(f"[intent] {intent!r} overridden -> document_or_reply "
+                      f"(message refers to the document)")
+            intent = "document_or_reply"
+        if (reply_ctx or doc_context) and intent in ("generate_lesson", "generate_questions") \
+                and _is_explain_request(request.message):
+            print(f"[intent] {intent!r} overridden -> document_or_reply "
+                  f"(explain/guide request against supplied material)")
+            intent = "document_or_reply"
+        # A lesson plan is produced ONLY when explicitly requested. The classifier
+        # drifts plain questions ("will this work for me?") into generate_lesson;
+        # reassign those to answer over the material or curriculum instead.
+        if intent == "generate_lesson" and not _is_lesson_request(search_message.lower()):
+            new_intent = "document_or_reply" if (reply_ctx or doc_context) else "curriculum"
+            print(f"[intent] generate_lesson not explicit -> {new_intent}")
+            intent = new_intent
+        # Same principle for questions: only generate a quiz when explicitly asked.
+        if intent == "generate_questions" and not _is_question_request(search_message.lower()) \
+                and (reply_ctx or doc_context):
+            print("[intent] generate_questions not explicit -> document_or_reply")
+            intent = "document_or_reply"
         # ---- DOCUMENT / QUOTED-REPLY QUESTIONS ----
         if intent == "document_or_reply":
-            source = doc_context if doc_context else reply_ctx
-            kind = "document" if doc_context else "reply"
-            answer = answer_over_context(request.message, source, access_role, kind=kind)
+            source = reply_ctx if reply_ctx else doc_context
+            doc_system = (
+                "You are Nexa, an educational assistant. The user is asking about the "
+                "material supplied with their message: a passage they quoted, or a document "
+                "they uploaded. That material is the ONLY subject. Never describe the "
+                "conversation itself, and ignore other topics discussed earlier. Follow the "
+                "user's instructions exactly: if they ask for simpler language, a shorter "
+                "answer, or one specific item from it, do that rather than starting a new "
+                f"explanation. Do not invent facts beyond the material. {_MATH_FORMAT_RULE} "
+                f"Audience: {build_role_instruction(access_role)}")
+            answer = answer_with_history(
+                doc_system, request.message, session_id,
+                reply_ctx=source if reply_ctx else "",
+                extra_material="" if reply_ctx else source)
             if answer:
+                answer = wrap_bare_latex(strip_curriculum_meta(answer) or answer)
                 if "pdf" in lower_msg:
                     pdf_url = build_answer_pdf(answer, "nexa")
                 return _finish(answer, pdf_url=pdf_url)
             intent = "general"
-
         # ---- LESSON PLAN (teacher only) ----
         if intent == "generate_lesson":
             if access_role != "teacher":
                 return _finish("Only teachers can create full lesson plans. "
                                "Please sign in with a teacher EduNex account.")
-            lesson_query = strip_output_format_noise(request.message) or request.message
-            scope = parse_lesson_request_scope(request.message)
-            curriculum = retrieve_curriculum_context(lesson_query, scope)
-            answer = ""
-            try:
-                if curriculum:
-                    grounded = generate_lesson_plan_grounded(request.message, access_role, curriculum)
-                    if grounded and not looks_like_model_refusal(grounded):
-                        answer = grounded
-                else:
-                    print("[lesson] not in curriculum -> LLM fallback")
-                    direct = generate_lesson_plan_direct(request.message, access_role)
-                    if direct and not looks_like_model_refusal(direct):
-                        answer = direct
-            except Exception as exc:
-                print(f"Lesson plan failed: {exc}")
-            if not (answer or "").strip():
-                return _finish("I could not draft the lesson plan just now. Please try again.")
-            try:
-                answer = normalize_lesson_plan_format(answer, request.message)
-            except Exception as exc:
-                print(f"Lesson format failed: {exc}")
-            if "pdf" in lower_msg:
-                pdf_url = build_answer_pdf(answer, "lesson")
-            return _finish(answer, pdf_url=pdf_url)
-
+            source_text = reply_ctx if reply_ctx else doc_context
+            spec = extract_lesson_spec_llm(
+                search_message, get_recent_turns_text(session_id, n=6))
+            spec["request"] = search_message
+            if not spec.get("topic") and source_text and len(source_text.split()) > 8:
+                spec["topic"] = topic_from_material(source_text)
+                print(f"[lesson] topic from supplied material: {spec['topic']!r}")
+            slot, question = next_missing_lesson_slot(spec)
+            if slot and not (source_text and len(source_text.split()) > 8):
+                SESSION_PENDING_LESSON[session_id] = spec
+                status_message = None
+                return _finish(question)
+            print(f"[lesson] spec={spec}")
+            return _generate_lesson_and_finish(
+                build_lesson_request(spec), access_role, source_text,
+                spec.get("topic", ""), lower_msg, _finish)
         # ---- QUESTION GENERATION (teacher only) ----
         if intent == "generate_questions":
             if access_role != "teacher":
                 return _finish("Only teachers can generate assessment questions. "
                                "Please sign in with a teacher EduNex account.")
             history_topic = infer_topic_from_history(session_id)
-            recent = get_recent_turns_text(session_id, n=6)
-            spec = extract_question_spec_llm(request.message, reply_ctx, history_topic, recent)
-
-            # If the user quoted a reply, generate FROM that quoted content directly —
-            # the exact material they want questions on, so no retrieval that could drift.
-            if reply_ctx and len(reply_ctx.split()) > 15:
-                print(f"[questions] grounding on quoted reply ({len(reply_ctx)} chars)")
+            spec = extract_question_spec_llm(
+                search_message, reply_ctx, history_topic,
+                get_recent_turns_text(session_id, n=6))
+            source_text = reply_ctx if reply_ctx else doc_context
+            if source_text and len(source_text.split()) > 15:
+                if not (spec.get("topic") or "").strip():
+                    spec["topic"] = topic_from_material(source_text)
+                    print(f"[questions] topic from material: {spec['topic']!r}")
+                print(f"[questions] grounding on supplied material ({len(source_text)} chars)")
                 answer = generate_questions_from_text(
-                    request.message, access_role, spec, reply_ctx)
-                if answer and not looks_like_model_refusal(answer):
+                    build_question_request(spec), access_role, spec, source_text)
+                if (answer and not looks_like_model_refusal(answer)
+                        and looks_like_question_set(answer, spec["count"])):
+                    answer = wrap_bare_latex(strip_curriculum_meta(answer) or answer)
                     if "pdf" in lower_msg:
                         pdf_url = build_answer_pdf(answer, "questions")
                     return _finish(answer, pdf_url=pdf_url)
-
+                print("[questions] supplied-material output was not a question set")
             spec["scope"] = parse_lesson_request_scope(
-                request.message + " " + (spec.get("topic") or ""))
-
+                search_message + " " + (spec.get("topic") or ""))
             if not (spec.get("topic") or "").strip():
                 SESSION_PENDING_QUESTION[session_id] = {
                     "type": spec["type"], "count": spec["count"]}
@@ -4320,77 +5342,76 @@ async def chat_endpoint(request: ChatRequest):
                          "fill_blank": "fill-in-the-blank", "true_false": "true/false",
                          "essay": "essay"}.get(spec["type"], "")
                 return _finish(
-                    f"Sure — I'll make {spec['count']} {label} questions. Which topic or "
+                    f"Sure, I'll make {spec['count']} {label} questions. Which topic or "
                     f"lesson should they cover?")
-            return _generate_questions_and_finish(spec, request.message, access_role, lower_msg, _finish)
-
+            return _generate_questions_and_finish(
+                spec, search_message, access_role, lower_msg, _finish)
         # ---- IMAGE GENERATION ----
         if intent == "generate_image" or pending_image_request:
             return _handle_image_generation(
                 request, session_id, pending_image_request, lower_msg, _finish)
-
         # ---- SMALLTALK ----
         if intent == "smalltalk":
             return _finish(build_conversational_reply(request.message, student_name))
-
-        # ================= INFORMATIONAL: math / FAQ / curriculum / general =================
-        answer = solve_simple_reasoning_question(request.message) or None
-
-        if answer is None and looks_like_math(request.message):
-            computed = solve_with_sympy(request.message) or llm_to_sympy(request.message)
-            if computed:
-                latex_result, plain = computed
-                if LANGCHAIN_AVAILABLE and llm is not None:
-                    try:
-                        explain = ChatPromptTemplate.from_messages([
-                            ("system",
-                             "You are a maths tutor. The verified correct answer is provided and is "
-                             "CORRECT. Explain how to reach it step by step. Do NOT change the final "
-                             "answer. Wrap maths in $...$/$$...$$. Use '## Problem', '### Step 1', then "
-                             "'## Final Answer'. Audience: {audience}"),
-                            ("human", "Problem: {problem}\n\nVerified answer: {result}"),
-                        ])
-                        body = (explain | llm | StrOutputParser()).invoke({
-                            "problem": request.message, "result": plain,
-                            "audience": build_role_instruction(access_role),
-                        }).strip()
-                        answer = f"{body}\n\n## Final Answer\n{latex_result}"
-                    except Exception:
-                        answer = f"## Answer\n{latex_result}"
-                else:
-                    answer = f"## Answer\n{latex_result}"
-
+        answer = solve_simple_reasoning_question(search_message) or None
         if answer is None:
-            answer = build_nexa_faq_answer(request.message, session_id=session_id) or None
-
+            answer = build_nexa_faq_answer(search_message, session_id=session_id) or None
+        # Curriculum: retrieve on the search string, answer on the raw message.
         if answer is None and intent == "curriculum":
+            curriculum = None
             try:
-                hit = answer_from_curriculum(request.message, access_role)
+                curriculum = retrieve_curriculum_context(
+                    strip_output_format_noise(search_message) or search_message,
+                    parse_lesson_request_scope(search_message))
             except Exception as exc:
-                print(f"Curriculum lookup failed: {exc}")
-                hit = None
-            if hit:
-                answer = hit["answer"]
-                print("[answer] served from curriculum")
+                print(f"Curriculum retrieval failed: {exc}")
+            if curriculum and not _material_covers_topic(search_message, curriculum["context"]):
+                print("[answer] retrieved material does not match the question -> general")
+                curriculum = None
+            if curriculum:
+                material = _clean_pdf_artifacts(curriculum["context"])
+                drafted = answer_with_history(
+                    _CURRICULUM_FORMAT_SYSTEM.replace(
+                        "{audience}", build_role_instruction(access_role)),
+                    request.message, session_id, reply_ctx=reply_ctx,
+                    extra_material=material, model=(llm_precise or llm))
+                if drafted and not curriculum_answer_is_evasive(drafted):
+                    answer = drafted
+                    print("[answer] served from curriculum with history")
+                else:
+                    print("[answer] curriculum evasive or empty -> general knowledge")
             else:
-                print("[answer] curriculum miss -> general")
-                answer = build_general_knowledge_answer(request.message) or None
-
+                print("[answer] curriculum miss -> general knowledge")
         if answer is None:
-            answer = build_general_knowledge_answer(request.message) or None
-
+            general_system = (
+                "You are Nexa, a knowledgeable educational assistant for PNG students. "
+                "Answer the CURRENT message, using the conversation above for context. "
+                "If reference material is supplied below, it is a document the user "
+                "uploaded: answer from it and do not describe the conversation itself. "
+                "Follow every instruction in the message exactly: if the user asks for "
+                "simpler language, a shorter answer, more examples, or one specific item "
+                "from your previous reply, do that rather than starting a new explanation. "
+                f"Clean Markdown. {_MATH_FORMAT_RULE} Never mention curriculum material, "
+                "sources, or what any material does or does not contain. If genuinely "
+                "unsure of a fact, say so briefly rather than inventing details. "
+                f"Audience guidance: {build_role_instruction(access_role)}")
+            answer = answer_with_history(
+                general_system, request.message, session_id,
+                reply_ctx=reply_ctx,
+                extra_material=doc_context if (doc_context and not reply_ctx) else "") or None
+            if answer:
+                print("[answer] served from general knowledge with history")
         if answer is None:
-            answer = "I'm here to help with your studies. Tell me the topic you'd like to explore."
-
+            answer = ("I could not answer that just now. Please rephrase the question, "
+                      "or name the topic you would like to explore.")
+        answer = strip_curriculum_meta(answer) or answer
+        answer = wrap_bare_latex(answer)
         if "pdf" in lower_msg and (answer or "").strip():
             pdf_url = build_answer_pdf(answer, "nexa")
-
         return _finish(answer, pdf_url=pdf_url)
-
     except Exception as e:
         print(f"Chat endpoint failed: {e}")
         raise HTTPException(status_code=500, detail="Server error")
-
 
 @app.get("/health")
 def health():
@@ -4398,26 +5419,123 @@ def health():
     return {"status": "ok"}
 
 def _generate_questions_and_finish(spec, source_message, access_role, lower_msg, _finish):
+    # Always generate from a resolved instruction, never from the raw message,
+    # which may still contain an unresolved "from this".
+    request_text = build_question_request(spec)
+    print(f"[questions] request={request_text!r}")
+
     curriculum = retrieve_curriculum_context(spec["topic"], spec.get("scope") or {})
+
+    if curriculum and not _material_covers_topic(spec["topic"], curriculum["context"]):
+        print(f"[questions] material does not cover {spec['topic']!r} -> direct")
+        curriculum = None
+
     answer = ""
     try:
         if curriculum:
-            print(f"[questions] type={spec['type']} count={spec['count']} topic={spec['topic']!r} -> curriculum")
-            grounded = generate_questions_grounded(source_message, access_role, spec, curriculum)
-            if grounded and not looks_like_model_refusal(grounded):
+            print(f"[questions] type={spec['type']} count={spec['count']} "
+                  f"topic={spec['topic']!r} -> curriculum")
+            grounded = generate_questions_grounded(
+                request_text, access_role, spec, curriculum)
+            if (grounded and not looks_like_model_refusal(grounded)
+                    and looks_like_question_set(grounded, spec["count"])):
                 answer = grounded
-        else:
-            print(f"[questions] topic {spec['topic']!r} not in curriculum -> LLM")
-            direct = generate_questions_direct(source_message, access_role, spec)
-            if direct and not looks_like_model_refusal(direct):
+            else:
+                print("[questions] grounded output was not a question set")
+
+        if not answer:
+            print(f"[questions] topic {spec['topic']!r} -> direct generation")
+            direct = generate_questions_direct(request_text, access_role, spec)
+            if (direct and not looks_like_model_refusal(direct)
+                    and looks_like_question_set(direct, spec["count"])):
                 answer = direct
+            else:
+                print("[questions] direct output was not a question set, retrying")
+                # One retry with an explicit format demand.
+                retry_text = (
+                    f"{request_text}\n\nOutput format: a numbered list of exactly "
+                    f"{spec['count']} questions, then a '## Answer Key' section. "
+                    "Do not write an explanation, an essay, or a lesson plan.")
+                direct = generate_questions_direct(retry_text, access_role, spec)
+                if (direct and not looks_like_model_refusal(direct)
+                        and looks_like_question_set(direct, spec["count"])):
+                    answer = direct
     except Exception as exc:
         print(f"Question generation failed: {exc}")
+
     if not (answer or "").strip():
-        return _finish("I couldn't generate those questions just now. Please try again.")
+        return _finish("I couldn't generate those questions just now. Please name the "
+                       "topic and try again.")
+
+    answer = wrap_bare_latex(strip_curriculum_meta(answer) or answer)
     pdf_url = build_answer_pdf(answer, "questions") if "pdf" in lower_msg else None
     return _finish(answer, pdf_url=pdf_url)
 
+def _generate_lesson_and_finish(message, access_role, source_text, topic, lower_msg, _finish):
+    answer = ""
+
+    if source_text and len(source_text.split()) > 8:
+        print(f"[lesson] building from quoted/uploaded material ({len(source_text)} chars)")
+        drafted = generate_lesson_plan_from_text(message, access_role, source_text)
+        if drafted and not looks_like_model_refusal(drafted):
+            answer = drafted
+        else:
+            print("[lesson] from-material draft failed")
+
+    if not answer:
+        lesson_query = (topic or "").strip()
+        if not lesson_query:
+            # No topic means no safe search. Retrieving on a bare "create a
+            # lesson plan" matches arbitrary chunks from the whole corpus.
+            print("[lesson] no topic -> skipping retrieval, generating directly")
+            curriculum = None
+        else:
+            scope = parse_lesson_request_scope(message)
+            curriculum = retrieve_curriculum_context(lesson_query, scope)
+
+            if curriculum and not _material_covers_topic(topic, curriculum["context"]):
+                print(f"[lesson] retrieved material does not cover {topic!r} -> direct")
+                curriculum = None
+
+            subject_wanted = scope.get("subject")
+            if (curriculum and subject_wanted and curriculum.get("subject")
+                    and curriculum["subject"] != subject_wanted):
+                print(f"[lesson] retrieved {curriculum['subject']} for a "
+                      f"{subject_wanted} request -> direct")
+                curriculum = None
+
+        try:
+            if curriculum:
+                grounded = generate_lesson_plan_grounded(message, access_role, curriculum)
+                if grounded and "NO_COVERAGE" in grounded.upper():
+                    print("[lesson] grounded generator reported no coverage -> direct")
+                    grounded = ""
+                if grounded and not looks_like_model_refusal(grounded):
+                    answer = grounded
+                    print("[lesson] built from curriculum")
+            if not answer:
+                direct = generate_lesson_plan_direct(message, access_role)
+                if direct and not looks_like_model_refusal(direct):
+                    answer = direct
+                    print("[lesson] built directly from the model")
+        except Exception as exc:
+            print(f"Lesson plan failed: {exc}")
+
+    if not (answer or "").strip():
+        return _finish("I could not draft the lesson plan just now. Please try again.")
+
+    try:
+        answer = normalize_lesson_plan_format(answer, message)
+    except Exception as exc:
+        print(f"Lesson format failed: {exc}")
+
+    answer = re.sub(r"^#\s*(?:Thema|Theme|Unit|Topic|Strand)\s*[:\-]\s*", "# ",
+                    answer, count=1, flags=re.MULTILINE | re.IGNORECASE)
+    answer = strip_curriculum_meta(answer) or answer
+    answer = wrap_bare_latex(answer)
+
+    pdf_url = build_answer_pdf(answer, "lesson") if "pdf" in lower_msg else None
+    return _finish(answer, pdf_url=pdf_url)
 
 def _handle_image_generation(request, session_id, pending_image_request, lower_msg, _finish):
     if not (IMAGE_RUNTIME_AVAILABLE and IMAGE_FEATURE_ENABLED):
