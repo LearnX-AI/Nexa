@@ -1,0 +1,18 @@
+[Unit]
+Description=NEXA Agent Runtime (M1)
+After=network-online.target nexa-model-gateway.service
+Wants=network-online.target
+Requires=nexa-model-gateway.service
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/Nexa/Nexa
+EnvironmentFile=/etc/nexa/identity.env
+EnvironmentFile=/etc/nexa/agent-runtime.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/admin/Nexa/venv310/bin/python -m uvicorn v1.agent_runtime.main:app --host 127.0.0.1 --port 8102
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

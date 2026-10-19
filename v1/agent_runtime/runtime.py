@@ -1,0 +1,63 @@
+"""Core agent execution (NEXA-ADR-0003).
+
+Enforces the caller's permission for the agent, prepends the agent system
+prompt, calls the gateway, and returns the output with a trace block. Tool
+calling and multi step planning are later phase work and are not here.
+"""
+from __future__ import annotations
+import time
+import uuid
+from typing import Any, Optional
+
+from v1.identity.principal import Principal
+from v1.identity.rbac import can
+
+from . import registry, gateway_client
+from .schemas import RunResponse
+
+
+class AgentRuntimeError(Exception):
+    def __init__(self, status_code: int, detail: str):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(detail)
+
+
+async def run_agent(
+    name: str,
+    principal: Principal,
+    messages: list[dict[str, Any]],
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> RunResponse:
+    agent = registry.get_agent(name)
+    if agent is None:
+        raise AgentRuntimeError(404, f"Unknown agent: {name}")
+    if not can(principal, agent.required_permission):
+        raise AgentRuntimeError(403, "Not permitted")
+
+    trace_id = uuid.uuid4().hex
+    started = time.time()
+    full = [{"role": "system", "content": agent.system_prompt}] + messages
+
+    try:
+        data = await gateway_client.chat(agent.model, full, temperature, max_tokens)
+    except gateway_client.GatewayError as exc:
+        raise AgentRuntimeError(502, str(exc))
+
+    output = ""
+    try:
+        output = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        output = ""
+
+    x_nexa = data.get("x_nexa") if isinstance(data, dict) else None
+    if not isinstance(x_nexa, dict):
+        x_nexa = {}
+    x_nexa.setdefault("runtime", "agent-runtime")
+    x_nexa["agent"] = name
+    x_nexa["trace_id"] = trace_id
+    x_nexa["latency_ms"] = int((time.time() - started) * 1000)
+    x_nexa["principal"] = principal.subject
+
+    return RunResponse(agent=name, model=agent.model, output=output, x_nexa=x_nexa)
