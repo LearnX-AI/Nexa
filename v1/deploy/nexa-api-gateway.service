@@ -1,0 +1,17 @@
+[Unit]
+Description=NEXA API Gateway (M1)
+After=network-online.target nexa-agent-runtime.service
+Wants=network-online.target
+Requires=nexa-agent-runtime.service
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/Nexa/Nexa
+EnvironmentFile=/etc/nexa/identity.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/admin/Nexa/venv310/bin/python -m uvicorn v1.api_gateway.main:app --host 127.0.0.1 --port 8099
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

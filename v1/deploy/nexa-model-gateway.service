@@ -1,0 +1,14 @@
+[Unit]
+Description=NEXA Model Gateway (M1)
+After=network.target
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/Nexa/Nexa
+EnvironmentFile=/etc/nexa/nexa.env
+EnvironmentFile=/etc/nexa/model-gateway.env
+ExecStart=/home/admin/Nexa/venv310/bin/python -m uvicorn v1.model_gateway.main:app --host 127.0.0.1 --port 8100
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

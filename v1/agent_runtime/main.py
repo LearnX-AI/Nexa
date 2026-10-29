@@ -1,0 +1,53 @@
+"""NEXA Agent Runtime service (M1 skeleton). NEXA-ADR-0003.
+
+Run:
+    export NEXA_IDENTITY_SECRET=...            # shared with identity and gateway
+    export NEXA_AGENT_GATEWAY_TOKEN=...        # service token for the gateway
+    uvicorn v1.agent_runtime.main:app --host 127.0.0.1 --port 8102
+"""
+from __future__ import annotations
+from fastapi import FastAPI, Depends, HTTPException
+
+from v1.identity.principal import Principal
+
+from . import registry
+from .auth import require_principal
+from .runtime import run_agent, AgentRuntimeError
+from .schemas import RunRequest, RunResponse
+
+app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "service": "nexa-agent-runtime",
+        "version": "0.1.0",
+        "agents": list(registry.AGENTS),
+    }
+
+
+@app.get("/v1/agents")
+async def list_agents(principal: Principal = Depends(require_principal)):
+    return {
+        "agents": [
+            {"name": a.name, "description": a.description, "model": a.model}
+            for a in registry.AGENTS.values()
+        ]
+    }
+
+
+@app.post("/v1/agents/{name}/run", response_model=RunResponse)
+async def run(
+    name: str,
+    req: RunRequest,
+    principal: Principal = Depends(require_principal),
+):
+    messages = [m.model_dump() for m in req.messages]
+    try:
+        return await run_agent(
+            name, principal, messages, req.temperature, req.max_tokens
+        )
+    except AgentRuntimeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
