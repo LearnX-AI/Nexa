@@ -13,10 +13,13 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from v1.observability import TraceMiddleware
+
 from . import config, tokens
 from .rbac import permissions_for
 
 app = FastAPI(title="NEXA Identity", version="0.1.0")
+app.add_middleware(TraceMiddleware, service="nexa-identity")
 
 
 class IssueRequest(BaseModel):

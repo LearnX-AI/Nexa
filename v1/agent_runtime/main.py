@@ -6,9 +6,10 @@ Run:
     uvicorn v1.agent_runtime.main:app --host 127.0.0.1 --port 8102
 """
 from __future__ import annotations
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
+from v1.observability import TraceMiddleware
 
 from . import registry
 from .auth import require_principal
@@ -16,6 +17,7 @@ from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
 
 app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
+app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
 
 
 @app.get("/health")
@@ -42,12 +44,14 @@ async def list_agents(principal: Principal = Depends(require_principal)):
 async def run(
     name: str,
     req: RunRequest,
+    request: Request,
     principal: Principal = Depends(require_principal),
 ):
     messages = [m.model_dump() for m in req.messages]
+    trace_id = getattr(request.state, "trace_id", None)
     try:
         return await run_agent(
-            name, principal, messages, req.temperature, req.max_tokens
+            name, principal, messages, req.temperature, req.max_tokens, trace_id
         )
     except AgentRuntimeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)

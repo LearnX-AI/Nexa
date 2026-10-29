@@ -16,17 +16,19 @@ from __future__ import annotations
 import time
 import uuid
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from . import registry
 from .schemas import ChatCompletionRequest, EmbeddingsRequest
 from .identity import require_principal, Principal
 from .observability import new_trace_id, log_event, Timer
+from v1.observability import TraceMiddleware
 from .backends.ollama_backend import OllamaBackend
 from .backends.openai_backend import OpenAIBackend
 
 app = FastAPI(title="NEXA Model Gateway", version="0.1.0")
+app.add_middleware(TraceMiddleware, service="nexa-model-gateway")
 
 # One backend instance per runtime. Add vLLM or NVIDIA NIM here later without
 # touching callers (NEXA-ADR-0001).
@@ -76,6 +78,7 @@ async def list_models(principal: Principal = Depends(require_principal)):
 @app.post("/v1/chat/completions")
 async def chat_completions(
     req: ChatCompletionRequest,
+    request: Request,
     principal: Principal = Depends(require_principal),
 ):
     entry = registry.resolve(req.model)
@@ -84,7 +87,7 @@ async def chat_completions(
 
     temperature = req.temperature if req.temperature is not None else entry.default_temperature
     messages = [m.model_dump() for m in req.messages]
-    trace_id = new_trace_id()
+    trace_id = getattr(request.state, "trace_id", None) or new_trace_id()
     backend = _backend(entry.runtime)
 
     with Timer() as timer:
@@ -120,6 +123,7 @@ async def chat_completions(
 @app.post("/v1/embeddings")
 async def embeddings(
     req: EmbeddingsRequest,
+    request: Request,
     principal: Principal = Depends(require_principal),
 ):
     entry = registry.resolve(req.model)
@@ -127,7 +131,7 @@ async def embeddings(
         raise HTTPException(status_code=404, detail=f"Unknown embedding model {req.model}")
 
     inputs = req.input if isinstance(req.input, list) else [req.input]
-    trace_id = new_trace_id()
+    trace_id = getattr(request.state, "trace_id", None) or new_trace_id()
     backend = _backend(entry.runtime)
 
     with Timer() as timer:

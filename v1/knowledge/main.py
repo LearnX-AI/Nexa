@@ -12,12 +12,12 @@ Run:
 """
 from __future__ import annotations
 import time
-import uuid
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
 from v1.identity.rbac import can
+from v1.observability import TraceMiddleware, new_trace_id, audit_event
 
 from . import config, embeddings
 from .auth import require_principal
@@ -31,14 +31,11 @@ from .schemas import (
 )
 
 app = FastAPI(title="NEXA Knowledge Service", version="0.1.0")
+app.add_middleware(TraceMiddleware, service="nexa-knowledge")
 
 # One process-wide store. For the in-memory backend this means ingested data
 # lives only in this worker, which is fine for the skeleton.
 _STORE = get_store()
-
-
-def _trace() -> str:
-    return uuid.uuid4().hex
 
 
 @app.get("/health")
@@ -55,11 +52,16 @@ async def health():
 @app.post("/v1/knowledge/ingest", response_model=IngestResponse)
 async def ingest(
     req: IngestRequest,
+    request: Request,
     principal: Principal = Depends(require_principal),
 ):
+    trace_id = getattr(request.state, "trace_id", None) or new_trace_id()
     if not can(principal, "knowledge.ingest"):
+        audit_event(action="knowledge.ingest", decision="deny",
+                    principal=principal.subject, trace_id=trace_id)
         raise HTTPException(status_code=403, detail="Not permitted")
-    trace_id = _trace()
+    audit_event(action="knowledge.ingest", decision="allow",
+                principal=principal.subject, trace_id=trace_id)
     started = time.time()
     texts = [d.text for d in req.documents]
     try:
@@ -85,11 +87,14 @@ async def ingest(
 @app.post("/v1/knowledge/query", response_model=QueryResponse)
 async def query(
     req: QueryRequest,
+    request: Request,
     principal: Principal = Depends(require_principal),
 ):
+    trace_id = getattr(request.state, "trace_id", None) or new_trace_id()
     if not can(principal, "knowledge.query"):
+        audit_event(action="knowledge.query", decision="deny",
+                    principal=principal.subject, trace_id=trace_id)
         raise HTTPException(status_code=403, detail="Not permitted")
-    trace_id = _trace()
     started = time.time()
     top_k = req.top_k or config.DEFAULT_TOP_K
     try:
