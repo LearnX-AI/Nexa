@@ -1,0 +1,56 @@
+name: NEXA v1 CI
+
+on:
+  push:
+    branches: [nexa-v1-core]
+  pull_request:
+    branches: [nexa-v1-core]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi "uvicorn[standard]" httpx pydantic PyJWT pytest ruff
+
+      - name: Lint (pyflakes subset, honors noqa)
+        run: ruff check --select F v1
+
+      - name: Compile check
+        run: python -m compileall -q v1
+
+      - name: Import-rule check (service boundaries)
+        run: python v1/tools/check_imports.py
+
+      - name: Unit and integration tests
+        run: python -m pytest v1/tests -q
+
+      - name: Config validation gate
+        run: |
+          python - <<'PY'
+          from v1.shared.config import missing
+          # A required var that is unset must be reported, proving the gate works.
+          assert "NEXA_CI_UNSET_CHECK" in missing(["NEXA_CI_UNSET_CHECK"])
+          print("config validation gate OK")
+          PY
+
+      - name: Version artifact
+        run: |
+          echo "nexa-v1 $(git rev-parse --short HEAD) built $(date -u +%FT%TZ)" > nexa-version.txt
+          cat nexa-version.txt
+
+      - name: Upload version artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-version
+          path: nexa-version.txt

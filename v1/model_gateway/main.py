@@ -24,11 +24,17 @@ from .schemas import ChatCompletionRequest, EmbeddingsRequest
 from .identity import require_principal, Principal
 from .observability import new_trace_id, log_event, Timer
 from v1.observability import TraceMiddleware
+from v1.shared.config import preflight
 from .backends.ollama_backend import OllamaBackend
 from .backends.openai_backend import OpenAIBackend
 
 app = FastAPI(title="NEXA Model Gateway", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-model-gateway")
+
+
+@app.on_event("startup")
+async def _startup():
+    preflight("nexa-model-gateway", ["NEXA_IDENTITY_SECRET"])
 
 # One backend instance per runtime. Add vLLM or NVIDIA NIM here later without
 # touching callers (NEXA-ADR-0001).

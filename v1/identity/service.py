@@ -14,12 +14,18 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from v1.observability import TraceMiddleware
+from v1.shared.config import preflight
 
 from . import config, tokens
 from .rbac import permissions_for
 
 app = FastAPI(title="NEXA Identity", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-identity")
+
+
+@app.on_event("startup")
+async def _startup():
+    preflight("nexa-identity", ["NEXA_IDENTITY_SECRET"])
 
 
 class IssueRequest(BaseModel):

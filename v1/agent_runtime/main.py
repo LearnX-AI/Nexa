@@ -10,6 +10,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
 from v1.observability import TraceMiddleware
+from v1.shared.config import preflight
 
 from . import registry
 from .auth import require_principal
@@ -18,6 +19,11 @@ from .schemas import RunRequest, RunResponse
 
 app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
+
+
+@app.on_event("startup")
+async def _startup():
+    preflight("nexa-agent-runtime", ["NEXA_IDENTITY_SECRET", "NEXA_AGENT_GATEWAY_TOKEN"])
 
 
 @app.get("/health")

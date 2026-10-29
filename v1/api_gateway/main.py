@@ -19,11 +19,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from v1.identity.principal import Principal
 from v1.observability import TraceMiddleware, TRACE_HEADER, log_event
+from v1.shared.config import preflight
 
 from . import config
 from .auth import require_principal
 
 app = FastAPI(title="NEXA API Gateway", version="0.1.0")
+
+
+@app.on_event("startup")
+async def _startup():
+    preflight("nexa-api-gateway", ["NEXA_IDENTITY_SECRET"])
+
 
 app.add_middleware(TraceMiddleware, service="nexa-api-gateway")
 app.add_middleware(
