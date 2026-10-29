@@ -18,6 +18,10 @@ ROLE_PERMISSIONS = {
     "national_admin": {"model.list", "knowledge.query"},
     "auditor": {"model.list", "knowledge.query"},
     "admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin"},
+    # Baseline roles named in NEXA-M1-005. platform_admin is the full
+    # administrator; service_account is the non-human service identity.
+    "platform_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin"},
+    "service_account": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
 }
 
 

@@ -17,6 +17,13 @@ class AgentSpec:
     model: str
     system_prompt: str
     required_permission: str = "model.invoke"
+    version: str = "0.1.0"
+    deprecated: bool = False
+    # Declared capabilities and the tools the agent may call. The tool
+    # invocation boundary is declared here and stays empty until the Tool
+    # Gateway (NEXA-ADR-0006) arrives.
+    capabilities: tuple = ("chat",)
+    tools: tuple = ()
 
 
 AGENTS: dict[str, AgentSpec] = {

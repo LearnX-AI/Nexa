@@ -1,13 +1,14 @@
 """Ollama backend over its native HTTP API.
 
 Uses httpx directly so the gateway carries no heavy LLM framework. Serves both
-chat and embeddings on the local Ollama server. See NEXA-ADR-0001.
+chat and embeddings on the local Ollama server. Transient failures are retried
+by the shared policy in base.py. See NEXA-ADR-0001.
 """
 from __future__ import annotations
 from typing import Optional
 import httpx
 
-from .base import Backend
+from .base import Backend, retry_async
 from .. import config
 
 
@@ -28,10 +29,14 @@ class OllamaBackend(Backend):
             "stream": False,
             "options": options,
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(f"{self.base_url}/api/chat", json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+
+        async def _call():
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+                resp.raise_for_status()
+                return resp.json()
+
+        data = await retry_async(_call)
         content = (data.get("message") or {}).get("content", "")
         usage = {
             "prompt_tokens": data.get("prompt_eval_count", 0),
@@ -43,10 +48,14 @@ class OllamaBackend(Backend):
         vectors: list[list[float]] = []
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             for text in inputs:
-                resp = await client.post(
-                    f"{self.base_url}/api/embeddings",
-                    json={"model": model, "prompt": text},
-                )
-                resp.raise_for_status()
-                vectors.append(resp.json().get("embedding", []))
+                async def _call(text=text):
+                    resp = await client.post(
+                        f"{self.base_url}/api/embeddings",
+                        json={"model": model, "prompt": text},
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+
+                data = await retry_async(_call)
+                vectors.append(data.get("embedding", []))
         return vectors

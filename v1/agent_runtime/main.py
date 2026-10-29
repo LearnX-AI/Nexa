@@ -34,7 +34,15 @@ async def health():
 async def list_agents(principal: Principal = Depends(require_principal)):
     return {
         "agents": [
-            {"name": a.name, "description": a.description, "model": a.model}
+            {
+                "name": a.name,
+                "description": a.description,
+                "model": a.model,
+                "version": a.version,
+                "deprecated": a.deprecated,
+                "capabilities": list(a.capabilities),
+                "tools": list(a.tools),
+            }
             for a in registry.AGENTS.values()
         ]
     }

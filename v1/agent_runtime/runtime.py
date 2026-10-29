@@ -35,6 +35,8 @@ async def run_agent(
     agent = registry.get_agent(name)
     if agent is None:
         raise AgentRuntimeError(404, f"Unknown agent: {name}")
+    if agent.deprecated:
+        raise AgentRuntimeError(410, f"Agent {name} is deprecated")
     if not can(principal, agent.required_permission):
         audit_event(
             action=f"agent.run:{name}", decision="deny", principal=principal.subject,
@@ -67,6 +69,7 @@ async def run_agent(
         x_nexa = {}
     x_nexa.setdefault("runtime", "agent-runtime")
     x_nexa["agent"] = name
+    x_nexa["agent_version"] = agent.version
     x_nexa["trace_id"] = trace_id
     x_nexa["latency_ms"] = int((time.time() - started) * 1000)
     x_nexa["principal"] = principal.subject
