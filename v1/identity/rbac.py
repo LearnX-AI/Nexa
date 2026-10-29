@@ -8,16 +8,16 @@ from __future__ import annotations
 
 from .principal import Principal
 
-# permission -> set of roles that hold it
+# role -> set of permissions the role holds
 ROLE_PERMISSIONS = {
-    "service": {"model.invoke", "model.list"},
-    "ai_engineer": {"model.invoke", "model.list"},
-    "teacher": {"model.invoke", "model.list"},
-    "student": {"model.invoke"},
-    "school_admin": {"model.invoke", "model.list"},
-    "national_admin": {"model.list"},
-    "auditor": {"model.list"},
-    "admin": {"model.invoke", "model.list", "admin"},
+    "service": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    "ai_engineer": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    "teacher": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    "student": {"model.invoke", "knowledge.query"},
+    "school_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    "national_admin": {"model.list", "knowledge.query"},
+    "auditor": {"model.list", "knowledge.query"},
+    "admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin"},
 }
 
 
