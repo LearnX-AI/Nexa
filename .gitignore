@@ -4,3 +4,24 @@ __pycache__/
 venv*/
 .venv/
 *.env
+
+# Local runtime data and secrets: never commit (NEXA-M0-007, NEXA-M1-006)
+user_memory.json
+*.pem
+!global-bundle.pem
+*.key
+.env*
+!.env.example
+!**/.env.example
+
+# Editor and manual backup files
+*.bak
+*.bak2
+*.bak_dgx
+*.save
+*.save.*
+*.broken
+*.orig
+
+# Deploy state written on the host by v1/deploy/deploy.sh
+.nexa_deploy_history

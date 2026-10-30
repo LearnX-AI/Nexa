@@ -44,8 +44,9 @@ the Observability layer in place.
 
 - QA and UAT environments not provisioned (NEXA-M1-008). Infrastructure action.
 - Live rollback not yet exercised (NEXA-M1-009). Run once a QA host exists.
-- Dependency and security scan gate not wired, pending pinned per-service
-  requirements (NEXA-M0-003, NEXA-M1-009).
+- Dependency and security scan gate (`pip-audit`) is wired in CI with pinned
+  requirements; the first green run on GitHub is still to be recorded
+  (NEXA-M0-003, NEXA-M1-009).
 - EduNeX or IdP integration is a seam only; real SSO token validation is
   outstanding (NEXA-M1-005). Tokens are issued by the identity service for now.
 - Knowledge persistence is in-memory; pgvector and the full ingestion pipeline

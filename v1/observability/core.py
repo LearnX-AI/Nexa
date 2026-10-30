@@ -8,12 +8,16 @@ links the whole chain. Sensitive and student data is redacted before logging.
 from __future__ import annotations
 import json
 import sys
+import threading
 import time
 import uuid
-from typing import Any
+from collections import defaultdict
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import PlainTextResponse
 
 TRACE_HEADER = "X-NEXA-Trace-Id"
 
@@ -76,6 +80,81 @@ class Timer:
         self.ms = round((time.perf_counter() - self._start) * 1000, 1)
 
 
+class Metrics:
+    """Tiny in-process metrics registry rendered in Prometheus text format.
+
+    Counters and sum/count pairs only. No client library, no external service.
+    Labels must be low cardinality (route templates, model names, status codes),
+    never user ids, emails or prompts.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._values: dict[tuple, float] = defaultdict(float)
+
+    @staticmethod
+    def _key(name: str, labels: dict) -> tuple:
+        return (name, tuple(sorted((k, str(v)) for k, v in labels.items())))
+
+    def inc(self, name: str, value: float = 1.0, **labels) -> None:
+        with self._lock:
+            self._values[self._key(name, labels)] += value
+
+    def observe(self, name: str, value: float, **labels) -> None:
+        """Record one observation as <name>_count and <name>_sum."""
+        with self._lock:
+            self._values[self._key(name + "_count", labels)] += 1
+            self._values[self._key(name + "_sum", labels)] += value
+
+    def reset(self) -> None:
+        with self._lock:
+            self._values.clear()
+
+    def render(self) -> str:
+        lines = []
+        with self._lock:
+            items = sorted(self._values.items())
+        for (name, labels), value in items:
+            if labels:
+                inner = ",".join(
+                    '{}="{}"'.format(k, v.replace("\\", "/").replace('"', "'"))
+                    for k, v in labels
+                )
+                lines.append(f"{name}{{{inner}}} {value:g}")
+            else:
+                lines.append(f"{name} {value:g}")
+        return "\n".join(lines) + "\n"
+
+
+metrics = Metrics()
+
+
+async def metrics_endpoint(request: Request) -> PlainTextResponse:
+    """GET /metrics. Services bind to 127.0.0.1; scrape from the host only."""
+    return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
+
+
+@contextmanager
+def span(name: str, trace_id: Optional[str] = None, **fields) -> Iterator[None]:
+    """Trace hook for a RAG step or tool call (NEXA-M1-007).
+
+    Logs one structured record with latency and status, under the request's
+    trace id, and records a latency metric. Field values pass through redact().
+    """
+    start = time.perf_counter()
+    status = "ok"
+    try:
+        yield
+    except Exception:
+        status = "error"
+        raise
+    finally:
+        ms = round((time.perf_counter() - start) * 1000, 1)
+        log_event(event="span", span=name, status=status, latency_ms=ms,
+                  trace_id=trace_id, **fields)
+        metrics.observe("nexa_span_ms", ms, span=name, status=status)
+
+
 class TraceMiddleware(BaseHTTPMiddleware):
     """Assigns a trace id, logs one structured record per request."""
 
@@ -90,6 +169,11 @@ class TraceMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         latency_ms = round((time.perf_counter() - start) * 1000, 1)
         response.headers[TRACE_HEADER] = trace_id
+        route = getattr(request.scope.get("route"), "path", "unmatched")
+        metrics.inc("nexa_http_requests_total", service=self.service,
+                    method=request.method, route=route, status=response.status_code)
+        metrics.observe("nexa_http_request_ms", latency_ms,
+                        service=self.service, route=route)
         log_event(
             event="request",
             service=self.service,

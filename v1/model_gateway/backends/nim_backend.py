@@ -1,23 +1,26 @@
-"""NVIDIA NIM backend adapter (stub).
+"""NVIDIA NIM backend adapter.
 
-NIM microservices expose an OpenAI compatible HTTP API. This adapter will reuse
-the same Backend interface against a NIM endpoint. It is a stub until a NIM
-runtime is approved and available (NEXA-ADR-0001, NEXA-M1-003). Registering it
-is a config change in main.py, with no change to callers.
+NIM microservices expose an OpenAI-compatible API, so this adapter points the
+shared implementation at the NIM endpoint. Use it only where NIM is approved and
+available (NEXA-ADR-0001, NEXA-M1-003). A self-hosted NIM needs no key; the
+hosted NVIDIA API needs NEXA_NIM_API_KEY, which comes from the environment file
+and is never committed.
 """
 from __future__ import annotations
+from typing import Optional
 
-from .base import Backend
+from .openai_compat import OpenAICompatBackend
+from .. import config
 
 
-class NIMBackend(Backend):
+class NIMBackend(OpenAICompatBackend):
     runtime = "nim"
+    key_env = "NEXA_NIM_API_KEY"
 
-    async def chat(self, model, messages, temperature, max_tokens):
-        raise NotImplementedError(
-            "NVIDIA NIM adapter not enabled. Approve and configure a NIM endpoint, "
-            "then implement against its OpenAI compatible API."
+    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None,
+                 timeout: Optional[float] = None):
+        super().__init__(
+            base_url or config.NIM_BASE_URL,
+            api_key if api_key is not None else config.NIM_API_KEY,
+            timeout,
         )
-
-    async def embeddings(self, model, inputs):
-        raise NotImplementedError("NIM embeddings not enabled.")

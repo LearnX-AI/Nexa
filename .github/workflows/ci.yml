@@ -1,14 +1,25 @@
 name: NEXA v1 CI
 
+# NEXA-M1-009. Gates run on every push and pull request to nexa-v1-core.
+# Deploy jobs run only on push (never on pull requests, so forked code can not
+# reach a self-hosted runner) and only when the repository variable
+# NEXA_DEPLOY_ENABLED is "true". The QA job waits on the "qa" environment, which
+# must have Required reviewers set in GitHub (Settings > Environments > qa).
+
 on:
   push:
     branches: [nexa-v1-core]
   pull_request:
     branches: [nexa-v1-core]
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,11 +28,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            v1/requirements-dev.txt
+            v1/*/requirements.txt
 
-      - name: Install dependencies
+      - name: Install pinned dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install fastapi "uvicorn[standard]" httpx pydantic PyJWT pytest ruff
+          pip install -r v1/requirements-dev.txt
 
       - name: Lint (pyflakes subset, honors noqa)
         run: ruff check --select F v1
@@ -39,18 +54,65 @@ jobs:
         run: |
           python - <<'PY'
           from v1.shared.config import missing
+          from v1.model_gateway import registry
           # A required var that is unset must be reported, proving the gate works.
           assert "NEXA_CI_UNSET_CHECK" in missing(["NEXA_CI_UNSET_CHECK"])
+          # The example model config must stay valid.
+          registry.reload("v1/model_gateway/models.example.json")
           print("config validation gate OK")
           PY
 
-      - name: Version artifact
+      - name: Dependency and security scan (pip-audit)
         run: |
-          echo "nexa-v1 $(git rev-parse --short HEAD) built $(date -u +%FT%TZ)" > nexa-version.txt
+          pip-audit --progress-spinner off \
+            -r v1/agent_runtime/requirements.txt \
+            -r v1/api_gateway/requirements.txt \
+            -r v1/identity/requirements.txt \
+            -r v1/knowledge/requirements.txt \
+            -r v1/model_gateway/requirements.txt
+
+      - name: Version artifact
+        id: version
+        run: |
+          VERSION="nexa-v1-$(git rev-parse --short HEAD)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "$VERSION built $(date -u +%FT%TZ)" > nexa-version.txt
+          tar czf "$VERSION.tar.gz" v1
+          sha256sum "$VERSION.tar.gz" >> nexa-version.txt
           cat nexa-version.txt
 
       - name: Upload version artifact
         uses: actions/upload-artifact@v4
         with:
           name: nexa-version
-          path: nexa-version.txt
+          path: |
+            nexa-version.txt
+            nexa-v1-*.tar.gz
+
+  deploy-dev:
+    needs: build-test
+    if: github.event_name == 'push' && vars.NEXA_DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, nexa-dev]
+    environment: dev
+    concurrency: nexa-deploy-dev
+    steps:
+      - name: Checkout (for the deploy script at this commit)
+        uses: actions/checkout@v4
+      - name: Deploy to DEV with health gate and automatic rollback
+        env:
+          NEXA_HOME: ${{ vars.NEXA_HOME_DEV }}
+        run: bash v1/deploy/deploy.sh "$GITHUB_SHA"
+
+  promote-qa:
+    needs: deploy-dev
+    if: github.event_name == 'push' && vars.NEXA_DEPLOY_ENABLED == 'true'
+    runs-on: [self-hosted, nexa-qa]
+    environment: qa          # approval gate: configure Required reviewers
+    concurrency: nexa-deploy-qa
+    steps:
+      - name: Checkout (for the deploy script at this commit)
+        uses: actions/checkout@v4
+      - name: Promote to QA with health gate and automatic rollback
+        env:
+          NEXA_HOME: ${{ vars.NEXA_HOME_QA }}
+        run: bash v1/deploy/deploy.sh "$GITHUB_SHA"

@@ -11,6 +11,18 @@ OLLAMA_BASE_URL = os.getenv("NEXA_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 OPENAI_BASE_URL = os.getenv("NEXA_OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+# vLLM and NVIDIA NIM expose OpenAI-compatible APIs (NEXA-M1-003). Defaults are
+# local placeholders; real URLs and any keys come from the environment file.
+VLLM_BASE_URL = os.getenv("NEXA_VLLM_BASE_URL", "http://127.0.0.1:8200/v1")
+VLLM_API_KEY = os.getenv("NEXA_VLLM_API_KEY", "")
+NIM_BASE_URL = os.getenv("NEXA_NIM_BASE_URL", "http://127.0.0.1:8300/v1")
+NIM_API_KEY = os.getenv("NEXA_NIM_API_KEY", "")
+
+# Optional JSON file that defines the model registry (logical names, runtime,
+# backend model, version, aliases). When unset the built-in defaults in
+# registry.py are used. Per-model configuration lives outside application code.
+MODEL_CONFIG = os.getenv("NEXA_MODEL_CONFIG", "")
+
 # Gateway auth. Shared bearer token so model endpoints are never open to end
 # users. This is a placeholder until centralized identity and RBAC land in
 # ADR-0005.

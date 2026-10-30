@@ -13,18 +13,35 @@ Run:
 from __future__ import annotations
 from typing import Any, Optional
 import httpx
-from fastapi import FastAPI, Depends, Header, HTTPException, Body, Request
+from fastapi import FastAPI, Depends, Header, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from v1.identity.principal import Principal
-from v1.observability import TraceMiddleware, TRACE_HEADER, log_event
+from v1.observability import (
+    TraceMiddleware, TRACE_HEADER, audit_event, log_event, metrics_endpoint,
+)
 from v1.shared.config import preflight
 
 from . import config
 from .auth import require_principal
+from .schemas import AgentList, ErrorResponse, RunRequest, RunResponse
 
-app = FastAPI(title="NEXA API Gateway", version="0.1.0")
+app = FastAPI(
+    title="NEXA API Gateway",
+    version="0.2.0",
+    description="Single external entry for NEXA v1. Versioned under /v1.",
+)
+
+# Test seam: set to an httpx transport to run the proxy without a network.
+_transport: Optional[httpx.AsyncBaseTransport] = None
+
+_ERRORS = {
+    401: {"model": ErrorResponse, "description": "Missing or invalid token"},
+    403: {"model": ErrorResponse, "description": "Not permitted for this agent"},
+    404: {"model": ErrorResponse, "description": "Unknown agent"},
+    502: {"model": ErrorResponse, "description": "Runtime or model unavailable"},
+}
 
 
 @app.on_event("startup")
@@ -38,8 +55,10 @@ app.add_middleware(
     allow_origin_regex=config.CORS_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", TRACE_HEADER],
+    expose_headers=[TRACE_HEADER],
 )
+app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 
 
 def _error(status: int, message: str, trace_id: Optional[str]) -> JSONResponse:
@@ -74,7 +93,9 @@ async def _forward(
         headers[TRACE_HEADER] = trace_id
     url = f"{config.RUNTIME_URL}{path}"
     try:
-        async with httpx.AsyncClient(timeout=config.REQUEST_TIMEOUT) as client:
+        async with httpx.AsyncClient(
+            timeout=config.REQUEST_TIMEOUT, transport=_transport
+        ) as client:
             resp = await client.request(method, url, headers=headers, json=json_body)
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail=f"runtime unreachable: {exc}")
@@ -89,7 +110,7 @@ async def _forward(
 @app.get("/health")
 async def health():
     """Liveness: the process is up."""
-    return {"status": "ok", "service": "nexa-api-gateway", "version": "0.1.0"}
+    return {"status": "ok", "service": "nexa-api-gateway", "version": app.version}
 
 
 @app.get("/ready")
@@ -97,7 +118,7 @@ async def ready():
     """Readiness: the upstream runtime answers."""
     url = f"{config.RUNTIME_URL}/health"
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, transport=_transport) as client:
             resp = await client.get(url)
         upstream_ok = resp.status_code == 200
     except httpx.RequestError:
@@ -109,7 +130,7 @@ async def ready():
     })
 
 
-@app.get("/v1/agents")
+@app.get("/v1/agents", response_model=AgentList, responses=_ERRORS)
 async def list_agents(
     request: Request,
     principal: Principal = Depends(require_principal),
@@ -119,15 +140,20 @@ async def list_agents(
     return await _forward("GET", "/v1/agents", authorization, trace_id)
 
 
-@app.post("/v1/agents/{name}/run")
+@app.post("/v1/agents/{name}/run", response_model=RunResponse, responses=_ERRORS)
 async def run_agent(
-    name: str,
     request: Request,
-    payload: dict[str, Any] = Body(...),
+    payload: RunRequest,
+    name: str = Path(..., pattern=r"^[a-z0-9][a-z0-9-]{0,63}$"),
     principal: Principal = Depends(require_principal),
     authorization: str = Header(...),
 ):
     trace_id = getattr(request.state, "trace_id", None)
+    audit_event(
+        action=f"api.agents.run:{name}", decision="allow",
+        principal=principal.subject, roles=list(principal.roles), trace_id=trace_id,
+    )
     return await _forward(
-        "POST", f"/v1/agents/{name}/run", authorization, trace_id, payload
+        "POST", f"/v1/agents/{name}/run", authorization, trace_id,
+        payload.model_dump(exclude_none=True),
     )

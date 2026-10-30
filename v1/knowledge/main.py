@@ -17,7 +17,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
 from v1.identity.rbac import can
-from v1.observability import TraceMiddleware, new_trace_id, audit_event
+from v1.observability import TraceMiddleware, new_trace_id, audit_event, metrics_endpoint
 from v1.shared.config import preflight
 
 from . import config, embeddings
@@ -33,6 +33,7 @@ from .schemas import (
 
 app = FastAPI(title="NEXA Knowledge Service", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-knowledge")
+app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 
 
 @app.on_event("startup")

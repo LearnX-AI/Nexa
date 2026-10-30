@@ -5,6 +5,7 @@ chat and embeddings on the local Ollama server. Transient failures are retried
 by the shared policy in base.py. See NEXA-ADR-0001.
 """
 from __future__ import annotations
+import json
 from typing import Optional
 import httpx
 
@@ -43,6 +44,36 @@ class OllamaBackend(Backend):
             "completion_tokens": data.get("eval_count", 0),
         }
         return {"content": content, "usage": usage, "raw": data}
+
+    async def chat_stream(self, model, messages, temperature, max_tokens):
+        options = {"temperature": temperature}
+        if max_tokens:
+            options["num_predict"] = max_tokens
+        payload = {"model": model, "messages": messages, "stream": True,
+                   "options": options}
+        usage: dict = {}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream(
+                "POST", f"{self.base_url}/api/chat", json=payload
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except ValueError:
+                        continue
+                    delta = (obj.get("message") or {}).get("content", "")
+                    if delta:
+                        yield {"delta": delta, "usage": {}, "done": False}
+                    if obj.get("done"):
+                        usage = {
+                            "prompt_tokens": obj.get("prompt_eval_count", 0),
+                            "completion_tokens": obj.get("eval_count", 0),
+                        }
+                        break
+        yield {"delta": "", "usage": usage, "done": True}
 
     async def embeddings(self, model, inputs):
         vectors: list[list[float]] = []

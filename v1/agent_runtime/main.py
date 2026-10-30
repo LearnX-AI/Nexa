@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
-from v1.observability import TraceMiddleware
+from v1.observability import TraceMiddleware, metrics_endpoint
 from v1.shared.config import preflight
 
 from . import registry
@@ -19,6 +19,7 @@ from .schemas import RunRequest, RunResponse
 
 app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
+app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 
 
 @app.on_event("startup")
@@ -46,6 +47,9 @@ async def list_agents(principal: Principal = Depends(require_principal)):
                 "model": a.model,
                 "version": a.version,
                 "deprecated": a.deprecated,
+                "deprecated_since": a.deprecated_since,
+                "replaced_by": a.replaced_by,
+                "required_permission": a.required_permission,
                 "capabilities": list(a.capabilities),
                 "tools": list(a.tools),
             }

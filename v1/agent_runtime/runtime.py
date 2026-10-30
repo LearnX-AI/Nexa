@@ -36,7 +36,8 @@ async def run_agent(
     if agent is None:
         raise AgentRuntimeError(404, f"Unknown agent: {name}")
     if agent.deprecated:
-        raise AgentRuntimeError(410, f"Agent {name} is deprecated")
+        hint = f"; use {agent.replaced_by}" if agent.replaced_by else ""
+        raise AgentRuntimeError(410, f"Agent {name} is deprecated{hint}")
     if not can(principal, agent.required_permission):
         audit_event(
             action=f"agent.run:{name}", decision="deny", principal=principal.subject,
@@ -74,4 +75,13 @@ async def run_agent(
     x_nexa["latency_ms"] = int((time.time() - started) * 1000)
     x_nexa["principal"] = principal.subject
 
-    return RunResponse(agent=name, model=agent.model, output=output, x_nexa=x_nexa)
+    usage = data.get("usage") if isinstance(data, dict) else None
+    return RunResponse(
+        agent=name,
+        agent_version=agent.version,
+        model=agent.model,
+        output=output,
+        trace_id=trace_id,
+        usage=usage if isinstance(usage, dict) else None,
+        x_nexa=x_nexa,
+    )

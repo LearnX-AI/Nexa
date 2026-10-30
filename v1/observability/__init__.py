@@ -10,8 +10,11 @@ from .core import (  # noqa: F401
     TraceMiddleware,
     audit_event,
     log_event,
+    metrics,
+    metrics_endpoint,
     new_trace_id,
     redact,
+    span,
 )
 
 __all__ = [
@@ -20,7 +23,10 @@ __all__ = [
     "TraceMiddleware",
     "audit_event",
     "log_event",
+    "metrics",
+    "metrics_endpoint",
     "new_trace_id",
     "redact",
+    "span",
 ]
 __version__ = "0.1.0"
