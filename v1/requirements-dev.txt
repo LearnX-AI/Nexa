@@ -1,0 +1,9 @@
+# CI and local development. Runtime pins come from the per-service files.
+-r agent_runtime/requirements.txt
+-r api_gateway/requirements.txt
+-r identity/requirements.txt
+-r knowledge/requirements.txt
+-r model_gateway/requirements.txt
+pytest==9.1.1
+ruff==0.17.3
+pip-audit==2.10.1

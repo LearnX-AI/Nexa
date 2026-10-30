@@ -1,0 +1,31 @@
+name: NEXA v1 Rollback
+
+# NEXA-M1-009. Manual rollback of one environment to its previous good deploy,
+# or to a specific commit. Run from the Actions tab. GitHub lists a manually
+# triggered workflow only once this file is on the default branch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to roll back
+        type: choice
+        options: [dev, qa]
+        required: true
+      sha:
+        description: Commit to roll back to (blank = previous successful deploy)
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ${{ fromJSON(format('["self-hosted","nexa-{0}"]', inputs.environment)) }}
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Roll back
+        env:
+          NEXA_HOME: ${{ inputs.environment == 'qa' && vars.NEXA_HOME_QA || vars.NEXA_HOME_DEV }}
+        run: bash v1/deploy/rollback.sh ${{ inputs.sha }}

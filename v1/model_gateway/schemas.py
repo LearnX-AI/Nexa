@@ -17,7 +17,7 @@ class ChatCompletionRequest(BaseModel):
     messages: list[ChatMessage]
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
-    stream: bool = False  # streaming is a later step; non streaming for now
+    stream: bool = False  # true returns server-sent events (OpenAI chunk format)
 
 
 class EmbeddingsRequest(BaseModel):

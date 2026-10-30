@@ -1,0 +1,53 @@
+{
+  "models": [
+    {
+      "logical": "nexa-chat-default",
+      "runtime": "ollama",
+      "backend_model": "llama3.1:8b-instruct-q5_K_M",
+      "version": "llama3.1-8b-instruct-q5_K_M",
+      "capability": "chat",
+      "default_temperature": 0.4,
+      "aliases": ["nexa-chat"]
+    },
+    {
+      "logical": "nexa-chat-precise",
+      "runtime": "ollama",
+      "backend_model": "llama3.1:8b-instruct-q5_K_M",
+      "version": "llama3.1-8b-instruct-q5_K_M",
+      "capability": "chat",
+      "default_temperature": 0.1
+    },
+    {
+      "logical": "nexa-general",
+      "runtime": "openai",
+      "backend_model": "gpt-4o",
+      "version": "gpt-4o",
+      "capability": "chat",
+      "default_temperature": 0.3
+    },
+    {
+      "logical": "nexa-chat-vllm",
+      "runtime": "vllm",
+      "backend_model": "meta-llama/Llama-3.1-8B-Instruct",
+      "version": "llama3.1-8b-instruct-vllm",
+      "capability": "chat",
+      "default_temperature": 0.4
+    },
+    {
+      "logical": "nexa-chat-nim",
+      "runtime": "nim",
+      "backend_model": "meta/llama-3.1-8b-instruct",
+      "version": "llama3.1-8b-instruct-nim",
+      "capability": "chat",
+      "default_temperature": 0.4
+    },
+    {
+      "logical": "nexa-embed-default",
+      "runtime": "ollama",
+      "backend_model": "nomic-embed-text",
+      "version": "nomic-embed-text",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    }
+  ]
+}
