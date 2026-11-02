@@ -33,6 +33,11 @@ jobs:
             v1/requirements-dev.txt
             v1/*/requirements.txt
 
+      - name: Install OCR engine (M2 ingestion tests)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends tesseract-ocr tesseract-ocr-eng
+
       - name: Install pinned dependencies
         run: |
           python -m pip install --upgrade pip
@@ -62,14 +67,10 @@ jobs:
           print("config validation gate OK")
           PY
 
-      - name: Dependency and security scan (pip-audit)
-        run: |
-          pip-audit --progress-spinner off \
-            -r v1/agent_runtime/requirements.txt \
-            -r v1/api_gateway/requirements.txt \
-            -r v1/identity/requirements.txt \
-            -r v1/knowledge/requirements.txt \
-            -r v1/model_gateway/requirements.txt
+      - name: Dependency and security scan (pip-audit with time-boxed exceptions)
+        # Fails on any advisory not listed in v1/security/audit-exceptions.json for
+        # that exact version, on an expired exception, and on a stale one.
+        run: python v1/tools/audit_gate.py
 
       - name: Version artifact
         id: version

@@ -1,3 +1,3 @@
-"""NEXA Knowledge Service (M1 skeleton). See NEXA-ADR-0004."""
+"""NEXA Knowledge Service. See NEXA-ADR-0004 and NEXA-M2-001 to M2-003."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
