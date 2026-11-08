@@ -231,8 +231,18 @@ def test_pgvector_persists_across_reopen():
             async with s2._conn() as conn:
                 await conn.execute(f"ANALYZE {schema}.vec_idx_test_plan")
             student = retrieval_filter(Principal("u", ("student",), "user"))
-            plan = await s2.explain("idx_test_plan", [rnd.gauss(0, 1) for _ in range(32)], 10, where=student)
+            q = [rnd.gauss(0, 1) for _ in range(32)]
+            # On a table this small the planner may prefer a full scan; what must
+            # hold is that the query shape lets it use HNSW when that is cheaper.
+            plan = await s2.explain("idx_test_plan", q, 10, where=student, force_index=True)
             assert "Index Scan using" in plan and "embedding_idx" in plan, plan
+            # A distance-plus-tiebreak ORDER BY cannot use the index even then.
+            async with s2._conn() as conn, conn.transaction():
+                await conn.execute("SET LOCAL enable_seqscan = off")
+                bad = await (await conn.execute(
+                    f"EXPLAIN SELECT chunk_id FROM {schema}.vec_idx_test_plan "
+                    f"ORDER BY embedding <=> %s::vector, chunk_id LIMIT 10", ["[" + ",".join(map(str, q)) + "]"])).fetchall()
+            assert "Order By: (embedding" not in "\n".join(r[0] for r in bad)
         finally:
             async with s2._conn() as conn:
                 await conn.execute(f"DROP SCHEMA {schema} CASCADE")

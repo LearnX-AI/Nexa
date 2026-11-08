@@ -271,13 +271,18 @@ class PgVectorStore(VectorStore):
         out.sort(key=lambda r: (-round(r["score"], 9), r["chunk_id"]))
         return out
 
-    async def explain(self, index_id: str, vector: list[float], top_k: int, where=None) -> str:
-        """The plan for a query, so operations can confirm the HNSW index is used."""
+    async def explain(self, index_id: str, vector: list[float], top_k: int, where=None,
+                      force_index: bool = False) -> str:
+        """The plan for a query, so operations can confirm the HNSW index is used.
+        On small tables the planner may rightly prefer a sequential scan;
+        force_index=True shows whether the query shape can use the index at all."""
         t = self._table(index_id)
         clause, params = where.sql() if where is not None else ("TRUE", [])
         v = _vec(vector)
         async with self._conn() as conn, conn.transaction():
             await conn.execute(f"SET LOCAL hnsw.ef_search = {int(max(config.HNSW_EF_SEARCH, top_k * 4))}")
+            if force_index:
+                await conn.execute("SET LOCAL enable_seqscan = off")
             rows = await (await conn.execute(
                 f"EXPLAIN SELECT chunk_id FROM {t} WHERE {clause} ORDER BY embedding <=> %s::vector LIMIT %s",
                 [*params, v, top_k])).fetchall()
