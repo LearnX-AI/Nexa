@@ -124,3 +124,41 @@ def lesson_manifest(item: str = "cm9001", **extra) -> dict:
     }
     md.update(extra)
     return {"metadata": md}
+
+
+# ---- fake Model Gateway for embeddings (no network) ----
+
+def bow_vector(text: str, dim: int = 128) -> list[float]:
+    """Deterministic bag-of-words embedding: similar words, similar vectors."""
+    import hashlib
+    import math
+    import re
+
+    v = [0.0] * dim
+    for w in re.findall(r"[a-z]{3,}", text.lower()):
+        v[int(hashlib.md5(w.encode()).hexdigest(), 16) % dim] += 1.0
+    n = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / n for x in v]
+
+
+class FakeGateway:
+    """Stands in for embeddings._gateway. Records every input text, can fail,
+    and can change the model it reports, like a gateway whose registry changed."""
+
+    def __init__(self, version: str = "nomic-embed-text", runtime: str = "ollama", dim: int = 128):
+        self.version, self.runtime, self.dim = version, runtime, dim
+        self.fail = False
+        self.calls = 0
+        self.texts: list[str] = []
+        self.models: list[str] = []
+
+    async def __call__(self, texts, model, trace_id=None):
+        from v1.knowledge.embeddings import EmbeddingError
+
+        self.calls += 1
+        if self.fail:
+            raise EmbeddingError("gateway 503")
+        self.texts.extend(texts)
+        self.models.append(model)
+        return ([bow_vector(t, self.dim) for t in texts],
+                {"model_version": self.version, "runtime": self.runtime, "model": model})

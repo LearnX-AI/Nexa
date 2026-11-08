@@ -11,16 +11,16 @@ from .principal import Principal
 # role -> set of permissions the role holds
 ROLE_PERMISSIONS = {
     "service": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
-    "ai_engineer": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    "ai_engineer": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "knowledge.admin"},
     "teacher": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
     "student": {"model.invoke", "knowledge.query"},
     "school_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
     "national_admin": {"model.list", "knowledge.query"},
     "auditor": {"model.list", "knowledge.query"},
-    "admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin"},
+    "admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin", "knowledge.admin"},
     # Baseline roles named in NEXA-M1-005. platform_admin is the full
     # administrator; service_account is the non-human service identity.
-    "platform_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin"},
+    "platform_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin", "knowledge.admin"},
     "service_account": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
 }
 

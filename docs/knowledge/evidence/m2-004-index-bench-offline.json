@@ -1,0 +1,48 @@
+{
+  "mode": "offline",
+  "pgvector": "0.6.0",
+  "hnsw": {
+    "m": 16,
+    "ef_construction": 64,
+    "ef_search": 100
+  },
+  "expected_chunks": 1811,
+  "build": {
+    "index": "idx_20261108115746_94a07895",
+    "status": "active",
+    "fingerprint": "nexa-embed-default|offline-hash-768|local|768|none",
+    "seconds": 5.4,
+    "cache_hits": 0,
+    "gateway_calls": 105,
+    "failed_sources": 0,
+    "indexed_sources": 72
+  },
+  "validation": {
+    "stale": 0,
+    "passed": true,
+    "missing": 0,
+    "sampled": 50,
+    "threshold": 0.8,
+    "checked_at": "2026-11-08T11:57:52+00:00",
+    "stored_chunks": 1811,
+    "expected_chunks": 1811,
+    "self_recall_at_5": 1.0
+  },
+  "rebuild_unchanged": {
+    "status": "ready",
+    "seconds": 4.0,
+    "document_gateway_calls": 0,
+    "cache_hits": 1811
+  },
+  "ann_vs_exact": {
+    "queries": 100,
+    "mean_top10_overlap": 0.981,
+    "min_top10_overlap": 0.8
+  },
+  "latency_ms_filtered_student_query": {
+    "p50": 1.9,
+    "p95": 2.39
+  },
+  "query_plan_uses_hnsw": true,
+  "gold": "skipped: offline embeddings carry no semantics; run on the DGX through the gateway"
+}

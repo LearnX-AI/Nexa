@@ -21,9 +21,37 @@ EMBED_MODEL = os.environ.get("NEXA_EMBED_MODEL", "nexa-embed-default")
 # Request timeout to the gateway, seconds.
 GATEWAY_TIMEOUT = float(os.environ.get("NEXA_GATEWAY_TIMEOUT", "120"))
 
-# Which store backend to use: memory (default for the skeleton) or pgvector
-# (deferred, raises if selected until implemented).
+# Which store backend to use: memory (tests and quick DEV) or pgvector
+# (NEXA-ADR-0002, persistent, the default for QA, UAT and PROD).
 STORE_BACKEND = os.environ.get("NEXA_KNOWLEDGE_STORE", "memory")
+
+# PostgreSQL connection for the pgvector store, e.g.
+# postgresql://nexa_knowledge@127.0.0.1:5432/nexa. Keep the password in
+# /etc/nexa/knowledge.env or a .pgpass file, never in the repository.
+PG_DSN = os.environ.get("NEXA_KNOWLEDGE_PG_DSN", "")
+PG_SCHEMA = os.environ.get("NEXA_KNOWLEDGE_PG_SCHEMA", "knowledge")
+PG_POOL_MAX = int(os.environ.get("NEXA_KNOWLEDGE_PG_POOL_MAX", "8"))
+
+# ---- M2-004 embeddings and index versioning ----
+
+# Task prefix scheme: auto (from the model version the gateway reports), none,
+# or custom (NEXA_EMBED_DOC_PREFIX / NEXA_EMBED_QUERY_PREFIX).
+EMBED_PREFIX_SCHEME = os.environ.get("NEXA_EMBED_PREFIX_SCHEME", "auto")
+EMBED_DOC_PREFIX = os.environ.get("NEXA_EMBED_DOC_PREFIX", "")
+EMBED_QUERY_PREFIX = os.environ.get("NEXA_EMBED_QUERY_PREFIX", "")
+EMBED_BATCH = int(os.environ.get("NEXA_EMBED_BATCH", "32"))
+EMBED_CACHE = os.environ.get("NEXA_EMBED_CACHE", "true").lower() == "true"
+
+# A new index must pass validation before it can be activated: every expected
+# chunk embedded, and self-retrieval recall@5 on a sample at or above this.
+INDEX_SELF_RECALL_MIN = float(os.environ.get("NEXA_INDEX_SELF_RECALL_MIN", "0.8"))
+INDEX_VALIDATION_SAMPLE = int(os.environ.get("NEXA_INDEX_VALIDATION_SAMPLE", "50"))
+
+# pgvector HNSW parameters. ef_search is raised for filtered queries because
+# pgvector 0.6 filters after the index scan.
+HNSW_M = int(os.environ.get("NEXA_HNSW_M", "16"))
+HNSW_EF_CONSTRUCTION = int(os.environ.get("NEXA_HNSW_EF_CONSTRUCTION", "64"))
+HNSW_EF_SEARCH = int(os.environ.get("NEXA_HNSW_EF_SEARCH", "100"))
 
 # Default number of results per query.
 DEFAULT_TOP_K = int(os.environ.get("NEXA_KNOWLEDGE_TOP_K", "5"))
@@ -71,8 +99,8 @@ OCR_TIMEOUT_S = int(os.environ.get("NEXA_KNOWLEDGE_OCR_TIMEOUT", "120"))
 # unaffected.
 IMAGE_UPLOADS = os.environ.get("NEXA_KNOWLEDGE_IMAGE_UPLOADS", "auto")
 
-# Re-embed every active, approved source at startup. Needed while the vector
-# store is the in-memory M1 store, so retrieval survives a restart.
+# Re-embed every active, approved source into the active index at startup.
+# Needed only with the in-memory store; pgvector keeps vectors across restarts.
 REINDEX_ON_START = os.environ.get("NEXA_KNOWLEDGE_REINDEX_ON_START", "false").lower() == "true"
 
 # Retries for a failed job before it is parked for an operator.

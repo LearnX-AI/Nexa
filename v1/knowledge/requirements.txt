@@ -20,3 +20,8 @@ XlsxWriter==3.2.9
 Pillow==12.3.0
 # Wrapper for the tesseract OCR binary (system package tesseract-ocr, tesseract-ocr-eng).
 pytesseract==0.3.13
+
+# M2-004 pgvector store (NEXA-ADR-0002).
+psycopg==3.3.8
+psycopg-binary==3.3.8
+psycopg-pool==3.3.3

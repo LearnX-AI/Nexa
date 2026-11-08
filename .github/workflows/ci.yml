@@ -18,6 +18,18 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    services:
+      # PostgreSQL with pgvector for the M2-004 store tests (NEXA-ADR-0002).
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_DB: nexa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -52,8 +64,19 @@ jobs:
       - name: Import-rule check (service boundaries)
         run: python v1/tools/check_imports.py
 
+      - name: Enable pgvector in the test database
+        env:
+          PGPASSWORD: ci-only-not-a-secret
+        run: psql -h 127.0.0.1 -U postgres -d nexa_test -c "CREATE EXTENSION IF NOT EXISTS vector"
+
       - name: Unit and integration tests
-        run: python -m pytest v1/tests -q
+        env:
+          NEXA_TEST_PG_DSN: postgresql://postgres:ci-only-not-a-secret@127.0.0.1:5432/nexa_test
+        run: |
+          python -m pytest v1/tests -q -rs
+          # The pgvector tests must run in CI, never skip.
+          python -m pytest v1/tests/test_knowledge_indexing.py -q -k pgvector -rs | tee pg.log
+          ! grep -q "skipped" pg.log
 
       - name: Config validation gate
         run: |
