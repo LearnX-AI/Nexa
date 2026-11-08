@@ -27,9 +27,40 @@ class QueryResult(BaseModel):
     text: str
     score: float
     metadata: dict[str, Any] = {}
+    citation: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
     query: str
     results: list[QueryResult]
     x_nexa: Optional[dict[str, Any]] = None
+
+
+# ---- M2 ingestion API ----
+
+class IngestManifest(BaseModel):
+    """Governance and override fields supplied with an upload. metadata keys
+    are SourceMetadata fields and win over anything inferred from the file."""
+    model_config = {"extra": "forbid"}
+
+    metadata: dict[str, Any] = {}
+    chunking: Optional[dict[str, Any]] = None
+
+
+class LmsReferenceIn(BaseModel):
+    system: str = "edunex"
+    course_id: str
+    item_id: str
+    revision: Optional[str] = None
+
+
+class LmsItemRequest(BaseModel):
+    lms: LmsReferenceIn
+    title: Optional[str] = None
+    body: str
+    format: str = "html"
+    metadata: dict[str, Any] = {}
+
+
+class JobRetryRequest(BaseModel):
+    metadata_patch: Optional[dict[str, Any]] = None

@@ -28,6 +28,56 @@ STORE_BACKEND = os.environ.get("NEXA_KNOWLEDGE_STORE", "memory")
 # Default number of results per query.
 DEFAULT_TOP_K = int(os.environ.get("NEXA_KNOWLEDGE_TOP_K", "5"))
 
+# ---- M2 ingestion (NEXA-M2-002) ----
+
+# Where the source registry, jobs and chunks are kept. sqlite:///path for DEV
+# and single-host QA, memory for tests. PostgreSQL per ADR-0002 uses the DDL in
+# v1/knowledge/migrations and lands with the pgvector retrieval step.
+REGISTRY_URL = os.environ.get("NEXA_KNOWLEDGE_REGISTRY", "memory")
+
+# Content-addressed store for original files, so a failed job can be retried
+# without re-uploading. Empty means keep originals in memory (tests only).
+BLOB_DIR = os.environ.get("NEXA_KNOWLEDGE_BLOB_DIR", "")
+
+# Upload limits.
+MAX_FILE_BYTES = int(os.environ.get("NEXA_KNOWLEDGE_MAX_FILE_MB", "60")) * 1024 * 1024
+MAX_UNCOMPRESSED_BYTES = int(os.environ.get("NEXA_KNOWLEDGE_MAX_UNZIPPED_MB", "400")) * 1024 * 1024
+MAX_ZIP_ENTRIES = int(os.environ.get("NEXA_KNOWLEDGE_MAX_ZIP_ENTRIES", "5000"))
+MAX_ZIP_RATIO = float(os.environ.get("NEXA_KNOWLEDGE_MAX_ZIP_RATIO", "200"))
+MAX_PAGES = int(os.environ.get("NEXA_KNOWLEDGE_MAX_PAGES", "1500"))
+
+# Malware scanning: none or clamav. REQUIRE_AV=true makes a missing or failing
+# scanner reject the upload; set it in QA, UAT and PROD.
+AV_SCANNER = os.environ.get("NEXA_KNOWLEDGE_AV", "none")
+REQUIRE_AV = os.environ.get("NEXA_KNOWLEDGE_REQUIRE_AV", "false").lower() == "true"
+
+# More distinct email addresses than this in one document blocks it as likely
+# learner records rather than curriculum content.
+MAX_EMAILS_BEFORE_BLOCK = int(os.environ.get("NEXA_KNOWLEDGE_MAX_EMAILS", "10"))
+
+# OCR (tesseract). Pages with fewer native characters than OCR_MIN_CHARS are
+# OCRed. Pages below OCR_LOW_CONFIDENCE mean word confidence are flagged.
+OCR_ENABLED = os.environ.get("NEXA_KNOWLEDGE_OCR", "true").lower() == "true"
+OCR_LANG = os.environ.get("NEXA_KNOWLEDGE_OCR_LANG", "eng")
+OCR_DPI = int(os.environ.get("NEXA_KNOWLEDGE_OCR_DPI", "300"))
+OCR_MIN_CHARS = int(os.environ.get("NEXA_KNOWLEDGE_OCR_MIN_CHARS", "60"))
+OCR_LOW_CONFIDENCE = float(os.environ.get("NEXA_KNOWLEDGE_OCR_LOW_CONF", "70"))
+OCR_TIMEOUT_S = int(os.environ.get("NEXA_KNOWLEDGE_OCR_TIMEOUT", "120"))
+
+# Direct image uploads (PNG, JPEG, TIFF) hand untrusted bytes to Pillow's
+# decoders. Pillow below 13.0.0 has open decoder advisories and Pillow 13 needs
+# Python 3.11+, so image uploads are refused on older Pillow unless this is set
+# to "force". PDF pages are rendered by pdfium, not decoded by Pillow, and are
+# unaffected.
+IMAGE_UPLOADS = os.environ.get("NEXA_KNOWLEDGE_IMAGE_UPLOADS", "auto")
+
+# Re-embed every active, approved source at startup. Needed while the vector
+# store is the in-memory M1 store, so retrieval survives a restart.
+REINDEX_ON_START = os.environ.get("NEXA_KNOWLEDGE_REINDEX_ON_START", "false").lower() == "true"
+
+# Retries for a failed job before it is parked for an operator.
+MAX_JOB_ATTEMPTS = int(os.environ.get("NEXA_KNOWLEDGE_MAX_ATTEMPTS", "3"))
+
 # Bind address for this service.
 BIND_HOST = os.environ.get("NEXA_KNOWLEDGE_HOST", "127.0.0.1")
 BIND_PORT = int(os.environ.get("NEXA_KNOWLEDGE_PORT", "8103"))

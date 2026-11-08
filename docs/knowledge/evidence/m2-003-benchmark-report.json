@@ -1,0 +1,462 @@
+{
+  "files": 72,
+  "gold_questions": 40,
+  "gold_invalid": [],
+  "v0": {
+    "strategy": "RecursiveCharacterTextSplitter 1500/300 per PyPDFLoader page; DOCX paragraphs only",
+    "files_with_chunks": 70,
+    "chunks": 2310,
+    "tokens_p5": 43,
+    "tokens_median": 236,
+    "tokens_p95": 334,
+    "tokens_max": 1183,
+    "under_30_tokens_pct": 4.2,
+    "starts_mid_sentence_pct": 20.6,
+    "chunks_with_noise_pct": 43.6,
+    "answer_underscores_pct": 0.3,
+    "letter_spaced_pct": 3.2,
+    "page_label_pct": 40.4,
+    "toc_leaders_pct": 3.2,
+    "content_retention_pct": 99.1,
+    "by_format": {
+      "docx": 97.3,
+      "pdf": 99.9,
+      "pdf-scanned": 0.0,
+      "pptx": 0.0
+    },
+    "docx_table_rows": 140,
+    "table_rows_intact_pct": 0.7,
+    "provenance": {
+      "file": 100.0,
+      "subject": 100.0,
+      "grade": 100.0,
+      "term_or_module": 86.7,
+      "doctype": 100.0,
+      "page": 86.7
+    },
+    "retrieval": {
+      "overall": {
+        "n": 40,
+        "recall@1": 37.5,
+        "recall@3": 52.5,
+        "recall@5": 62.5,
+        "mrr@10": 0.47
+      },
+      "by_category": {
+        "docx_table": {
+          "n": 14,
+          "recall@1": 7.1,
+          "recall@3": 7.1,
+          "recall@5": 7.1,
+          "mrr@10": 0.071
+        },
+        "docx_text": {
+          "n": 4,
+          "recall@1": 75.0,
+          "recall@3": 75.0,
+          "recall@5": 75.0,
+          "mrr@10": 0.786
+        },
+        "ocr": {
+          "n": 1,
+          "recall@1": 0.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 0.5
+        },
+        "pdf_text": {
+          "n": 15,
+          "recall@1": 53.3,
+          "recall@3": 73.3,
+          "recall@5": 93.3,
+          "mrr@10": 0.675
+        },
+        "pptx": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "syllabus_outcome": {
+          "n": 5,
+          "recall@1": 40.0,
+          "recall@3": 80.0,
+          "recall@5": 100.0,
+          "mrr@10": 0.607
+        }
+      },
+      "per_question": {
+        "q01": 4,
+        "q02": 1,
+        "q03": 1,
+        "q04": 1,
+        "q05": 5,
+        "q06": 1,
+        "q07": 1,
+        "q08": 1,
+        "q09": 7,
+        "q10": 1,
+        "q11": 3,
+        "q12": 2,
+        "q13": 1,
+        "q14": 2,
+        "q15": 5,
+        "q16": 1,
+        "q17": 2,
+        "q18": 5,
+        "q19": 3,
+        "q20": 1,
+        "q21": 1,
+        "q22": 1,
+        "q23": 1,
+        "q24": 7,
+        "q25": null,
+        "q26": null,
+        "q27": null,
+        "q28": null,
+        "q29": null,
+        "q30": null,
+        "q31": null,
+        "q32": null,
+        "q33": null,
+        "q34": null,
+        "q35": null,
+        "q36": null,
+        "q37": null,
+        "q38": 1,
+        "q39": 1,
+        "q40": 2
+      }
+    }
+  },
+  "v1": {
+    "strategy": "nexa-structural 1.0.0 (target 320, max 512, overlap 48, profiles per subject)",
+    "files_with_chunks": 72,
+    "chunks": 1811,
+    "tokens_p5": 65,
+    "tokens_median": 248,
+    "tokens_p95": 344,
+    "tokens_max": 834,
+    "under_30_tokens_pct": 1.2,
+    "starts_mid_sentence_pct": 0.4,
+    "chunks_with_noise_pct": 0.7,
+    "letter_spaced_pct": 0.1,
+    "page_label_pct": 0.1,
+    "toc_leaders_pct": 0.5,
+    "content_retention_pct": 99.7,
+    "by_format": {
+      "docx": 99.9,
+      "pdf": 99.6,
+      "pdf-scanned": 98.3,
+      "pptx": 100.0
+    },
+    "docx_table_rows": 140,
+    "table_rows_intact_pct": 100.0,
+    "provenance": {
+      "file": 100.0,
+      "subject": 100.0,
+      "grade": 100.0,
+      "term_or_module": 99.4,
+      "doctype": 100.0,
+      "page": 100.0,
+      "printed_page": 68.6,
+      "section": 88.3,
+      "module": 45.3,
+      "topic": 39.8,
+      "outcome_codes": 13.5,
+      "version": 100.0,
+      "authority": 100.0,
+      "access": 100.0,
+      "approval": 100.0,
+      "chunker_version": 100.0,
+      "citation": 100.0,
+      "neighbours": 100.0
+    },
+    "retrieval": {
+      "overall": {
+        "n": 40,
+        "recall@1": 55.0,
+        "recall@3": 72.5,
+        "recall@5": 82.5,
+        "mrr@10": 0.67
+      },
+      "by_category": {
+        "docx_table": {
+          "n": 14,
+          "recall@1": 35.7,
+          "recall@3": 57.1,
+          "recall@5": 71.4,
+          "mrr@10": 0.515
+        },
+        "docx_text": {
+          "n": 4,
+          "recall@1": 75.0,
+          "recall@3": 75.0,
+          "recall@5": 75.0,
+          "mrr@10": 0.75
+        },
+        "ocr": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "pdf_text": {
+          "n": 15,
+          "recall@1": 66.7,
+          "recall@3": 80.0,
+          "recall@5": 93.3,
+          "mrr@10": 0.762
+        },
+        "pptx": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "syllabus_outcome": {
+          "n": 5,
+          "recall@1": 40.0,
+          "recall@3": 80.0,
+          "recall@5": 80.0,
+          "mrr@10": 0.633
+        }
+      },
+      "per_question": {
+        "q01": 4,
+        "q02": 1,
+        "q03": 1,
+        "q04": 1,
+        "q05": 1,
+        "q06": 1,
+        "q07": 1,
+        "q08": 1,
+        "q09": 2,
+        "q10": 1,
+        "q11": 3,
+        "q12": 1,
+        "q13": 1,
+        "q14": 10,
+        "q15": 4,
+        "q16": 1,
+        "q17": 2,
+        "q18": 6,
+        "q19": 2,
+        "q20": 1,
+        "q21": 1,
+        "q22": 1,
+        "q23": 1,
+        "q24": null,
+        "q25": 1,
+        "q26": 1,
+        "q27": 5,
+        "q28": 3,
+        "q29": 1,
+        "q30": 2,
+        "q31": 4,
+        "q32": 9,
+        "q33": 6,
+        "q34": 7,
+        "q35": 1,
+        "q36": 3,
+        "q37": 6,
+        "q38": 1,
+        "q39": 1,
+        "q40": 1
+      }
+    },
+    "retrieval_body_only": {
+      "overall": {
+        "n": 40,
+        "recall@1": 50.0,
+        "recall@3": 62.5,
+        "recall@5": 75.0,
+        "mrr@10": 0.604
+      },
+      "by_category": {
+        "docx_table": {
+          "n": 14,
+          "recall@1": 28.6,
+          "recall@3": 42.9,
+          "recall@5": 64.3,
+          "mrr@10": 0.416
+        },
+        "docx_text": {
+          "n": 4,
+          "recall@1": 75.0,
+          "recall@3": 75.0,
+          "recall@5": 75.0,
+          "mrr@10": 0.781
+        },
+        "ocr": {
+          "n": 1,
+          "recall@1": 0.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 0.5
+        },
+        "pdf_text": {
+          "n": 15,
+          "recall@1": 53.3,
+          "recall@3": 66.7,
+          "recall@5": 80.0,
+          "mrr@10": 0.636
+        },
+        "pptx": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "syllabus_outcome": {
+          "n": 5,
+          "recall@1": 80.0,
+          "recall@3": 80.0,
+          "recall@5": 80.0,
+          "mrr@10": 0.833
+        }
+      },
+      "per_question": {
+        "q01": 4,
+        "q02": 1,
+        "q03": 1,
+        "q04": 1,
+        "q05": 2,
+        "q06": 1,
+        "q07": 1,
+        "q08": null,
+        "q09": 7,
+        "q10": 1,
+        "q11": 3,
+        "q12": 1,
+        "q13": 1,
+        "q14": 9,
+        "q15": 5,
+        "q16": 1,
+        "q17": 1,
+        "q18": 6,
+        "q19": 1,
+        "q20": 1,
+        "q21": 1,
+        "q22": 1,
+        "q23": 1,
+        "q24": 8,
+        "q25": 1,
+        "q26": 1,
+        "q27": 8,
+        "q28": null,
+        "q29": 1,
+        "q30": 2,
+        "q31": 5,
+        "q32": null,
+        "q33": 5,
+        "q34": 10,
+        "q35": 2,
+        "q36": 5,
+        "q37": null,
+        "q38": 1,
+        "q39": 1,
+        "q40": 2
+      }
+    },
+    "retrieval_with_authority_weights": {
+      "overall": {
+        "n": 40,
+        "recall@1": 52.5,
+        "recall@3": 67.5,
+        "recall@5": 80.0,
+        "mrr@10": 0.632
+      },
+      "by_category": {
+        "docx_table": {
+          "n": 14,
+          "recall@1": 28.6,
+          "recall@3": 50.0,
+          "recall@5": 64.3,
+          "mrr@10": 0.435
+        },
+        "docx_text": {
+          "n": 4,
+          "recall@1": 75.0,
+          "recall@3": 75.0,
+          "recall@5": 75.0,
+          "mrr@10": 0.75
+        },
+        "ocr": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "pdf_text": {
+          "n": 15,
+          "recall@1": 53.3,
+          "recall@3": 73.3,
+          "recall@5": 86.7,
+          "mrr@10": 0.667
+        },
+        "pptx": {
+          "n": 1,
+          "recall@1": 100.0,
+          "recall@3": 100.0,
+          "recall@5": 100.0,
+          "mrr@10": 1.0
+        },
+        "syllabus_outcome": {
+          "n": 5,
+          "recall@1": 80.0,
+          "recall@3": 80.0,
+          "recall@5": 100.0,
+          "mrr@10": 0.84
+        }
+      },
+      "per_question": {
+        "q01": 4,
+        "q02": 1,
+        "q03": 1,
+        "q04": 1,
+        "q05": 2,
+        "q06": 1,
+        "q07": 1,
+        "q08": 1,
+        "q09": 3,
+        "q10": 1,
+        "q11": 4,
+        "q12": 2,
+        "q13": 1,
+        "q14": null,
+        "q15": 6,
+        "q16": 1,
+        "q17": 1,
+        "q18": 5,
+        "q19": 1,
+        "q20": 1,
+        "q21": 1,
+        "q22": 1,
+        "q23": 1,
+        "q24": null,
+        "q25": 1,
+        "q26": 1,
+        "q27": 7,
+        "q28": 3,
+        "q29": 1,
+        "q30": 2,
+        "q31": 4,
+        "q32": 10,
+        "q33": null,
+        "q34": 10,
+        "q35": 3,
+        "q36": 5,
+        "q37": 8,
+        "q38": 1,
+        "q39": 1,
+        "q40": 1
+      }
+    }
+  }
+}

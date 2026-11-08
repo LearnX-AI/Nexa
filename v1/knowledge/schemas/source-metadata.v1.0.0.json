@@ -1,0 +1,558 @@
+{
+  "$defs": {
+    "AccessClassification": {
+      "enum": [
+        "public",
+        "learner",
+        "teacher_only",
+        "restricted"
+      ],
+      "title": "AccessClassification",
+      "type": "string"
+    },
+    "ApprovalStatus": {
+      "enum": [
+        "approved",
+        "pending_review",
+        "draft",
+        "superseded",
+        "withdrawn"
+      ],
+      "title": "ApprovalStatus",
+      "type": "string"
+    },
+    "AuthorityTier": {
+      "description": "Lower number = more authoritative. See authority.py for conflict rules.",
+      "enum": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "title": "AuthorityTier",
+      "type": "integer"
+    },
+    "CurriculumPosition": {
+      "additionalProperties": false,
+      "description": "Where a source sits in the curriculum. All optional at source level;\nchunks inherit and refine this (a chunk knows its own topic and outcomes).",
+      "properties": {
+        "thema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "PNG STEM thematic area, e.g. Biotechnology",
+          "title": "Thema"
+        },
+        "strand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Strand for non-STEM syllabi",
+          "title": "Strand"
+        },
+        "module_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. 12.1",
+          "title": "Module Code"
+        },
+        "module_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Module Title"
+        },
+        "topic_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. 12.1.1",
+          "title": "Topic Code"
+        },
+        "topic_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topic Title"
+        },
+        "outcome_codes": {
+          "description": "e.g. 12.1.1a",
+          "items": {
+            "type": "string"
+          },
+          "title": "Outcome Codes",
+          "type": "array"
+        }
+      },
+      "title": "CurriculumPosition",
+      "type": "object"
+    },
+    "ExternalReference": {
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "description": "Must be on the permitted external allowlist",
+          "title": "Domain",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        }
+      },
+      "required": [
+        "domain",
+        "retrieved_at"
+      ],
+      "title": "ExternalReference",
+      "type": "object"
+    },
+    "Jurisdiction": {
+      "additionalProperties": false,
+      "properties": {
+        "country": {
+          "default": "PG",
+          "pattern": "^[A-Z]{2}$",
+          "title": "Country",
+          "type": "string"
+        },
+        "province": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Province"
+        },
+        "school_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "School Id"
+        },
+        "class_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Class Id"
+        }
+      },
+      "title": "Jurisdiction",
+      "type": "object"
+    },
+    "LmsReference": {
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "default": "edunex",
+          "enum": [
+            "edunex",
+            "lms"
+          ],
+          "title": "System",
+          "type": "string"
+        },
+        "course_id": {
+          "title": "Course Id",
+          "type": "string"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "course_id",
+        "item_id"
+      ],
+      "title": "LmsReference",
+      "type": "object"
+    },
+    "Scope": {
+      "enum": [
+        "national",
+        "provincial",
+        "school",
+        "class"
+      ],
+      "title": "Scope",
+      "type": "string"
+    },
+    "SourceType": {
+      "enum": [
+        "official_syllabus",
+        "teacher_guide",
+        "student_guide",
+        "lesson_notes",
+        "assessment",
+        "lms_content",
+        "teacher_material",
+        "external_reference"
+      ],
+      "title": "SourceType",
+      "type": "string"
+    },
+    "Subject": {
+      "enum": [
+        "Biology",
+        "Chemistry",
+        "Physics",
+        "Mathematics",
+        "English",
+        "Engineering",
+        "Technology",
+        "General Science",
+        "Social Science",
+        "General"
+      ],
+      "title": "Subject",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Metadata for one version of one knowledge source document.",
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_id": {
+      "description": "Stable across versions, e.g. png-ndoe:stem-chemistry-syllabus-gr12-t1",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "content_checksum": {
+      "description": "sha256:<hex> of the original file bytes",
+      "title": "Content Checksum",
+      "type": "string"
+    },
+    "version_label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Edition or version as printed, e.g. 2023 or Edition 2",
+      "title": "Version Label"
+    },
+    "supersedes_checksum": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supersedes Checksum"
+    },
+    "source_type": {
+      "$ref": "#/$defs/SourceType"
+    },
+    "authority_tier": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthorityTier"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Derived from source_type"
+    },
+    "title": {
+      "maxLength": 300,
+      "minLength": 3,
+      "title": "Title",
+      "type": "string"
+    },
+    "subject": {
+      "$ref": "#/$defs/Subject"
+    },
+    "grade_levels": {
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 1,
+      "title": "Grade Levels",
+      "type": "array"
+    },
+    "term": {
+      "anyOf": [
+        {
+          "maximum": 4,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Term"
+    },
+    "curriculum": {
+      "$ref": "#/$defs/CurriculumPosition"
+    },
+    "language": {
+      "default": "en",
+      "title": "Language",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/Scope"
+    },
+    "jurisdiction": {
+      "$ref": "#/$defs/Jurisdiction"
+    },
+    "publisher": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Publisher"
+    },
+    "approval_status": {
+      "$ref": "#/$defs/ApprovalStatus"
+    },
+    "approved_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved By"
+    },
+    "access_classification": {
+      "$ref": "#/$defs/AccessClassification"
+    },
+    "effective_from": {
+      "format": "date",
+      "title": "Effective From",
+      "type": "string"
+    },
+    "effective_to": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective To"
+    },
+    "ingested_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Set by the ingestion pipeline",
+      "title": "Ingested At"
+    },
+    "source_uri": {
+      "title": "Source Uri",
+      "type": "string"
+    },
+    "file_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "File Name"
+    },
+    "mime_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mime Type"
+    },
+    "file_size_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "File Size Bytes"
+    },
+    "page_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page Count"
+    },
+    "lms": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LmsReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "external": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExternalReference"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_id",
+    "content_checksum",
+    "source_type",
+    "title",
+    "subject",
+    "grade_levels",
+    "scope",
+    "approval_status",
+    "access_classification",
+    "effective_from",
+    "source_uri"
+  ],
+  "title": "NEXA Source Metadata 1.0.0",
+  "type": "object",
+  "$id": "https://nexa.learnx.ai/schemas/source-metadata/1.0.0.json"
+}

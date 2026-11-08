@@ -1,0 +1,3007 @@
+{
+  "generated_at": "2026-11-02T13:30:29+00:00",
+  "total_seconds": 61.3,
+  "files": [
+    {
+      "file": "STEMBio-Term1-StudentGuide-Gr12.pdf",
+      "job_id": "job_df8a7034f19b4fcb91d5",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-student-guide-gr12-t1@27504cd7e6fcf8eb",
+      "seconds": 1.29,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 29,
+        "by_status": {
+          "ok": 28,
+          "empty": 1
+        },
+        "chars": 42105,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [
+          4
+        ],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9915,
+        "source_tokens": 5424,
+        "chunks": 30,
+        "tokens_min": 32,
+        "tokens_median": 229,
+        "tokens_max": 354,
+        "with_section_path": 29,
+        "with_page": 30,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 9,
+          "letter_spacing_fixed": 23,
+          "toc_lines_removed": 20,
+          "running_header_footer_removed": 24,
+          "page_number_lines_removed": 23
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term1-TeacherGuide-Gr12.pdf",
+      "job_id": "job_292cca607f90499dab9f",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-teacher-guide-gr12-t1@122afa9480776f2c",
+      "seconds": 2.73,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 36,
+        "by_status": {
+          "ok": 36
+        },
+        "chars": 46430,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9983,
+        "source_tokens": 6497,
+        "chunks": 36,
+        "tokens_min": 34,
+        "tokens_median": 247,
+        "tokens_max": 350,
+        "with_section_path": 35,
+        "with_page": 36,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 90,
+          "letter_spacing_fixed": 5,
+          "page_number_lines_removed": 4,
+          "toc_lines_removed": 20
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term2-Syllabus-Gr11.pdf",
+      "job_id": "job_723d529f5f1841459ea0",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-syllabus-gr11-t2@10a3783119c9655a",
+      "seconds": 2.08,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 34,
+        "by_status": {
+          "ok": 34
+        },
+        "chars": 51599,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9936,
+        "source_tokens": 6721,
+        "chunks": 41,
+        "tokens_min": 6,
+        "tokens_median": 209,
+        "tokens_max": 360,
+        "with_section_path": 40,
+        "with_page": 41,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 34,
+          "unicode_mapped": 158,
+          "page_number_lines_removed": 34,
+          "toc_lines_removed": 29,
+          "dehyphenated": 1
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term2-Syllabus-Gr12.pdf",
+      "job_id": "job_bc78f79a79d649c5b41a",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-syllabus-gr12-t2@d46e39f3bc31fb6c",
+      "seconds": 1.88,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 29,
+        "by_status": {
+          "ok": 28,
+          "empty": 1
+        },
+        "chars": 35776,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [
+          4
+        ],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9928,
+        "source_tokens": 4691,
+        "chunks": 31,
+        "tokens_min": 32,
+        "tokens_median": 163,
+        "tokens_max": 330,
+        "with_section_path": 30,
+        "with_page": 31,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 112,
+          "letter_spacing_fixed": 13,
+          "toc_lines_removed": 21,
+          "page_number_lines_removed": 13,
+          "running_header_footer_removed": 13,
+          "dehyphenated": 2
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term2-TeacherGuide-Gr11.pdf",
+      "job_id": "job_4b8260f99c2d4ef7acdb",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-teacher-guide-gr11-t2@65d75b9d484bf0c0",
+      "seconds": 3.61,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 69,
+        "by_status": {
+          "ok": 69
+        },
+        "chars": 149227,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9993,
+        "source_tokens": 22014,
+        "chunks": 108,
+        "tokens_min": 6,
+        "tokens_median": 290,
+        "tokens_max": 834,
+        "with_section_path": 107,
+        "with_page": 108,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 69,
+          "unicode_mapped": 387,
+          "page_number_lines_removed": 69,
+          "toc_lines_removed": 16,
+          "dehyphenated": 13
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term2-TeacherGuide-Gr12.pdf",
+      "job_id": "job_fc80389b7bee4e0d9c7a",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-teacher-guide-gr12-t2@49c52ce89a165618",
+      "seconds": 1.93,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 34,
+        "by_status": {
+          "ok": 34
+        },
+        "chars": 40689,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9993,
+        "source_tokens": 5525,
+        "chunks": 37,
+        "tokens_min": 34,
+        "tokens_median": 160,
+        "tokens_max": 326,
+        "with_section_path": 36,
+        "with_page": 37,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 102,
+          "letter_spacing_fixed": 1,
+          "toc_lines_removed": 21,
+          "dehyphenated": 2
+        }
+      }
+    },
+    {
+      "file": "STEMBio-Term3-Syllabus-Gr11.pdf",
+      "job_id": "job_e279de5fb8304b63a93a",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-biology-syllabus-gr11-t3@66f41fa41f9dc6cb",
+      "seconds": 1.01,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 20,
+        "by_status": {
+          "ok": 20
+        },
+        "chars": 32500,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9877,
+        "source_tokens": 3752,
+        "chunks": 25,
+        "tokens_min": 2,
+        "tokens_median": 147,
+        "tokens_max": 330,
+        "with_section_path": 24,
+        "with_page": 25,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 104,
+          "running_header_footer_removed": 20,
+          "toc_lines_removed": 42
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term1-StudentGuide-Gr12.pdf",
+      "job_id": "job_8a5f6a0bec3b48bbbee9",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-student-guide-gr12-t1@0c77aa30ce184dbe",
+      "seconds": 3.01,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 130,
+        "by_status": {
+          "ok": 130
+        },
+        "chars": 231988,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9985,
+        "source_tokens": 34691,
+        "chunks": 173,
+        "tokens_min": 7,
+        "tokens_median": 261,
+        "tokens_max": 394,
+        "with_section_path": 172,
+        "with_page": 173,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 176,
+          "letter_spacing_fixed": 127,
+          "toc_lines_removed": 12,
+          "page_number_lines_removed": 128,
+          "running_header_footer_removed": 127,
+          "dehyphenated": 19
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term1-Syllubus-Gr12.pdf",
+      "job_id": "job_698086bbd83a4f3a9cb8",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-syllabus-gr12-t1@a30d64e843d6737b",
+      "seconds": 0.64,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 25,
+        "by_status": {
+          "ok": 25
+        },
+        "chars": 37785,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9922,
+        "source_tokens": 4881,
+        "chunks": 29,
+        "tokens_min": 30,
+        "tokens_median": 221,
+        "tokens_max": 351,
+        "with_section_path": 28,
+        "with_page": 29,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 23,
+          "unicode_mapped": 177,
+          "page_number_lines_removed": 25,
+          "running_header_footer_removed": 23,
+          "toc_lines_removed": 19,
+          "dehyphenated": 6
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term1-TeacherGuide-Gr12.pdf",
+      "job_id": "job_3730cbc6f4b447878c29",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-teacher-guide-gr12-t1@ec7b12149725055b",
+      "seconds": 0.91,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 37,
+        "by_status": {
+          "ok": 37
+        },
+        "chars": 59366,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9956,
+        "source_tokens": 8416,
+        "chunks": 49,
+        "tokens_min": 30,
+        "tokens_median": 251,
+        "tokens_max": 335,
+        "with_section_path": 48,
+        "with_page": 49,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 169,
+          "letter_spacing_fixed": 33,
+          "page_number_lines_removed": 35,
+          "running_header_footer_removed": 35,
+          "toc_lines_removed": 31,
+          "dehyphenated": 9
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-StudentGuide-Gr11.pdf",
+      "job_id": "job_0a4c6dabd9884d6f8a71",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-student-guide-gr11-t2@7f42f25e13af68ac",
+      "seconds": 2.05,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 16,
+        "by_status": {
+          "ok": 16
+        },
+        "chars": 15509,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9968,
+        "source_tokens": 1238,
+        "chunks": 35,
+        "tokens_min": 6,
+        "tokens_median": 240,
+        "tokens_max": 519,
+        "with_section_path": 34,
+        "with_page": 35,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 16,
+          "dehyphenated": 1
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-StudentGuide-Gr12.pdf",
+      "job_id": "job_c6153be88ba54cb5ae8e",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-student-guide-gr12-t2@ef2f4a466f577f00",
+      "seconds": 1.97,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 84,
+        "by_status": {
+          "ok": 84
+        },
+        "chars": 149277,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9977,
+        "source_tokens": 22187,
+        "chunks": 112,
+        "tokens_min": 63,
+        "tokens_median": 262,
+        "tokens_max": 454,
+        "with_section_path": 111,
+        "with_page": 112,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 189,
+          "letter_spacing_fixed": 84,
+          "page_number_lines_removed": 84,
+          "toc_lines_removed": 14,
+          "running_header_footer_removed": 81,
+          "dehyphenated": 18
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-Syllabus-Gr11.pdf",
+      "job_id": "job_2ebc8c270b9240f084e6",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-syllabus-gr11-t2@6742463165b3f9c1",
+      "seconds": 2.5,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 30,
+        "by_status": {
+          "ok": 30
+        },
+        "chars": 41945,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9898,
+        "source_tokens": 5409,
+        "chunks": 32,
+        "tokens_min": 56,
+        "tokens_median": 216,
+        "tokens_max": 336,
+        "with_section_path": 31,
+        "with_page": 32,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 153,
+          "toc_lines_removed": 24,
+          "dehyphenated": 2
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-Syllabus-Gr12.pdf",
+      "job_id": "job_ffe44dcf746b4760ac92",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-syllabus-gr12-t2@9ffe7fbce809e9dd",
+      "seconds": 0.65,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 25,
+        "by_status": {
+          "ok": 25
+        },
+        "chars": 35699,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9862,
+        "source_tokens": 4630,
+        "chunks": 32,
+        "tokens_min": 30,
+        "tokens_median": 173,
+        "tokens_max": 315,
+        "with_section_path": 31,
+        "with_page": 32,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 23,
+          "unicode_mapped": 160,
+          "page_number_lines_removed": 23,
+          "running_header_footer_removed": 23,
+          "toc_lines_removed": 19,
+          "dehyphenated": 7
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-TeacherGuide-Gr11.pdf",
+      "job_id": "job_24e06de2ae354da4a20c",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-teacher-guide-gr11-t2@47e2134e8b5dd32a",
+      "seconds": 2.62,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 35,
+        "by_status": {
+          "ok": 35
+        },
+        "chars": 45576,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9881,
+        "source_tokens": 5983,
+        "chunks": 34,
+        "tokens_min": 74,
+        "tokens_median": 233,
+        "tokens_max": 345,
+        "with_section_path": 33,
+        "with_page": 34,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 110,
+          "toc_lines_removed": 28,
+          "page_number_lines_removed": 3,
+          "dehyphenated": 1
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term2-TeacherGuide-Gr12.pdf",
+      "job_id": "job_eaa98e50231845249472",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-teacher-guide-gr12-t2@7bd3a45d9787cba1",
+      "seconds": 0.87,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 29,
+        "by_status": {
+          "ok": 29
+        },
+        "chars": 43297,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9931,
+        "source_tokens": 5790,
+        "chunks": 38,
+        "tokens_min": 30,
+        "tokens_median": 218,
+        "tokens_max": 317,
+        "with_section_path": 37,
+        "with_page": 38,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 105,
+          "letter_spacing_fixed": 27,
+          "page_number_lines_removed": 29,
+          "running_header_footer_removed": 27,
+          "toc_lines_removed": 31,
+          "dehyphenated": 7
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term3-StudentGuide-Gr12.pdf",
+      "job_id": "job_1ae08e246b984cec838b",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-student-guide-gr12-t3@0838f0ae815bfc3b",
+      "seconds": 1.4,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 54,
+        "by_status": {
+          "ok": 54
+        },
+        "chars": 93938,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9998,
+        "source_tokens": 13954,
+        "chunks": 68,
+        "tokens_min": 102,
+        "tokens_median": 290,
+        "tokens_max": 363,
+        "with_section_path": 67,
+        "with_page": 68,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 97,
+          "letter_spacing_fixed": 51,
+          "toc_lines_removed": 13,
+          "page_number_lines_removed": 51,
+          "running_header_footer_removed": 51,
+          "dehyphenated": 9
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term3-Syllabus-Gr12.pdf",
+      "job_id": "job_883d2c19a83841e5ac95",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-syllabus-gr12-t3@966cd707c7d7dd84",
+      "seconds": 0.47,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 23,
+        "by_status": {
+          "ok": 23
+        },
+        "chars": 29954,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9914,
+        "source_tokens": 3845,
+        "chunks": 28,
+        "tokens_min": 30,
+        "tokens_median": 174,
+        "tokens_max": 299,
+        "with_section_path": 27,
+        "with_page": 28,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 23,
+          "unicode_mapped": 107,
+          "page_number_lines_removed": 23,
+          "toc_lines_removed": 18,
+          "running_header_footer_removed": 20,
+          "dehyphenated": 4
+        }
+      }
+    },
+    {
+      "file": "STEMChem-Term3-TeacherGuide-Gr12.pdf",
+      "job_id": "job_363acf67581740d29a87",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-chemistry-teacher-guide-gr12-t3@d3287e72723603e3",
+      "seconds": 0.63,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 27,
+        "by_status": {
+          "ok": 27
+        },
+        "chars": 39896,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9983,
+        "source_tokens": 5411,
+        "chunks": 36,
+        "tokens_min": 20,
+        "tokens_median": 193,
+        "tokens_max": 336,
+        "with_section_path": 35,
+        "with_page": 36,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 74,
+          "letter_spacing_fixed": 23,
+          "toc_lines_removed": 30,
+          "page_number_lines_removed": 24,
+          "running_header_footer_removed": 24,
+          "dehyphenated": 4
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term1-StudentGuide-Gr12.pdf",
+      "job_id": "job_437ab4ee575f42f1b4e2",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-student-guide-gr12-t1@4437af64773c6190",
+      "seconds": 1.88,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 66,
+        "by_status": {
+          "ok": 66
+        },
+        "chars": 128837,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9978,
+        "source_tokens": 17831,
+        "chunks": 88,
+        "tokens_min": 17,
+        "tokens_median": 279,
+        "tokens_max": 360,
+        "with_section_path": 87,
+        "with_page": 88,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 168,
+          "letter_spacing_fixed": 126,
+          "toc_lines_removed": 14,
+          "page_number_lines_removed": 63,
+          "running_header_footer_removed": 63,
+          "dehyphenated": 16,
+          "answer_lines_collapsed": 22
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term1-Syllubus-Gr12.pdf",
+      "job_id": "job_be6217d7e12a4e8fabac",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-syllabus-gr12-t1@71ffa75bcce37a72",
+      "seconds": 0.71,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 27,
+        "by_status": {
+          "ok": 27
+        },
+        "chars": 42291,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9952,
+        "source_tokens": 5417,
+        "chunks": 34,
+        "tokens_min": 22,
+        "tokens_median": 212,
+        "tokens_max": 355,
+        "with_section_path": 33,
+        "with_page": 34,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 25,
+          "unicode_mapped": 11,
+          "page_number_lines_removed": 25,
+          "running_header_footer_removed": 25,
+          "toc_lines_removed": 21,
+          "dehyphenated": 7
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term1-TeacherGuide-Gr12.pdf",
+      "job_id": "job_957c9ef721c848589371",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-teacher-guide-gr12-t1@bb09accb847a2cb5",
+      "seconds": 0.91,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 31,
+        "by_status": {
+          "ok": 31
+        },
+        "chars": 45559,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9952,
+        "source_tokens": 5635,
+        "chunks": 37,
+        "tokens_min": 21,
+        "tokens_median": 199,
+        "tokens_max": 378,
+        "with_section_path": 36,
+        "with_page": 37,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 39,
+          "letter_spacing_fixed": 29,
+          "toc_lines_removed": 35,
+          "page_number_lines_removed": 28,
+          "running_header_footer_removed": 28,
+          "dehyphenated": 8
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term2-Syllabus-Gr11.pdf",
+      "job_id": "job_bc514bba48b44f0fb0c1",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-syllabus-gr11-t2@869ce2845ccdad53",
+      "seconds": 3.75,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 31,
+        "by_status": {
+          "ok": 31
+        },
+        "chars": 39421,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9905,
+        "source_tokens": 5070,
+        "chunks": 28,
+        "tokens_min": 65,
+        "tokens_median": 227,
+        "tokens_max": 348,
+        "with_section_path": 27,
+        "with_page": 28,
+        "tables": 0,
+        "normalization": {
+          "letter_spacing_fixed": 31,
+          "unicode_mapped": 209,
+          "page_number_lines_removed": 31,
+          "toc_lines_removed": 24,
+          "dehyphenated": 4
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term2-Syllabus-Gr12.pdf",
+      "job_id": "job_6f47c05c49cf422eb7cc",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-syllabus-gr12-t2@1f62dff1c69a937d",
+      "seconds": 0.64,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 26,
+        "by_status": {
+          "ok": 26
+        },
+        "chars": 37071,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9952,
+        "source_tokens": 4809,
+        "chunks": 26,
+        "tokens_min": 16,
+        "tokens_median": 261,
+        "tokens_max": 366,
+        "with_section_path": 25,
+        "with_page": 26,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 13,
+          "letter_spacing_fixed": 23,
+          "toc_lines_removed": 19,
+          "page_number_lines_removed": 23,
+          "running_header_footer_removed": 23,
+          "dehyphenated": 8
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term2-TeacherGuide-Gr11.pdf",
+      "job_id": "job_0ffcefaa7c964117ae70",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-teacher-guide-gr11-t2@2bf85dd6046bf8ee",
+      "seconds": 2.99,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 37,
+        "by_status": {
+          "ok": 37
+        },
+        "chars": 51757,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9925,
+        "source_tokens": 6806,
+        "chunks": 42,
+        "tokens_min": 65,
+        "tokens_median": 201,
+        "tokens_max": 336,
+        "with_section_path": 41,
+        "with_page": 42,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 142,
+          "letter_spacing_fixed": 1,
+          "page_number_lines_removed": 38,
+          "toc_lines_removed": 30,
+          "dehyphenated": 4
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term2-TeacherGuide-Gr12.pdf",
+      "job_id": "job_fd468e7570cf452ea619",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-teacher-guide-gr12-t2@ceb6632c98973af2",
+      "seconds": 0.88,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 34,
+        "by_status": {
+          "ok": 34
+        },
+        "chars": 48002,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9964,
+        "source_tokens": 6380,
+        "chunks": 37,
+        "tokens_min": 21,
+        "tokens_median": 245,
+        "tokens_max": 363,
+        "with_section_path": 36,
+        "with_page": 37,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 45,
+          "letter_spacing_fixed": 32,
+          "toc_lines_removed": 29,
+          "page_number_lines_removed": 32,
+          "running_header_footer_removed": 31,
+          "dehyphenated": 8
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term3-StudentGuide-Gr12.pdf",
+      "job_id": "job_b253c14dace4409f8162",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-student-guide-gr12-t3@1707922a5215bf0f",
+      "seconds": 4.3,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 123,
+        "by_status": {
+          "ok": 123
+        },
+        "chars": 239235,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9991,
+        "source_tokens": 36694,
+        "chunks": 176,
+        "tokens_min": 19,
+        "tokens_median": 270,
+        "tokens_max": 488,
+        "with_section_path": 175,
+        "with_page": 176,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 205,
+          "letter_spacing_fixed": 122,
+          "page_number_lines_removed": 122,
+          "running_header_footer_removed": 122,
+          "toc_lines_removed": 14,
+          "dehyphenated": 29
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term3-Syllabus-Gr12.pdf",
+      "job_id": "job_9584982d3e2c4870adbc",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-syllabus-gr12-t3@68cc8606226054f2",
+      "seconds": 0.58,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 26,
+        "by_status": {
+          "ok": 26
+        },
+        "chars": 34625,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9949,
+        "source_tokens": 4527,
+        "chunks": 28,
+        "tokens_min": 25,
+        "tokens_median": 207,
+        "tokens_max": 336,
+        "with_section_path": 27,
+        "with_page": 28,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 10,
+          "letter_spacing_fixed": 23,
+          "toc_lines_removed": 19,
+          "page_number_lines_removed": 23,
+          "running_header_footer_removed": 23
+        }
+      }
+    },
+    {
+      "file": "STEMPhysics-Term3-TeacherGuide-Gr12.pdf",
+      "job_id": "job_edb2f5f7b86947e0be73",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "png-ndoe:stem-physics-teacher-guide-gr12-t3@cd5cd189dae63d8d",
+      "seconds": 0.77,
+      "extractor": "pypdf 6.21.4",
+      "ocr": null,
+      "stats": {
+        "pages": 28,
+        "by_status": {
+          "ok": 28
+        },
+        "chars": 41667,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9987,
+        "source_tokens": 5495,
+        "chunks": 34,
+        "tokens_min": 18,
+        "tokens_median": 209,
+        "tokens_max": 373,
+        "with_section_path": 33,
+        "with_page": 34,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 36,
+          "letter_spacing_fixed": 26,
+          "toc_lines_removed": 25,
+          "page_number_lines_removed": 25,
+          "running_header_footer_removed": 25,
+          "dehyphenated": 1
+        }
+      }
+    },
+    {
+      "file": "s01_cm8870_12.1_Sciencetific Methods and Skills_Lesson Notes.docx",
+      "job_id": "job_e442bed37df34884b450",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8870@16bed95ed5780281",
+      "seconds": 0.18,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 14,
+        "by_status": {
+          "ok": 14
+        },
+        "chars": 20814,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9972,
+        "source_tokens": 2900,
+        "chunks": 17,
+        "tokens_min": 78,
+        "tokens_median": 215,
+        "tokens_max": 312,
+        "with_section_path": 17,
+        "with_page": 17,
+        "tables": 4,
+        "normalization": {
+          "unicode_mapped": 6
+        }
+      }
+    },
+    {
+      "file": "s02_cm8873_12.2_Genetics and Molecular Biology_1_DNA Structure_Nucleic Acids.docx",
+      "job_id": "job_6a01175dff1c43f59e86",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8873@acfc279dcff60aa4",
+      "seconds": 0.19,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 13,
+        "by_status": {
+          "ok": 13
+        },
+        "chars": 17425,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9992,
+        "source_tokens": 2621,
+        "chunks": 19,
+        "tokens_min": 64,
+        "tokens_median": 171,
+        "tokens_max": 311,
+        "with_section_path": 19,
+        "with_page": 19,
+        "tables": 3,
+        "normalization": {
+          "unicode_mapped": 1
+        }
+      }
+    },
+    {
+      "file": "s03_cm8876_12.3_Genetics and Molecular Biology_2_ Genes  Chromosomes_Lesson Notes.docx",
+      "job_id": "job_136af032b8d14eabae32",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8876@5f4014d53c670088",
+      "seconds": 0.26,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 17,
+        "by_status": {
+          "ok": 17
+        },
+        "chars": 24641,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9969,
+        "source_tokens": 3554,
+        "chunks": 23,
+        "tokens_min": 51,
+        "tokens_median": 178,
+        "tokens_max": 288,
+        "with_section_path": 23,
+        "with_page": 23,
+        "tables": 6,
+        "normalization": {
+          "unicode_mapped": 1
+        }
+      }
+    },
+    {
+      "file": "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx",
+      "job_id": "job_62d83ad82caf4d0bb03e",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8879@17514652aeb4ad8e",
+      "seconds": 0.19,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 13,
+        "by_status": {
+          "ok": 13
+        },
+        "chars": 18868,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9956,
+        "source_tokens": 2746,
+        "chunks": 18,
+        "tokens_min": 88,
+        "tokens_median": 176,
+        "tokens_max": 310,
+        "with_section_path": 18,
+        "with_page": 18,
+        "tables": 2,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s05_cm8882_12.2_Genetics and Molecular Biology_4_Transcription_and_Translation.docx",
+      "job_id": "job_65ea22ecd5a54f0b8c55",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8882@7057a76dfe277bd2",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 8,
+        "by_status": {
+          "ok": 8
+        },
+        "chars": 6459,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1058,
+        "chunks": 11,
+        "tokens_min": 49,
+        "tokens_median": 125,
+        "tokens_max": 175,
+        "with_section_path": 10,
+        "with_page": 11,
+        "tables": 1,
+        "normalization": {
+          "unicode_mapped": 4
+        }
+      }
+    },
+    {
+      "file": "s06_cm8885_12.2_Genetics and Molecular Biology_5_Punnett Squares and Monohybrid Crosses.docx",
+      "job_id": "job_3f93607f63fa419e939f",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8885@5392e14e3704718b",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6544,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1089,
+        "chunks": 5,
+        "tokens_min": 228,
+        "tokens_median": 298,
+        "tokens_max": 342,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s07_cm8888_12.2_Genetics and Molecular Biology_6_Sex Linkage, Co-dominance and Incomplete Dominance.docx",
+      "job_id": "job_9f1098c2b2674f7ba8df",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8888@eb0ae53daafbaf87",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6834,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1095,
+        "chunks": 5,
+        "tokens_min": 243,
+        "tokens_median": 305,
+        "tokens_max": 361,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s08_cm8891_12.2_Genetics and Molecular Biology_7_Chromosomal Mutations.docx",
+      "job_id": "job_183b57c7434c4279bd45",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8891@753bc0a83a44faa2",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6061,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 904,
+        "chunks": 4,
+        "tokens_min": 243,
+        "tokens_median": 286,
+        "tokens_max": 402,
+        "with_section_path": 0,
+        "with_page": 4,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s09_cm8894_12.3_Biotechnology_1_DNA Extraction, Amplification (PCR), Gel Electrophoresis.docx",
+      "job_id": "job_d73e4705121045dc87d8",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8894@d3956760b523d7d0",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 8,
+        "by_status": {
+          "ok": 8
+        },
+        "chars": 8175,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1269,
+        "chunks": 6,
+        "tokens_min": 204,
+        "tokens_median": 312,
+        "tokens_max": 364,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 2
+        }
+      }
+    },
+    {
+      "file": "s10_cm8897_12.3_Biotechnology_2_DNA Sequencing (Sanger, NGS).docx",
+      "job_id": "job_552fdfcbe67b4141ab80",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8897@0bea5119c8231b31",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 8474,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1324,
+        "chunks": 6,
+        "tokens_min": 261,
+        "tokens_median": 324,
+        "tokens_max": 338,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 1,
+        "normalization": {
+          "unicode_mapped": 6
+        }
+      }
+    },
+    {
+      "file": "s11_cm8900_12.3_Biotechnology_3_Bioinformatics (Concept).docx",
+      "job_id": "job_95163301d7a840288fa0",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8900@624e535b57b43a05",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6519,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 954,
+        "chunks": 5,
+        "tokens_min": 141,
+        "tokens_median": 298,
+        "tokens_max": 315,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s12_cm8903_12.3_Biotechnology_4_DNA Sequence Analysis (BLAST, CLUSTAL).docx",
+      "job_id": "job_5f85dc59fd784631b458",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8903@2df8d546795f15f6",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 7372,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1213,
+        "chunks": 5,
+        "tokens_min": 292,
+        "tokens_median": 308,
+        "tokens_max": 340,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 6
+        }
+      }
+    },
+    {
+      "file": "s13_cm8906_12.3_Biotechnology_5_Recombinant_DNA_Technology.docx",
+      "job_id": "job_4e84f7fd7d5040b9be9f",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8906@7fb320fb7ce12366",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 6317,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 959,
+        "chunks": 11,
+        "tokens_min": 20,
+        "tokens_median": 107,
+        "tokens_max": 171,
+        "with_section_path": 10,
+        "with_page": 11,
+        "tables": 4,
+        "normalization": {
+          "unicode_mapped": 17
+        }
+      }
+    },
+    {
+      "file": "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx",
+      "job_id": "job_bf52b9ef599e42d88970",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8909@5fcd313c33414eb8",
+      "seconds": 0.19,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 14,
+        "by_status": {
+          "ok": 14
+        },
+        "chars": 19751,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 0.9969,
+        "source_tokens": 2909,
+        "chunks": 18,
+        "tokens_min": 75,
+        "tokens_median": 186,
+        "tokens_max": 314,
+        "with_section_path": 18,
+        "with_page": 18,
+        "tables": 3,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s15_cm8912_12.4_Bioenergetics_2_Biomass  Biofuels.docx",
+      "job_id": "job_56c797125231469b9a98",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8912@8c3e845f1319cf27",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 7239,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1142,
+        "chunks": 5,
+        "tokens_min": 227,
+        "tokens_median": 292,
+        "tokens_max": 351,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s16_cm8915_12.4_Bioenergetics_3_Biogas Production.docx",
+      "job_id": "job_801aa00b6a4241049a66",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8915@1b46ce9da1b9eb24",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 8415,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1330,
+        "chunks": 6,
+        "tokens_min": 246,
+        "tokens_median": 336,
+        "tokens_max": 341,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s17_cm8918_12.4_Bioenergetics_4_Hydrogen Production via Photosynthesis.docx",
+      "job_id": "job_5411a3e4e9af4f078788",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8918@420f3a551731e882",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 7468,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1130,
+        "chunks": 5,
+        "tokens_min": 221,
+        "tokens_median": 315,
+        "tokens_max": 350,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s18_cm8921_12.4_Bioenergetics_5_The Moses Experiment (Burning Bush).docx",
+      "job_id": "job_69f6cb9d35f24358b689",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8921@1171671d09e991c4",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 7192,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1174,
+        "chunks": 5,
+        "tokens_min": 256,
+        "tokens_median": 303,
+        "tokens_max": 344,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s19_cm8924_12.5_Battery Technology_1_Bio-Batteries.docx",
+      "job_id": "job_e31cf323213249aa8875",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8924@9bcd3952b26963d5",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6360,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 979,
+        "chunks": 4,
+        "tokens_min": 318,
+        "tokens_median": 339,
+        "tokens_max": 346,
+        "with_section_path": 0,
+        "with_page": 4,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s20_cm8927_12.5_Battery Technology_2_Paper Batteries.docx",
+      "job_id": "job_3b7b0a0140a149159f8c",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8927@d076a597eaccb5f6",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6716,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1052,
+        "chunks": 5,
+        "tokens_min": 122,
+        "tokens_median": 315,
+        "tokens_max": 324,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx",
+      "job_id": "job_f0a737eb2f1d4d988c9c",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8930@f2eb87d4bb22bb03",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6829,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1086,
+        "chunks": 5,
+        "tokens_min": 232,
+        "tokens_median": 273,
+        "tokens_max": 339,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s22_cm8933_12.5_Battery Technology_4_Bioelectrochemical Reactor - Grade 12 Lesson Notes.docx",
+      "job_id": "job_19d719d17ed34259b382",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8933@577f7b9be8f41524",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6726,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1022,
+        "chunks": 5,
+        "tokens_min": 160,
+        "tokens_median": 297,
+        "tokens_max": 334,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 1,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s23_cm8936_12.6_Health and Medical_1_Homeostasis (Concept  Mechanisms).docx",
+      "job_id": "job_f07cd3dbf3534748bac1",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8936@d4437e1a9d497e37",
+      "seconds": 0.14,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 14,
+        "by_status": {
+          "ok": 14
+        },
+        "chars": 15087,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 2229,
+        "chunks": 10,
+        "tokens_min": 178,
+        "tokens_median": 304,
+        "tokens_max": 366,
+        "with_section_path": 0,
+        "with_page": 10,
+        "tables": 1,
+        "normalization": {
+          "unicode_mapped": 2
+        }
+      }
+    },
+    {
+      "file": "s24_cm8940_12.6_Health and Medical_2_Disease - Disruption of Homeostasis.docx",
+      "job_id": "job_3f7153e12cc8455fb21f",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8940@1f204ea6f366dd05",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 8962,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1344,
+        "chunks": 6,
+        "tokens_min": 230,
+        "tokens_median": 315,
+        "tokens_max": 324,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 2,
+        "normalization": {
+          "unicode_mapped": 2
+        }
+      }
+    },
+    {
+      "file": "s25_cm8943_12.6_Health and Medical_3_Systemic Response to Disease or Injury.docx",
+      "job_id": "job_a0c98900414d4949a2de",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8943@3f1fc28644c29009",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 8127,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1204,
+        "chunks": 6,
+        "tokens_min": 122,
+        "tokens_median": 286,
+        "tokens_max": 325,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s26_cm8946_12.6_Health and Medical_4_Surgery - Dissection of Animals.docx",
+      "job_id": "job_f33e7b9934ea4d978a1b",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8946@2b6545fa847de370",
+      "seconds": 0.13,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 9,
+        "by_status": {
+          "ok": 9
+        },
+        "chars": 8696,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1366,
+        "chunks": 6,
+        "tokens_min": 281,
+        "tokens_median": 310,
+        "tokens_max": 339,
+        "with_section_path": 0,
+        "with_page": 6,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 3
+        }
+      }
+    },
+    {
+      "file": "s27_cm8949_12.7_Neuroscience and AI_1_General Design of the Nervous System.docx",
+      "job_id": "job_25087560ab1c47c79a0c",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8949@65c4816fdbbb84eb",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 5,
+        "by_status": {
+          "ok": 5
+        },
+        "chars": 6999,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1085,
+        "chunks": 5,
+        "tokens_min": 231,
+        "tokens_median": 284,
+        "tokens_max": 336,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s28_cm8951_12.7_Neuroscience and AI_2_Sensory Receptors and Neuronal Circuits.docx",
+      "job_id": "job_6a0cebf3f5504c34b468",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8951@1e24a53f77d69f33",
+      "seconds": 0.08,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6228,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 947,
+        "chunks": 5,
+        "tokens_min": 141,
+        "tokens_median": 281,
+        "tokens_max": 343,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s29_cm8954_12.7_Neuroscience and AI_3_The Eye and Vision.docx",
+      "job_id": "job_a68c5e1a6a0448d192d5",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8954@82ce279ce1299d4f",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6037,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1022,
+        "chunks": 5,
+        "tokens_min": 131,
+        "tokens_median": 292,
+        "tokens_max": 355,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s30_cm8958_12.7_Neuroscience and AI_4_Cerebral Cortex, Learning and Memory.docx",
+      "job_id": "job_9015dd7ef0b04269b1a4",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8958@ecefa6671b3afe18",
+      "seconds": 0.06,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6095,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 916,
+        "chunks": 4,
+        "tokens_min": 235,
+        "tokens_median": 323,
+        "tokens_max": 358,
+        "with_section_path": 0,
+        "with_page": 4,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s31_cm8960_12.7_Neuroscience and AI_5_Behavioural and Motivational Mechanisms (Limbic System).docx",
+      "job_id": "job_1d557ed3f9af4932a8dd",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8960@f0e8881da96f816a",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6268,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 958,
+        "chunks": 5,
+        "tokens_min": 139,
+        "tokens_median": 282,
+        "tokens_max": 339,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s33_cm8967_12.8_Robotics_1_Sensory Systems for Robotics.docx",
+      "job_id": "job_bbc0d2c0494e4a318782",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8967@c91c529d83ef6138",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 5929,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 929,
+        "chunks": 4,
+        "tokens_min": 258,
+        "tokens_median": 300,
+        "tokens_max": 401,
+        "with_section_path": 0,
+        "with_page": 4,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s36_cm8975_12.9_Population Ecology_1_Adaptations of Organisms.docx",
+      "job_id": "job_46fda6d66fd54480b399",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8975@4ad77708311cd1b3",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6170,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 902,
+        "chunks": 5,
+        "tokens_min": 122,
+        "tokens_median": 253,
+        "tokens_max": 347,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s37_cm8979_12.9_Population Ecology_2_Species Interactions.docx",
+      "job_id": "job_9ba4125aed84409889f8",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8979@cbad7112b205cda2",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6254,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 903,
+        "chunks": 5,
+        "tokens_min": 228,
+        "tokens_median": 261,
+        "tokens_max": 290,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s38_cm8982_12.9_Population Ecology_3_Energy Flow, Food Webs and Pyramids.docx",
+      "job_id": "job_05a73d880868406b8cb3",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8982@4d8aa1621ebe4595",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6260,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1004,
+        "chunks": 5,
+        "tokens_min": 127,
+        "tokens_median": 284,
+        "tokens_max": 364,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s39_cm8985_12.9_Population Ecology_4_Biogeochemical Cycles.docx",
+      "job_id": "job_f8451f192144438690ab",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8985@aece4913d3a0f1a4",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6328,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 975,
+        "chunks": 5,
+        "tokens_min": 123,
+        "tokens_median": 287,
+        "tokens_max": 341,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s40_cm8988_12.9_Population Ecology_5_Population Dynamics, Sampling and Growth Models.docx",
+      "job_id": "job_ca8756994b424ea69140",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8988@fa6f93b04140ae1b",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6275,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 953,
+        "chunks": 5,
+        "tokens_min": 156,
+        "tokens_median": 272,
+        "tokens_max": 350,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s41_cm8991_12.9_Population Ecology_6_Human Impact on Ecosystem  Climate Change Mitigation - Grade 12 Lesson Notes.docx",
+      "job_id": "job_4461472d1c274bb683c3",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8991@69a027e4424c2517",
+      "seconds": 0.04,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6897,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 990,
+        "chunks": 5,
+        "tokens_min": 130,
+        "tokens_median": 298,
+        "tokens_max": 356,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s42_cm8994_12.10_Evolution_1_Theories of Evolution (Darwin vs Lamarck).docx",
+      "job_id": "job_92820d94fa5c45d1abb2",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8994@f63a1ba34c9a98c8",
+      "seconds": 0.07,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6510,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1005,
+        "chunks": 5,
+        "tokens_min": 163,
+        "tokens_median": 265,
+        "tokens_max": 339,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s43_cm8997_12.10_Evolution_2_Natural Selection and Evidence for Evolution.docx",
+      "job_id": "job_d0c80e1c6840465ab7b0",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm8997@d80f934636c9fb6f",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 7,
+        "by_status": {
+          "ok": 7
+        },
+        "chars": 6678,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 1003,
+        "chunks": 5,
+        "tokens_min": 228,
+        "tokens_median": 258,
+        "tokens_max": 294,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "s44_cm9000_12.10_Evolution_3_Mechanisms of Evolution and Extinction.docx",
+      "job_id": "job_d46da0636f0848d39eaa",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "edunex:cm9000@675e3aadc091e718",
+      "seconds": 0.05,
+      "extractor": "python-docx 1.2.0",
+      "ocr": null,
+      "stats": {
+        "pages": 6,
+        "by_status": {
+          "ok": 6
+        },
+        "chars": 6495,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 985,
+        "chunks": 5,
+        "tokens_min": 124,
+        "tokens_median": 283,
+        "tokens_max": 359,
+        "with_section_path": 0,
+        "with_page": 5,
+        "tables": 0,
+        "normalization": {}
+      }
+    },
+    {
+      "file": "scanned-STEMPhysics-Term1-Syllabus-Gr12-p16-18.pdf",
+      "job_id": "job_960c3aada2d84cd5aea1",
+      "state": "partial",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured",
+        "low-confidence OCR pages: [3]"
+      ],
+      "version_id": "png-ndoe:stem-physics-syllabus-gr12-t1-scan@b713bc0f30813403",
+      "seconds": 4.73,
+      "extractor": "pypdf 6.21.4",
+      "ocr": {
+        "engine": "tesseract",
+        "version": "5.3.4",
+        "wrapper": "pytesseract 0.3.13",
+        "language": "eng",
+        "dpi": 300,
+        "config": "--oem 1 --psm 3",
+        "low_confidence_threshold": 70.0
+      },
+      "stats": {
+        "pages": 3,
+        "by_status": {
+          "ocr": 2,
+          "low_confidence": 1
+        },
+        "chars": 4002,
+        "low_confidence_pages": [
+          3
+        ],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": [
+          1,
+          2,
+          3
+        ]
+      },
+      "quality": {
+        "coverage": 0.9831,
+        "source_tokens": 590,
+        "chunks": 3,
+        "tokens_min": 155,
+        "tokens_median": 212,
+        "tokens_max": 308,
+        "with_section_path": 0,
+        "with_page": 3,
+        "tables": 0,
+        "normalization": {
+          "unicode_mapped": 4,
+          "page_number_lines_removed": 1,
+          "ocr_noise_lines_removed": 2
+        }
+      }
+    },
+    {
+      "file": "teacher-deck-transcription.pptx",
+      "job_id": "job_602008d375c04701a16d",
+      "state": "succeeded",
+      "stage": "index",
+      "error": null,
+      "detail": null,
+      "warnings": [
+        "malware scan skipped:not_configured"
+      ],
+      "version_id": "school:demo-high:teacher-deck-transcription@26bb7fce5ed8d748",
+      "seconds": 0.05,
+      "extractor": "python-pptx 1.0.2",
+      "ocr": null,
+      "stats": {
+        "pages": 10,
+        "by_status": {
+          "ok": 10
+        },
+        "chars": 4897,
+        "low_confidence_pages": [],
+        "failed_pages": [],
+        "empty_pages": [],
+        "ocr_pages": []
+      },
+      "quality": {
+        "coverage": 1.0,
+        "source_tokens": 810,
+        "chunks": 10,
+        "tokens_min": 8,
+        "tokens_median": 105,
+        "tokens_max": 175,
+        "with_section_path": 10,
+        "with_page": 10,
+        "tables": 1,
+        "normalization": {
+          "unicode_mapped": 2
+        }
+      }
+    }
+  ],
+  "idempotency": {
+    "counts_after_first_pass": {
+      "sources": 72,
+      "active_sources": 72,
+      "runs": 72,
+      "jobs": 72,
+      "chunks": 1811,
+      "active_chunks": 1811
+    },
+    "resubmit_created_any_job": false,
+    "counts_after_resubmit": {
+      "sources": 72,
+      "active_sources": 72,
+      "runs": 72,
+      "jobs": 72,
+      "chunks": 1811,
+      "active_chunks": 1811
+    },
+    "reprocess_file": "STEMBio-Term1-StudentGuide-Gr12.pdf",
+    "reprocess_state": "succeeded",
+    "counts_after_reprocess": {
+      "sources": 72,
+      "active_sources": 72,
+      "runs": 73,
+      "jobs": 73,
+      "chunks": 1846,
+      "active_chunks": 1816
+    },
+    "versions_of_reprocessed_source": 1,
+    "runs_of_reprocessed_version": 2,
+    "active_chunks_reprocessed_version": 35,
+    "all_chunks_reprocessed_version": 65
+  }
+}

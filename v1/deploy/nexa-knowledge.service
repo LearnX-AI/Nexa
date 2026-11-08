@@ -1,5 +1,7 @@
 [Unit]
-Description=NEXA Knowledge Service (M1)
+Description=NEXA Knowledge Service (M2)
+# Host needs: tesseract-ocr tesseract-ocr-eng (OCR), clamav-daemon (malware scan),
+# /var/lib/nexa/knowledge owned by the service user (registry and originals).
 After=network-online.target nexa-model-gateway.service
 Wants=network-online.target
 Requires=nexa-model-gateway.service

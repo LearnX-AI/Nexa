@@ -1,0 +1,453 @@
+{
+ "version": "1.0.0",
+ "description": "NEXA-M2-003 retrieval gold set over the PNG STEM curriculum corpus. Questions are written in learner and teacher wording, not copied from the source. A retrieved chunk is a hit when it comes from one of the expected files and contains every evidence phrase (compared after lower-casing and collapsing non-alphanumerics). Categories: pdf_text, syllabus_outcome, docx_text, docx_table, pptx, ocr.",
+ "questions": [
+  {
+   "id": "q01",
+   "category": "pdf_text",
+   "question": "What is a double-sided printed circuit board?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "double trace layers"
+   ]
+  },
+  {
+   "id": "q02",
+   "category": "pdf_text",
+   "question": "Why should technicians use an isolated power supply when testing a circuit?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "lethal shock"
+   ]
+  },
+  {
+   "id": "q03",
+   "category": "pdf_text",
+   "question": "How are ligands used to purify a protein in affinity chromatography?",
+   "files": [
+    "STEMChem-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "affinity beads are made by attaching ligands"
+   ]
+  },
+  {
+   "id": "q04",
+   "category": "pdf_text",
+   "question": "Which radioisotopes are used for SPECT imaging compared with PET?",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "99mTc"
+   ]
+  },
+  {
+   "id": "q05",
+   "category": "pdf_text",
+   "question": "How does the proteome differ from the genome over time?",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "proteome is ever-changing"
+   ]
+  },
+  {
+   "id": "q06",
+   "category": "pdf_text",
+   "question": "What is inductive or wireless charging of devices?",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "without having to plug the device directly into a power socket"
+   ]
+  },
+  {
+   "id": "q07",
+   "category": "pdf_text",
+   "question": "Why is a compressed hydrogen cylinder a disadvantage for vehicles compared with petrol?",
+   "files": [
+    "STEMChem-Term2-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "much heavier than a petrol tank"
+   ]
+  },
+  {
+   "id": "q08",
+   "category": "pdf_text",
+   "question": "What are the six main branches of artificial intelligence?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "six main branches",
+    "Fuzzy Logic"
+   ]
+  },
+  {
+   "id": "q09",
+   "category": "pdf_text",
+   "question": "How do molecular hinges move in artificial molecular machines?",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "Molecular hinges revolve around a stiff axis"
+   ]
+  },
+  {
+   "id": "q10",
+   "category": "pdf_text",
+   "question": "How many bird families and species are found in Papua New Guinea?",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "79 families and 730 species"
+   ]
+  },
+  {
+   "id": "q11",
+   "category": "pdf_text",
+   "question": "What is a pharmacokinetic drug interaction in the liver?",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "compete with the metabolisation enzymes"
+   ]
+  },
+  {
+   "id": "q12",
+   "category": "pdf_text",
+   "question": "When does an individual function normally according to health and medical biology?",
+   "files": [
+    "STEMBio-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "homeostatic mechanisms are fully functional"
+   ]
+  },
+  {
+   "id": "q13",
+   "category": "pdf_text",
+   "question": "What does an AI system use to communicate and interact with a human?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "Natural Language Processing (NLP)"
+   ]
+  },
+  {
+   "id": "q14",
+   "category": "pdf_text",
+   "question": "Why do industrial robots outperform human workers on long shifts?",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "day and night without ever complaining"
+   ]
+  },
+  {
+   "id": "q15",
+   "category": "pdf_text",
+   "question": "What fields does robotics combine as a multidisciplinary subject?",
+   "files": [
+    "STEMPhysics-Term3-TeacherGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "multidisciplinary field combining computer science and engineering"
+   ]
+  },
+  {
+   "id": "q16",
+   "category": "syllabus_outcome",
+   "question": "Which performance indicator asks students to explain how electromagnets and transformers use electromagnetic induction?",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1c",
+    "electromagnets and transformers"
+   ]
+  },
+  {
+   "id": "q17",
+   "category": "syllabus_outcome",
+   "question": "What must Grade 12 chemistry students explain about the organisational levels of protein structure?",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.2a",
+    "four organizational levels"
+   ]
+  },
+  {
+   "id": "q18",
+   "category": "syllabus_outcome",
+   "question": "Which outcome covers naming the 20 amino acids with one-letter and three-letter codes?",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "one-letter code and three-letter code"
+   ]
+  },
+  {
+   "id": "q19",
+   "category": "syllabus_outcome",
+   "question": "What is the content standard for the protein sequencing module?",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "determine the amino acid sequence of a protein"
+   ]
+  },
+  {
+   "id": "q20",
+   "category": "syllabus_outcome",
+   "question": "Which indicator requires students to describe how a magnetic field generates current?",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1b",
+    "magnetic field generates current"
+   ]
+  },
+  {
+   "id": "q21",
+   "category": "docx_text",
+   "question": "During which phase of the cell cycle is DNA copied?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "S (Synthesis) phase"
+   ]
+  },
+  {
+   "id": "q22",
+   "category": "docx_text",
+   "question": "Which enzyme unwinds the DNA double helix and how?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "unwinds the DNA double helix by breaking the hydrogen bonds"
+   ]
+  },
+  {
+   "id": "q23",
+   "category": "docx_text",
+   "question": "What gives DNA polymerase a starting point to add nucleotides?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "provides a starting point for DNA polymerase"
+   ]
+  },
+  {
+   "id": "q24",
+   "category": "docx_text",
+   "question": "What is molecular biology the study of?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "studies the molecules responsible for storing"
+   ]
+  },
+  {
+   "id": "q25",
+   "category": "docx_table",
+   "question": "In the fertiliser and plant growth experiment, what is the dependent variable?",
+   "files": [
+    "s01_cm8870_12.1_Sciencetific Methods and Skills_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Plant height or growth rate"
+   ]
+  },
+  {
+   "id": "q26",
+   "category": "docx_table",
+   "question": "What is the job of the ribosome binding site on a gene?",
+   "files": [
+    "s03_cm8876_12.3_Genetics and Molecular Biology_2_ Genes  Chromosomes_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Helps ribosomes recognise the transcript"
+   ]
+  },
+  {
+   "id": "q27",
+   "category": "docx_table",
+   "question": "How does next-generation sequencing read DNA compared with Sanger sequencing?",
+   "files": [
+    "s10_cm8897_12.3_Biotechnology_2_DNA Sequencing (Sanger, NGS).docx"
+   ],
+   "evidence": [
+    "Millions of fragments at once"
+   ]
+  },
+  {
+   "id": "q28",
+   "category": "docx_table",
+   "question": "What are the products of the light-dependent reactions of photosynthesis?",
+   "files": [
+    "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "ATP, NADPH, Oxygen"
+   ]
+  },
+  {
+   "id": "q29",
+   "category": "docx_table",
+   "question": "What is a disadvantage of growing crops for biofuel?",
+   "files": [
+    "s15_cm8912_12.4_Bioenergetics_2_Biomass  Biofuels.docx"
+   ],
+   "evidence": [
+    "competes with food crops for land"
+   ]
+  },
+  {
+   "id": "q30",
+   "category": "docx_table",
+   "question": "Why does a biogas digester produce less gas in cold weather?",
+   "files": [
+    "s16_cm8915_12.4_Bioenergetics_3_Biogas Production.docx"
+   ],
+   "evidence": [
+    "Works slowly in cold conditions"
+   ]
+  },
+  {
+   "id": "q31",
+   "category": "docx_table",
+   "question": "What is the oxygen problem in biological hydrogen production?",
+   "files": [
+    "s17_cm8918_12.4_Bioenergetics_4_Hydrogen Production via Photosynthesis.docx"
+   ],
+   "evidence": [
+    "Enzymes are damaged by oxygen"
+   ]
+  },
+  {
+   "id": "q32",
+   "category": "docx_table",
+   "question": "What safety rule applies to the burning bush (Moses) experiment?",
+   "files": [
+    "s18_cm8921_12.4_Bioenergetics_5_The Moses Experiment (Burning Bush).docx"
+   ],
+   "evidence": [
+    "controlled teacher demonstration only"
+   ]
+  },
+  {
+   "id": "q33",
+   "category": "docx_table",
+   "question": "Why do bio-batteries have a limited working life?",
+   "files": [
+    "s19_cm8924_12.5_Battery Technology_1_Bio-Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes/microbes can be short-lived"
+   ]
+  },
+  {
+   "id": "q34",
+   "category": "docx_table",
+   "question": "What can damage a paper battery?",
+   "files": [
+    "s20_cm8927_12.5_Battery Technology_2_Paper Batteries.docx"
+   ],
+   "evidence": [
+    "damaged by water or tearing"
+   ]
+  },
+  {
+   "id": "q35",
+   "category": "docx_table",
+   "question": "Why do sugar batteries need their enzymes replaced?",
+   "files": [
+    "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes wear out and must be replaced"
+   ]
+  },
+  {
+   "id": "q36",
+   "category": "docx_table",
+   "question": "What two jobs does a bioelectrochemical reactor do at the same time?",
+   "files": [
+    "s22_cm8933_12.5_Battery Technology_4_Bioelectrochemical Reactor - Grade 12 Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Treats wastewater and makes energy at once"
+   ]
+  },
+  {
+   "id": "q37",
+   "category": "docx_table",
+   "question": "Which hormones and organ control blood glucose in homeostasis?",
+   "files": [
+    "s23_cm8936_12.6_Health and Medical_1_Homeostasis (Concept  Mechanisms).docx"
+   ],
+   "evidence": [
+    "Insulin and glucagon (pancreas)"
+   ]
+  },
+  {
+   "id": "q38",
+   "category": "docx_table",
+   "question": "What happens to beta cells in type 1 diabetes?",
+   "files": [
+    "s24_cm8940_12.6_Health and Medical_2_Disease - Disruption of Homeostasis.docx"
+   ],
+   "evidence": [
+    "Beta cells are destroyed"
+   ]
+  },
+  {
+   "id": "q39",
+   "category": "pptx",
+   "question": "In transcription, which base does RNA use instead of thymine?",
+   "files": [
+    "teacher-deck-transcription.pptx",
+    "s05_cm8882_12.2_Genetics and Molecular Biology_4_Transcription_and_Translation.docx"
+   ],
+   "evidence": [
+    "uracil (U) in place of thymine"
+   ]
+  },
+  {
+   "id": "q40",
+   "category": "ocr",
+   "question": "Which performance indicator asks students to differentiate genomics and proteomics in the biophysics module?",
+   "files": [
+    "scanned-STEMPhysics-Term1-Syllabus-Gr12-p16-18.pdf",
+    "STEMPhysics-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1c",
+    "Differentiate between Genomics and Proteomics"
+   ]
+  }
+ ]
+}
