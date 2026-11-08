@@ -6,7 +6,7 @@ for tests; it does not persist and is not shared across workers.
 """
 from __future__ import annotations
 import math
-from typing import Any
+from typing import Any, Callable, Optional
 
 from . import config
 
@@ -22,13 +22,22 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb)
 
 
+Filter = Callable[[dict[str, Any]], bool]
+
+
 class VectorStore:
-    """Store interface. Backends implement add and query."""
+    """Store interface. Backends implement add, query and delete_version."""
 
     async def add(self, items: list[dict[str, Any]]) -> int:
         raise NotImplementedError
 
-    async def query(self, vector: list[float], top_k: int) -> list[dict[str, Any]]:
+    async def query(self, vector: list[float], top_k: int,
+                    where: Optional[Filter] = None) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    async def delete_version(self, version_id: str) -> int:
+        """Remove every item ingested for one source version (M2 supersession
+        and reprocessing)."""
         raise NotImplementedError
 
 
@@ -40,7 +49,13 @@ class InMemoryStore(VectorStore):
         self._items.extend(items)
         return len(items)
 
-    async def query(self, vector: list[float], top_k: int) -> list[dict[str, Any]]:
+    async def delete_version(self, version_id: str) -> int:
+        before = len(self._items)
+        self._items = [it for it in self._items if (it.get("metadata") or {}).get("version_id") != version_id]
+        return before - len(self._items)
+
+    async def query(self, vector: list[float], top_k: int,
+                    where: Optional[Filter] = None) -> list[dict[str, Any]]:
         scored = [
             {
                 "text": it["text"],
@@ -48,6 +63,7 @@ class InMemoryStore(VectorStore):
                 "score": _cosine(vector, it["vector"]),
             }
             for it in self._items
+            if where is None or where(it.get("metadata") or {})
         ]
         scored.sort(key=lambda r: r["score"], reverse=True)
         return scored[:top_k]
