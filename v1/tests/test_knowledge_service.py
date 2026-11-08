@@ -5,45 +5,33 @@ network is used.
 """
 from __future__ import annotations
 
-import hashlib
 import json
-import math
-import re
 
 import pytest
 from fastapi.testclient import TestClient
 
 from v1.knowledge import embeddings
 from v1.knowledge import main as km
+from v1.knowledge.indexing import IndexManager
 from v1.knowledge.ingestion.pipeline import Pipeline
 from v1.knowledge.store import InMemoryStore
 
-from .knowledge_fixtures import lesson_manifest, make_docx, make_pptx, minimal_pdf
+from .knowledge_fixtures import FakeGateway, lesson_manifest, make_docx, make_pptx, minimal_pdf
 
 
-def _vec(text: str, dim: int = 128) -> list[float]:
-    v = [0.0] * dim
-    for w in re.findall(r"[a-z]{3,}", text.lower()):
-        v[int(hashlib.md5(w.encode()).hexdigest(), 16) % dim] += 1.0
-    n = math.sqrt(sum(x * x for x in v)) or 1.0
-    return [x / n for x in v]
+def _fresh_index(pipe):
+    return IndexManager(InMemoryStore(), pipe.registry)
 
 
 @pytest.fixture
 def svc(monkeypatch):
-    calls = {"n": 0, "fail": False}
-
-    async def fake_embed(texts, trace_id=None):
-        calls["n"] += 1
-        if calls["fail"]:
-            raise embeddings.EmbeddingError("gateway 503")
-        return [_vec(t) for t in texts]
-
-    monkeypatch.setattr(embeddings, "embed", fake_embed)
-    monkeypatch.setattr(km, "PIPE", Pipeline())
-    monkeypatch.setattr(km, "_STORE", InMemoryStore())
+    gw = FakeGateway()
+    monkeypatch.setattr(embeddings, "_gateway", gw)
+    pipe = Pipeline()
+    monkeypatch.setattr(km, "PIPE", pipe)
+    monkeypatch.setattr(km, "INDEX", _fresh_index(pipe))
     with TestClient(km.app) as c:
-        yield c, calls
+        yield c, gw
 
 
 def _upload(c, token, auth, name, data, manifest):
@@ -122,14 +110,14 @@ def test_teacher_only_material_hidden_from_students(svc, make_token, auth):
 
 
 def test_index_failure_is_visible_and_retryable(svc, make_token, auth):
-    c, calls = svc
+    c, gw = svc
     teacher = make_token(["teacher"])
-    calls["fail"] = True
+    gw.fail = True
     jid = _upload(c, teacher, auth, "l.docx", make_docx(), lesson_manifest()).json()["job"]["job_id"]
     job = c.get(f"/v1/knowledge/jobs/{jid}", headers=auth(teacher)).json()
     assert job["state"] == "failed" and job["stage"] == "index" and job["retryable"]
     assert job["error_code"] == "index_error"
-    calls["fail"] = False
+    gw.fail = False
     c.post(f"/v1/knowledge/jobs/{jid}/retry", headers=auth(teacher))
     job = c.get(f"/v1/knowledge/jobs/{jid}", headers=auth(teacher)).json()
     assert job["state"] == "succeeded" and job["stage"] == "done"
@@ -178,13 +166,13 @@ def test_reindex_after_restart_restores_retrieval(svc, make_token, auth, monkeyp
     c, _ = svc
     teacher = make_token(["teacher"])
     _upload(c, teacher, auth, "l.docx", make_docx(), lesson_manifest())
-    monkeypatch.setattr(km, "_STORE", InMemoryStore())  # a restart empties the in-memory store
+    monkeypatch.setattr(km, "INDEX", _fresh_index(km.PIPE))  # a restart empties the in-memory store
     student = make_token(["student"])
     assert c.post("/v1/knowledge/query", headers=auth(student), json={"query": "helicase"}).json()["results"] == []
     vid = c.get("/v1/knowledge/sources", headers=auth(teacher)).json()["sources"][0]["version_id"]
     assert c.post(f"/v1/knowledge/sources/{vid}/reindex", headers=auth(student)).status_code == 403
     assert c.post(f"/v1/knowledge/sources/{vid}/reindex", headers=auth(teacher)).status_code == 202
     assert c.post("/v1/knowledge/query", headers=auth(student), json={"query": "helicase"}).json()["results"]
-    monkeypatch.setattr(km, "_STORE", InMemoryStore())
+    monkeypatch.setattr(km, "INDEX", _fresh_index(km.PIPE))
     assert c.post("/v1/knowledge/sources/all/reindex", headers=auth(teacher)).json() == {"queued": "all"}
     assert c.post("/v1/knowledge/query", headers=auth(student), json={"query": "helicase"}).json()["results"]

@@ -181,12 +181,10 @@ pip install -r v1/knowledge/requirements.txt
 
 New settings are listed in `v1/knowledge/.env.example`. Set
 `NEXA_KNOWLEDGE_REGISTRY` and `NEXA_KNOWLEDGE_BLOB_DIR` to disk paths so
-registry and originals survive restarts. The vector store is still the M1
-in-memory store until the pgvector step, so its contents are lost on restart.
-Set `NEXA_KNOWLEDGE_REINDEX_ON_START=true` to re-embed every active, approved
-source in the background at startup, or call
-`POST /v1/knowledge/sources/all/reindex` (or a single `version_id`). The same
-call re-embeds everything after an embedding model change.
+registry and originals survive restarts. Since M2-004 the vector store is
+pgvector and persists; see NEXA-M2-004 for index versions and model changes.
+With the in-memory store (tests only), set `NEXA_KNOWLEDGE_REINDEX_ON_START=true`
+or call `POST /v1/knowledge/sources/all/reindex` after a restart.
 
 ## 11. Known limitations
 

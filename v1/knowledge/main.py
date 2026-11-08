@@ -43,12 +43,15 @@ from .schemas import (
     IngestManifest,
     IngestRequest,
     IngestResponse,
+    IndexActivateRequest,
+    IndexBuildRequest,
     JobRetryRequest,
     LmsItemRequest,
     QueryRequest,
     QueryResponse,
     QueryResult,
 )
+from .indexing import IndexError_, IndexManager
 from .store import get_store
 
 app = FastAPI(title="NEXA Knowledge Service", version=__version__)
@@ -56,20 +59,30 @@ app.add_middleware(TraceMiddleware, service="nexa-knowledge")
 app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 
 
+# One process-wide store, pipeline and index manager. With the in-memory store
+# vectors live only in this worker; with pgvector they persist. The registry and
+# originals persist when NEXA_KNOWLEDGE_REGISTRY and NEXA_KNOWLEDGE_BLOB_DIR
+# point at disk.
+_STORE = get_store()
+PIPE = Pipeline()
+INDEX = IndexManager(_STORE, PIPE.registry)
+
+
 @app.on_event("startup")
 async def _startup():
-    preflight("nexa-knowledge", ["NEXA_IDENTITY_SECRET", "NEXA_KNOWLEDGE_GATEWAY_TOKEN"])
+    required = ["NEXA_IDENTITY_SECRET", "NEXA_KNOWLEDGE_GATEWAY_TOKEN"]
+    if config.STORE_BACKEND == "pgvector":
+        required.append("NEXA_KNOWLEDGE_PG_DSN")
+    preflight("nexa-knowledge", required)
+    await INDEX.store.open()
     if config.REINDEX_ON_START:
         import asyncio
         asyncio.get_running_loop().create_task(reindex_all())
 
-# One process-wide store and pipeline. With the in-memory store, ingested
-# vectors live only in this worker; the registry and originals persist when
-# NEXA_KNOWLEDGE_REGISTRY and NEXA_KNOWLEDGE_BLOB_DIR point at disk.
-_STORE = get_store()
-PIPE = Pipeline()
 
-EMBED_BATCH = 32
+@app.on_event("shutdown")
+async def _shutdown():
+    await INDEX.store.close()
 
 
 def _trace(request: Request) -> str:
@@ -91,12 +104,19 @@ def _job_view(job: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/health")
 async def health():
+    try:
+        active = await INDEX.active()
+        index = {"active_index": active.index_id, "embed_fingerprint": active.fingerprint} if active \
+            else {"active_index": None}
+    except Exception as exc:  # the store being down must show, not crash health
+        index = {"active_index": None, "store_error": type(exc).__name__}
     return {
-        "status": "ok",
+        "status": "ok" if "store_error" not in index else "degraded",
         "service": "nexa-knowledge",
         "version": __version__,
         "store": config.STORE_BACKEND,
         "embed_model": config.EMBED_MODEL,
+        **index,
         "metadata_schema": SCHEMA_VERSION,
         "pipeline": PIPELINE_VERSION,
         "normalizer": NORMALIZER_VERSION,
@@ -117,16 +137,10 @@ async def ingest(
     trace_id = _trace(request)
     _require(principal, "knowledge.ingest", "knowledge.ingest", trace_id)
     started = time.time()
-    texts = [d.text for d in req.documents]
     try:
-        vectors = await embeddings.embed(texts, trace_id)
+        count = await INDEX.add_raw([{"text": d.text, "metadata": d.metadata} for d in req.documents], trace_id)
     except embeddings.EmbeddingError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    items = [
-        {"text": d.text, "metadata": d.metadata, "vector": vec}
-        for d, vec in zip(req.documents, vectors)
-    ]
-    count = await _STORE.add(items)
     x_nexa = {
         "service": "nexa-knowledge",
         "op": "ingest",
@@ -152,12 +166,13 @@ async def query(
     started = time.time()
     top_k = req.top_k or config.DEFAULT_TOP_K
     try:
-        vectors = await embeddings.embed([req.query], trace_id)
+        rows, rec = await INDEX.query(req.query, top_k, where=retrieval_filter(principal), trace_id=trace_id)
+    except embeddings.ModelChanged as exc:
+        audit_event(action="knowledge.query", decision="refuse", principal=principal.subject,
+                    trace_id=trace_id, reason="embedding_model_changed")
+        raise HTTPException(status_code=503, detail=str(exc))
     except embeddings.EmbeddingError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    if not vectors:
-        raise HTTPException(status_code=502, detail="Empty query embedding")
-    rows = await _STORE.query(vectors[0], top_k, where=retrieval_filter(principal))
     results = [
         QueryResult(text=r["text"], score=r["score"], metadata=r.get("metadata", {}),
                     citation=(r.get("metadata") or {}).get("citation"))
@@ -170,60 +185,18 @@ async def query(
         "latency_ms": int((time.time() - started) * 1000),
         "principal": principal.subject,
         "returned": len(results),
+        "index": rec.index_id if rec else None,
     }
     return QueryResponse(query=req.query, results=results, x_nexa=x_nexa)
 
 
 # ------------------------------------------------------------------ M2 ingestion
 
-def _store_metadata(c: dict[str, Any]) -> dict[str, Any]:
-    """Flat metadata stored with each vector: the source contract plus the
-    chunk's own provenance, so a hit can be cited and filtered without a join."""
-    loc, cur = c["locator"], c["curriculum"]
-    md = dict(c["source"])
-    md.update({
-        "chunk_id": c["chunk_id"], "ordinal": c["ordinal"], "citation": c["citation"],
-        "page_start": loc.get("page_start"), "page_end": loc.get("page_end"), "page_label": loc.get("page_label"),
-        "page_basis": loc.get("page_basis"), "section_path": " > ".join(loc.get("section_path") or []),
-        "anchor": loc.get("anchor"),
-        "thema": cur.get("thema") or md.get("thema"), "module_code": cur.get("module_code") or md.get("module_code"),
-        "module_title": cur.get("module_title"), "topic_code": cur.get("topic_code"),
-        "topic_title": cur.get("topic_title"), "outcome_codes": ",".join(cur.get("outcome_codes") or []),
-        "prev_chunk_id": c.get("prev_chunk_id"), "next_chunk_id": c.get("next_chunk_id"),
-        "low_confidence": c["extraction"]["low_confidence"],
-        "chunker_version": c["chunking"]["chunker_version"], "chunk_config_hash": c["chunking"]["config_hash"],
-        "run_id": c["extraction"]["run_id"],
-    })
-    return md
-
-
 async def index_version(version_id: str, trace_id: Optional[str] = None) -> int:
-    """Embed one source version's active chunks through the Model Gateway and
-    replace them in the vector store, removing superseded versions of the same
-    source. Raises EmbeddingError; on failure nothing of this version remains
-    half-indexed. Returns the number of chunks indexed."""
-    reg = PIPE.registry
-    src = reg.get_source(version_id)
-    if src is None or src["status"] != "active" or src["metadata"].get("approval_status") != "approved":
-        return 0
-    for v in reg.versions_of(src["source_id"]):
-        if v["status"] != "active":
-            await _STORE.delete_version(v["version_id"])
-    await _STORE.delete_version(version_id)
-    chunks = reg.chunks_of(version_id)
-    try:
-        for i in range(0, len(chunks), EMBED_BATCH):
-            batch = chunks[i:i + EMBED_BATCH]
-            vectors = await embeddings.embed([c["embedding_text"] for c in batch], trace_id)
-            if len(vectors) != len(batch):
-                raise embeddings.EmbeddingError("embedding count mismatch")
-            await _STORE.add([{"text": c["text"], "vector": v, "metadata": _store_metadata(c)}
-                              for c, v in zip(batch, vectors)])
-            reg.mark_embedded([c["chunk_id"] for c in batch])
-    except embeddings.EmbeddingError:
-        await _STORE.delete_version(version_id)
-        raise
-    return len(chunks)
+    """Embed one approved source version into the active index (and any index
+    still building). Raises EmbeddingError."""
+    out = await INDEX.index_version(version_id, trace_id)
+    return out.get("indexed", 0)
 
 
 async def index_job(job_id: str, trace_id: Optional[str] = None) -> dict[str, Any]:
@@ -250,16 +223,12 @@ async def index_job(job_id: str, trace_id: Optional[str] = None) -> dict[str, An
 
 
 async def reindex_all(trace_id: Optional[str] = None) -> dict[str, int]:
-    """Re-embed every active, approved source. Used after a restart while the
-    vector store is the in-memory M1 store, and after an embedding model change."""
-    done = failed = 0
-    for s in PIPE.registry.list_sources("active"):
-        try:
-            if await index_version(s["version_id"], trace_id):
-                done += 1
-        except embeddings.EmbeddingError:
-            failed += 1
-    return {"indexed_sources": done, "failed_sources": failed}
+    """Re-embed every active, approved source into the active index. Needed after
+    a restart with the in-memory store; cached vectors make it cheap."""
+    try:
+        return await INDEX.reindex_all(trace_id=trace_id)
+    except embeddings.EmbeddingError as exc:
+        return {"indexed_sources": 0, "failed_sources": -1, "error": str(exc)[:300]}
 
 
 async def _process_and_index(job_id: str, trace_id: str) -> None:
@@ -406,3 +375,108 @@ async def get_source_chunks(version_id: str, request: Request, active: bool = Tr
 @app.get("/v1/knowledge/schema/source-metadata")
 async def source_metadata_schema(principal: Principal = Depends(require_principal)):
     return json_schema()
+
+
+# ------------------------------------------------------------------ M2-004 index versions
+
+def _index_error(exc: IndexError_) -> HTTPException:
+    return HTTPException(status_code=exc.status, detail=exc.detail)
+
+
+@app.get("/v1/knowledge/indexes")
+async def list_indexes(request: Request, principal: Principal = Depends(require_principal)):
+    _require(principal, "knowledge.admin", "knowledge.indexes.list", _trace(request))
+    active = await INDEX.store.active_index_id()
+    return {"active_index": active,
+            "indexes": [r.to_dict() for r in await INDEX.store.list_indexes()]}
+
+
+@app.get("/v1/knowledge/indexes/{index_id}")
+async def get_index(index_id: str, request: Request, check_model: bool = False,
+                    principal: Principal = Depends(require_principal)):
+    """One index. With check_model=true, also asks the gateway which model it
+    serves now and reports whether this index still matches it."""
+    trace_id = _trace(request)
+    _require(principal, "knowledge.admin", "knowledge.indexes.get", trace_id)
+    rec = await INDEX.store.get_index(index_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail="index not found")
+    out = rec.to_dict()
+    if check_model:
+        try:
+            now = await INDEX.embedder(rec.logical).describe(trace_id)
+            out["gateway_fingerprint"] = now.fingerprint
+            out["model_matches"] = now.fingerprint == rec.fingerprint
+        except embeddings.EmbeddingError as exc:
+            out["gateway_error"] = str(exc)[:300]
+    return out
+
+
+async def _build(index_id: str, activate: bool, trace_id: str) -> None:
+    await INDEX.run_build(index_id, activate=activate, trace_id=trace_id)
+
+
+@app.post("/v1/knowledge/indexes", status_code=202)
+async def build_index(request: Request, background: BackgroundTasks, body: Optional[IndexBuildRequest] = None,
+                      principal: Principal = Depends(require_principal)):
+    """Build a new index from every active, approved source, beside the active
+    one. It is validated when the build ends; activate it explicitly or set
+    activate_when_ready."""
+    trace_id = _trace(request)
+    body = body or IndexBuildRequest()
+    _require(principal, "knowledge.admin", "knowledge.indexes.build", trace_id,
+             model=body.embed_model or config.EMBED_MODEL)
+    try:
+        rec = await INDEX.start_build(body.embed_model, note=body.note, trace_id=trace_id)
+    except IndexError_ as exc:
+        raise _index_error(exc)
+    background.add_task(_build, rec.index_id, body.activate_when_ready, trace_id)
+    return rec.to_dict()
+
+
+@app.post("/v1/knowledge/indexes/{index_id}/activate")
+async def activate_index(index_id: str, request: Request, body: Optional[IndexActivateRequest] = None,
+                         principal: Principal = Depends(require_principal)):
+    trace_id = _trace(request)
+    force = bool(body and body.force)
+    _require(principal, "knowledge.admin", "knowledge.indexes.activate", trace_id, index=index_id, force=force)
+    try:
+        return (await INDEX.activate(index_id, force=force, trace_id=trace_id)).to_dict()
+    except IndexError_ as exc:
+        raise _index_error(exc)
+
+
+@app.post("/v1/knowledge/indexes/rollback")
+async def rollback_index(request: Request, principal: Principal = Depends(require_principal)):
+    trace_id = _trace(request)
+    _require(principal, "knowledge.admin", "knowledge.indexes.rollback", trace_id)
+    try:
+        return (await INDEX.rollback(trace_id=trace_id)).to_dict()
+    except IndexError_ as exc:
+        raise _index_error(exc)
+
+
+@app.post("/v1/knowledge/indexes/{index_id}/validate")
+async def validate_index(index_id: str, request: Request, principal: Principal = Depends(require_principal)):
+    trace_id = _trace(request)
+    _require(principal, "knowledge.admin", "knowledge.indexes.validate", trace_id, index=index_id)
+    if await INDEX.store.get_index(index_id) is None:
+        raise HTTPException(status_code=404, detail="index not found")
+    try:
+        result = await INDEX.validate(index_id, trace_id)
+    except embeddings.ModelChanged as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except embeddings.EmbeddingError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    await INDEX.store.update_index(index_id, validation=result)
+    return result
+
+
+@app.delete("/v1/knowledge/indexes/{index_id}")
+async def retire_index(index_id: str, request: Request, principal: Principal = Depends(require_principal)):
+    trace_id = _trace(request)
+    _require(principal, "knowledge.admin", "knowledge.indexes.retire", trace_id, index=index_id)
+    try:
+        return (await INDEX.retire(index_id)).to_dict()
+    except IndexError_ as exc:
+        raise _index_error(exc)
