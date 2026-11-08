@@ -64,3 +64,21 @@ class LmsItemRequest(BaseModel):
 
 class JobRetryRequest(BaseModel):
     metadata_patch: Optional[dict[str, Any]] = None
+
+
+# ---- M2-004 index versions ----
+
+class IndexBuildRequest(BaseModel):
+    """Build a new index beside the active one. embed_model is a logical model
+    name the Model Gateway serves (default: NEXA_EMBED_MODEL)."""
+    model_config = {"extra": "forbid"}
+
+    embed_model: Optional[str] = None
+    activate_when_ready: bool = False
+    note: str = ""
+
+
+class IndexActivateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    force: bool = False

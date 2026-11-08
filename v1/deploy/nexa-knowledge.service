@@ -1,8 +1,10 @@
 [Unit]
 Description=NEXA Knowledge Service (M2)
+# With NEXA_KNOWLEDGE_STORE=pgvector: PostgreSQL 16 with postgresql-16-pgvector,
+# prepared with v1/knowledge/migrations/0002_vector_index.sql.
 # Host needs: tesseract-ocr tesseract-ocr-eng (OCR), clamav-daemon (malware scan),
 # /var/lib/nexa/knowledge owned by the service user (registry and originals).
-After=network-online.target nexa-model-gateway.service
+After=network-online.target nexa-model-gateway.service postgresql.service
 Wants=network-online.target
 Requires=nexa-model-gateway.service
 
