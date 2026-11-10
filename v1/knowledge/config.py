@@ -67,8 +67,9 @@ RETRIEVAL_MODE = os.environ.get("NEXA_RETRIEVAL_MODE", "hybrid")
 RRF_K = int(os.environ.get("NEXA_RRF_K", "60"))
 RRF_WEIGHT_VECTOR = float(os.environ.get("NEXA_RRF_WEIGHT_VECTOR", "1.0"))
 RRF_WEIGHT_LEXICAL = float(os.environ.get("NEXA_RRF_WEIGHT_LEXICAL", "1.0"))
-# Reranking of the fused top candidates: on or off. The default follows the
-# M2-005 benchmark (docs/knowledge/NEXA-M2-005-*.md section 5).
+# Reranking of the fused top candidates: on or off. Off by the M2-005 benchmark
+# on the DGX: with nomic v1.5 it lowered S by 4.0 (better recall@1, worse
+# recall@5), failing the fixed rule (docs/knowledge/NEXA-M2-005-*.md section 5).
 RERANK = os.environ.get("NEXA_RERANK", "off").lower() == "on"
 # Retrieval profile: central (DGX) or edge (school server). Sets how many
 # candidates each retriever returns and how many are reranked.
@@ -85,7 +86,7 @@ PROFILES = {
 # coverage is no evidence; at or above strong is strong. Calibrated on the gold
 # set by v1/tools/knowledge_retrieval_bench.py (NEXA-M2-006 section 4).
 EVIDENCE_THRESHOLDS = {
-    "nomic-embed": {"min": 0.50, "strong": 0.62},
+    "nomic-embed": {"min": 0.59, "strong": 0.69},   # DGX calibration 2026-11-10, separation 0.882
     "bge-m3": {"min": 0.45, "strong": 0.58},
     "default": {"min": 0.50, "strong": 0.62},
 }
