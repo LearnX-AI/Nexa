@@ -50,6 +50,8 @@ BENCH = os.path.join(ROOT, "v1", "knowledge", "benchmark")
 # The chunker's token estimate counts words and punctuation. Subword tokenizers
 # produce more pieces; 1.3 is a conservative factor for curriculum English.
 SUBWORD_FACTOR = 1.3
+# More failed question embeddings than this share marks the model not servable.
+MAX_QUERY_ERROR_SHARE = 0.05
 _W = re.compile(r"[a-z0-9]+")
 
 
@@ -150,20 +152,34 @@ async def evaluate(mgr: IndexManager, store: PgVectorStore, cand: dict, gold: li
     ranks: dict[str, list] = {"en": [], "tpi": []}
     per_q, lat = {}, []
     by_cat: dict[str, list] = {}
+    errors: list[dict] = []
     for q in gold:
+        lang = q.get("language", "en")
         t = time.perf_counter()
-        vec, _ = await emb.embed_query(q["question"], expect=info_of(built))
+        try:
+            vec, _ = await emb.embed_query(q["question"], expect=info_of(built))
+        except embeddings.EmbeddingError as exc:
+            # The model could not embed this question: it cannot answer it, so it
+            # counts as a miss, and the error is reported. One bad question must
+            # not stop the evaluation of every other model.
+            errors.append({"id": q["id"], "error": str(exc)[:200]})
+            ranks[lang].append(None)
+            per_q[q["id"]] = "error"
+            by_cat.setdefault(f"{lang}:{q['category']}", []).append(None)
+            continue
         lat.append((time.perf_counter() - t) * 1000)
         rows = await store.query(built.index_id, vec, 10, where=who)
         ev = [norm(e) for e in q["evidence"]]
         rank = next((i for i, r in enumerate(rows, 1)
                      if files.get(r["chunk_id"]) in q["files"] and all(e in norm(r["text"]) for e in ev)), None)
-        lang = q.get("language", "en")
         ranks[lang].append(rank)
         per_q[q["id"]] = rank
         by_cat.setdefault(f"{lang}:{q['category']}", []).append(rank)
     res.update(en_ranks=ranks["en"], tpi_ranks=ranks["tpi"], per_question=per_q,
-               query_embed_ms={"p50": pct(lat, 0.5), "p95": pct(lat, 0.95)})
+               query_embed_ms={"p50": pct(lat, 0.5), "p95": pct(lat, 0.95)}, query_errors=errors)
+    if len(errors) > MAX_QUERY_ERROR_SHARE * len(gold):
+        # A model that cannot reliably embed questions is not servable (gate G1).
+        res["index_status"] = "query_failures"
     for lang in ("en", "tpi"):
         rs = ranks[lang]
         res[lang] = {"n": len(rs), "recall@1": round(selection.recall_at(rs, 1), 1),
@@ -223,10 +239,23 @@ async def main_async(args) -> dict:
         mgr = IndexManager(store, reg)
         for c in cands:
             print(f"evaluating {c['ollama_tag']} ...", flush=True)
-            r = await evaluate(mgr, store, c, gold, files, chunk_texts)
+            try:
+                r = await evaluate(mgr, store, c, gold, files, chunk_texts)
+            except Exception as exc:  # never lose the other models' results
+                r = {"logical": c["logical"], "ollama_tag": c["ollama_tag"], "role": c["role"],
+                     "index_status": "error", "error": f"{type(exc).__name__}: {exc}"[:300], "en_ranks": [],
+                     "tpi_ranks": [], "dim": 0, "card": None, "validation_passed": False, "truncated_pct": 100.0}
+                # Leave no index half-built, or the next start_build would refuse.
+                for x in await store.list_indexes():
+                    if x.status == "building":
+                        await store.update_index(x.index_id, status="failed")
             results.append(r)
-            print(f"  {r['index_status']} en={r.get('en')} tpi={r.get('tpi')} trunc={r.get('truncated_pct')}",
-                  flush=True)
+            print(f"  {r['index_status']} en={r.get('en')} tpi={r.get('tpi')} trunc={r.get('truncated_pct')}"
+                  + (f" query_errors={len(r['query_errors'])}" if r.get("query_errors") else "")
+                  + (f" error={r['error']}" if r.get("error") else ""), flush=True)
+            os.makedirs(args.out, exist_ok=True)
+            with open(os.path.join(args.out, "m2-004-embedding-eval.partial.json"), "w") as fh:
+                json.dump(results, fh, indent=2, default=str)
         indexes = [x.to_dict() for x in await store.list_indexes()]
     finally:
         if not args.keep_schema:
