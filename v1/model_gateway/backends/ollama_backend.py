@@ -80,7 +80,7 @@ class OllamaBackend(Backend):
     # Texts per /api/embed request. Ollama batches them on the model.
     EMBED_BATCH = 32
 
-    async def embeddings(self, model, inputs):
+    async def embeddings(self, model, inputs, options=None):
         """Embeddings through /api/embed (Ollama 0.3+): batched, and inputs
         longer than the model's context are truncated by Ollama rather than
         rejected. The legacy /api/embeddings endpoint takes one text per call
@@ -91,20 +91,21 @@ class OllamaBackend(Backend):
         inputs = list(inputs)
         async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             try:
-                return await self._embed_batched(client, model, inputs)
+                return await self._embed_batched(client, model, inputs, options or {})
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 404:
                     raise
-            return await self._embed_legacy(client, model, inputs)
+            return await self._embed_legacy(client, model, inputs, options or {})
 
-    async def _embed_batched(self, client, model, inputs):
+    async def _embed_batched(self, client, model, inputs, options):
         vectors: list[list[float]] = []
         for i in range(0, len(inputs), self.EMBED_BATCH):
             batch = inputs[i:i + self.EMBED_BATCH]
 
             async def _call(batch=batch):
                 resp = await client.post(f"{self.base_url}/api/embed",
-                                         json={"model": model, "input": batch, "truncate": True})
+                                         json={"model": model, "input": batch, "truncate": True,
+                                               **({"options": options} if options else {})})
                 resp.raise_for_status()
                 return resp.json()
 
@@ -115,11 +116,12 @@ class OllamaBackend(Backend):
             vectors.extend(got)
         return vectors
 
-    async def _embed_legacy(self, client, model, inputs):
+    async def _embed_legacy(self, client, model, inputs, options):
         vectors: list[list[float]] = []
         for text in inputs:
             async def _call(text=text):
-                resp = await client.post(f"{self.base_url}/api/embeddings", json={"model": model, "prompt": text})
+                resp = await client.post(f"{self.base_url}/api/embeddings", json={"model": model, "prompt": text,
+                                                                               **({"options": options} if options else {})})
                 resp.raise_for_status()
                 return resp.json()
 

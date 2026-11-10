@@ -60,3 +60,21 @@ def test_client_error_does_not_open_the_circuit(monkeypatch):
             run(base.guarded("ollama", lambda: b.embeddings("m", ["x"])))
     assert base.breaker_for("ollama").state == "closed"
     base.reset_breakers()
+
+
+def test_registry_options_reach_ollama():
+    from v1.model_gateway import registry
+    entry = registry.parse_models({"models": [
+        {"logical": "embed-bge-m3-cpu", "runtime": "ollama", "backend_model": "bge-m3",
+         "version": "bge-m3:567m-f16-cpu", "capability": "embedding", "options": {"num_gpu": 0}}]})[0]
+    assert dict(entry.options) == {"num_gpu": 0}
+    sent = []
+
+    def handler(req):
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json={"embeddings": [[1.0, 0.0]]})
+
+    b = OllamaBackend("http://ollama", transport=httpx.MockTransport(handler))
+    run(b.embeddings("bge-m3", ["x"], dict(entry.options)))
+    run(b.embeddings("bge-m3", ["y"]))
+    assert sent[0]["options"] == {"num_gpu": 0} and "options" not in sent[1]

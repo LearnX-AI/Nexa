@@ -20,6 +20,16 @@
       "why": "Multilingual, 8K context, widely used retrieval baseline."
     },
     {
+      "logical": "embed-cand-bge-m3-cpu",
+      "ollama_tag": "bge-m3",
+      "role": "candidate",
+      "why": "bge-m3 served on the CPU (num_gpu 0): on the DGX GPU, Ollama's bge-m3 intermittently returns NaN (2 of 56 questions). CPU serving also matches the school edge, which has no GPU.",
+      "options": {
+        "num_gpu": 0
+      },
+      "version": "bge-m3:567m-cpu"
+    },
+    {
       "logical": "embed-cand-snowflake-arctic-embed2",
       "ollama_tag": "snowflake-arctic-embed2",
       "role": "candidate",

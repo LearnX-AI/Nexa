@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import struct
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -149,7 +150,13 @@ def _normalise(vec: list[float], expect_dim: Optional[int]) -> list[float]:
     n = math.sqrt(sum(x * x for x in vec))
     if n == 0.0:
         raise EmbeddingError("embedding is all zeros")
-    return [x / n for x in vec]
+    # Quantise to float32 once, here. pgvector and the embedding cache both
+    # store 32-bit floats; quantising at the source makes a fresh vector and its
+    # cached copy bit-identical, so re-writing an unchanged vector is a no-op.
+    # (Without this every cache-served re-index rewrote every row, adding HNSW
+    # entries and changing answers: found by the M2-004 rollback drill on the DGX.)
+    unit = [x / n for x in vec]
+    return list(struct.unpack(f"{len(unit)}f", struct.pack(f"{len(unit)}f", *unit)))
 
 
 def text_key(text: str) -> str:

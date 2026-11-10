@@ -26,6 +26,17 @@
       "default_temperature": 0.0
     },
     {
+      "logical": "embed-cand-bge-m3-cpu",
+      "runtime": "ollama",
+      "backend_model": "bge-m3",
+      "version": "bge-m3:567m-cpu",
+      "capability": "embedding",
+      "default_temperature": 0.0,
+      "options": {
+        "num_gpu": 0
+      }
+    },
+    {
       "logical": "embed-cand-snowflake-arctic-embed2",
       "runtime": "ollama",
       "backend_model": "snowflake-arctic-embed2",

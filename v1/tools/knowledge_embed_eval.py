@@ -219,7 +219,8 @@ def markdown(report: dict) -> str:
 async def main_async(args) -> dict:
     cands = json.load(open(os.path.join(BENCH, "embedding_candidates.json")))["candidates"]
     if args.only:
-        cands = [c for c in cands if c["ollama_tag"] in args.only.split(",")]
+        want = set(args.only.split(","))
+        cands = [c for c in cands if c["ollama_tag"] in want or c["logical"] in want]
     if args.offline:
         embeddings._gateway = offline_gateway(cands)
     gold = json.load(open(os.path.join(BENCH, "gold_questions.json")))["questions"]
@@ -290,7 +291,7 @@ def main() -> int:
     ap.add_argument("--pg-dsn", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--offline", action="store_true")
-    ap.add_argument("--only", default="", help="comma-separated Ollama tags to evaluate")
+    ap.add_argument("--only", default="", help="comma-separated Ollama tags or logical names to evaluate")
     ap.add_argument("--keep-schema", action="store_true")
     args = ap.parse_args()
     asyncio.run(main_async(args))
