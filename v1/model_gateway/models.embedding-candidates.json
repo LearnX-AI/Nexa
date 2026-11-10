@@ -1,0 +1,85 @@
+{
+  "_doc": "Embedding candidates for the NEXA-M2-004 evaluation. Merge into the gateway model registry on the DGX. 'version' must be the exact Ollama tag including size; for production also pin the quantisation tag the edge will run (NEXA-M2-004 section 7).",
+  "models": [
+    {
+      "logical": "embed-cand-nomic-embed-text-v1-5",
+      "runtime": "ollama",
+      "backend_model": "nomic-embed-text:v1.5",
+      "version": "nomic-embed-text:v1.5",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-nomic-embed-text-v2-moe",
+      "runtime": "ollama",
+      "backend_model": "nomic-embed-text-v2-moe",
+      "version": "nomic-embed-text-v2-moe",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-bge-m3",
+      "runtime": "ollama",
+      "backend_model": "bge-m3",
+      "version": "bge-m3",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-snowflake-arctic-embed2",
+      "runtime": "ollama",
+      "backend_model": "snowflake-arctic-embed2",
+      "version": "snowflake-arctic-embed2",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-embeddinggemma",
+      "runtime": "ollama",
+      "backend_model": "embeddinggemma",
+      "version": "embeddinggemma",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-qwen3-embedding-0-6b",
+      "runtime": "ollama",
+      "backend_model": "qwen3-embedding:0.6b",
+      "version": "qwen3-embedding:0.6b",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-granite-embedding-278m",
+      "runtime": "ollama",
+      "backend_model": "granite-embedding:278m",
+      "version": "granite-embedding:278m",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-mxbai-embed-large",
+      "runtime": "ollama",
+      "backend_model": "mxbai-embed-large",
+      "version": "mxbai-embed-large",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-all-minilm-33m",
+      "runtime": "ollama",
+      "backend_model": "all-minilm:33m",
+      "version": "all-minilm:33m",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    },
+    {
+      "logical": "embed-cand-qwen3-embedding-4b",
+      "runtime": "ollama",
+      "backend_model": "qwen3-embedding:4b",
+      "version": "qwen3-embedding:4b",
+      "capability": "embedding",
+      "default_temperature": 0.0
+    }
+  ]
+}
