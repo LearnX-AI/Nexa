@@ -16,10 +16,18 @@ needs CREATE on the schema to add per-index tables.
 
 pgvector 0.6 applies WHERE filters after the HNSW scan, so filtered queries
 raise hnsw.ef_search to keep enough candidates.
+
+NEXA-M2-005 adds, to every index table, typed filter columns (subject, grades,
+language, source type, authority tier, curriculum codes, school) and a
+full-text column (tsv, GIN-indexed) for lexical retrieval. All of them are
+generated from the stored metadata and text, so writes are unchanged and the
+columns can never disagree with the metadata. Tables created before M2-005
+get the columns added in place when the store opens.
 """
 from __future__ import annotations
 
 import json
+import logging
 import re
 import struct
 from typing import Any, Optional
@@ -29,6 +37,47 @@ from .store import IndexRecord, StoreError, VectorStore
 
 _ID_RE = re.compile(r"^[a-z0-9_]{3,48}$")
 _RECORD_FIELDS = set(IndexRecord.__dataclass_fields__)
+log = logging.getLogger("nexa.knowledge.pgstore")
+
+
+def _generated_columns(fts: str) -> list[tuple[str, str]]:
+    """(column, definition) for the M2-005 filter and full-text columns. The
+    expressions are immutable, as generated columns require."""
+    if not re.fullmatch(r"[a-z_]{2,32}", fts):
+        raise StoreError("invalid full-text configuration name")
+    def txt(k):
+        return f"text GENERATED ALWAYS AS (metadata->>'{k}') STORED"
+    return [
+        ("subject", txt("subject")),
+        ("language", txt("language")),
+        ("source_type", txt("source_type")),
+        ("module_code", txt("module_code")),
+        ("topic_code", txt("topic_code")),
+        ("school_id", txt("school_id")),
+        ("authority_tier", "int GENERATED ALWAYS AS (CASE WHEN metadata->>'authority_tier' ~ '^[0-9]{1,2}$' "
+                           "THEN (metadata->>'authority_tier')::int END) STORED"),
+        ("grade_levels", "int[] GENERATED ALWAYS AS (CASE WHEN metadata->>'grade_levels' ~ "
+                         "'^[0-9]{1,2}(,[0-9]{1,2})*$' THEN string_to_array(metadata->>'grade_levels', ',')::int[] "
+                         "END) STORED"),
+        # Body text weighted A, title and section path B: a heading match counts,
+        # but less than the passage itself.
+        ("tsv", f"tsvector GENERATED ALWAYS AS ("
+                f"setweight(to_tsvector('{fts}'::regconfig, coalesce(metadata->>'title', '') || ' ' || "
+                f"coalesce(metadata->>'section_path', '')), 'B') || "
+                f"setweight(to_tsvector('{fts}'::regconfig, text), 'A')) STORED"),
+    ]
+
+
+_TERM_RE = re.compile(r"[a-z0-9]+")
+
+
+def tsquery_text(query: str) -> str:
+    """An OR query over the question's content words. A question is not a
+    conjunction: requiring every word (websearch_to_tsquery) misses passages
+    that answer it in other words. Ranking does the rest."""
+    from .benchmark.bm25 import tokenize
+    terms = list(dict.fromkeys(t for t in tokenize(query) if _TERM_RE.fullmatch(t)))[:32]
+    return " | ".join(terms)
 
 
 def _literal(text: str) -> str:
@@ -66,6 +115,8 @@ class PgVectorStore(VectorStore):
         self.dsn = dsn
         self.schema = schema
         self._pool = None
+        self.fts_config = config.FTS_CONFIG
+        self._no_lexical: set[str] = set()   # index tables that could not be migrated
 
     # ---------------------------------------------------------------- plumbing
 
@@ -102,6 +153,34 @@ class PgVectorStore(VectorStore):
                     created_at  timestamptz NOT NULL DEFAULT now(),
                     PRIMARY KEY (fingerprint, text_key))""")
         self.pgvector_version = ext[0]
+        for rec in await self.list_indexes():
+            if rec.status != "retired":
+                await self._ensure_columns(rec.index_id)
+
+    async def _ensure_columns(self, index_id: str) -> None:
+        """Add the M2-005 columns to an index table created before them. Adding
+        a stored generated column rewrites the table once; on failure (for
+        example a table owned by another role) the index keeps working for
+        vector queries and reports lexical retrieval as unavailable."""
+        t = self._table(index_id)
+        try:
+            async with self._conn() as conn:
+                have = {r[0] for r in await (await conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema = %s "
+                    "AND table_name = %s", (self.schema, f"vec_{index_id}"))).fetchall()}
+                if not have:
+                    return
+                for col, ddl in _generated_columns(self.fts_config):
+                    if col not in have:
+                        await conn.execute(f"ALTER TABLE {t} ADD COLUMN IF NOT EXISTS {col} {ddl}")
+                await conn.execute(f"CREATE INDEX IF NOT EXISTS vec_{index_id}_tsv ON {t} USING gin (tsv)")
+            self._no_lexical.discard(index_id)
+        except Exception as exc:  # noqa: BLE001 - degrade, do not fail startup
+            log.warning("index %s: lexical columns unavailable: %s", index_id, exc)
+            self._no_lexical.add(index_id)
+
+    def lexical_available(self, index_id: str) -> bool:
+        return index_id not in self._no_lexical
 
     async def close(self) -> None:
         if self._pool is not None:
@@ -143,8 +222,10 @@ class PgVectorStore(VectorStore):
                     scope                 text,
                     effective_from        date,
                     effective_to          date,
-                    embedding             vector({int(rec.dim)}) NOT NULL)""")
+                    embedding             vector({int(rec.dim)}) NOT NULL,
+                    """ + ",\n".join(f"{c} {d}" for c, d in _generated_columns(self.fts_config)) + ")")
             await conn.execute(f"CREATE INDEX ON {t} (version_id)")
+            await conn.execute(f"CREATE INDEX vec_{rec.index_id}_tsv ON {t} USING gin (tsv)")
             # The collection itself carries its version, for anyone reading the database directly.
             await conn.execute(f"COMMENT ON TABLE {t} IS " + _literal(
                 f"NEXA index {rec.index_id}; embedding {rec.fingerprint}; tokenizer {rec.tokenizer}; "
@@ -294,6 +375,39 @@ class PgVectorStore(VectorStore):
         out = [{"chunk_id": r[0], "text": r[1], "metadata": r[2], "score": float(r[3])} for r in rows]
         out.sort(key=lambda r: (-round(r["score"], 9), r["chunk_id"]))
         return out
+
+    async def lexical_query(self, index_id: str, query: str, top_k: int, where=None) -> list[dict[str, Any]]:
+        """Full-text retrieval over the tsv column, ranked by ts_rank with length
+        normalisation. Same filter as vector queries."""
+        if index_id in self._no_lexical:
+            return []
+        q = tsquery_text(query)
+        if not q:
+            return []
+        t = self._table(index_id)
+        clause, params = "TRUE", []
+        if where is not None:
+            if not hasattr(where, "sql"):
+                raise StoreError("the pgvector store needs a RetrievalFilter, not an arbitrary callable")
+            clause, params = where.sql()
+        async with self._conn() as conn:
+            rows = await (await conn.execute(
+                f"SELECT chunk_id, text, metadata, ts_rank(tsv, q, 1) AS score "
+                f"FROM {t}, to_tsquery(%s::regconfig, %s) q WHERE tsv @@ q AND {clause} "
+                f"ORDER BY score DESC LIMIT %s", [self.fts_config, q, *params, top_k])).fetchall()
+        out = [{"chunk_id": r[0], "text": r[1], "metadata": r[2], "score": float(r[3])} for r in rows]
+        out.sort(key=lambda r: (-round(r["score"], 9), r["chunk_id"]))
+        return out
+
+    async def get_items(self, index_id: str, chunk_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Text, metadata and vector of specific chunks."""
+        if not chunk_ids:
+            return {}
+        async with self._conn() as conn:
+            rows = await (await conn.execute(
+                f"SELECT chunk_id, text, metadata, embedding::text FROM {self._table(index_id)} "
+                f"WHERE chunk_id = ANY(%s)", (chunk_ids,))).fetchall()
+        return {r[0]: {"chunk_id": r[0], "text": r[1], "metadata": r[2], "vector": _parse_vec(r[3])} for r in rows}
 
     async def explain(self, index_id: str, vector: list[float], top_k: int, where=None,
                       force_index: bool = False) -> str:

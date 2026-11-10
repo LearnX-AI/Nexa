@@ -1,6 +1,7 @@
 name: NEXA v1 CI
 
-# NEXA-M1-009. Gates run on every push and pull request to nexa-v1-core.
+# NEXA-M1-009. Gates run on every push and pull request to nexa-v1-core, and
+# on pull requests to main (where work is now merged; tests only, no deploy).
 # Deploy jobs run only on push (never on pull requests, so forked code can not
 # reach a self-hosted runner) and only when the repository variable
 # NEXA_DEPLOY_ENABLED is "true". The QA job waits on the "qa" environment, which
@@ -10,7 +11,7 @@ on:
   push:
     branches: [nexa-v1-core]
   pull_request:
-    branches: [nexa-v1-core]
+    branches: [nexa-v1-core, main]
 
 permissions:
   contents: read
@@ -75,7 +76,7 @@ jobs:
         run: |
           python -m pytest v1/tests -q -rs
           # The pgvector tests must run in CI, never skip.
-          python -m pytest v1/tests/test_knowledge_indexing.py -q -k pgvector -rs | tee pg.log
+          python -m pytest v1/tests/test_knowledge_indexing.py v1/tests/test_knowledge_retrieval.py -q -k pgvector -rs | tee pg.log
           ! grep -q "skipped" pg.log
 
       - name: Config validation gate

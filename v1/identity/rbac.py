@@ -22,7 +22,13 @@ ROLE_PERMISSIONS = {
     # administrator; service_account is the non-human service identity.
     "platform_admin": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest", "admin", "knowledge.admin"},
     "service_account": {"model.invoke", "model.list", "knowledge.query", "knowledge.ingest"},
+    # An LMS site's sync client (NEXA-M2-007). It can push and reconcile its own
+    # site's content and nothing else: no queries, no direct uploads.
+    "lms_sync": {"knowledge.lms.sync"},
 }
+for _r in ("admin", "platform_admin"):
+    ROLE_PERMISSIONS[_r] |= {"knowledge.lms.sync", "knowledge.lms.admin"}
+ROLE_PERMISSIONS["ai_engineer"] |= {"knowledge.lms.admin"}
 
 
 def permissions_for(roles) -> set:

@@ -90,6 +90,46 @@ CREATE TABLE IF NOT EXISTS chunks (
     UNIQUE (run_id, ordinal)
 );
 CREATE INDEX IF NOT EXISTS ix_chunks_version_active ON chunks(version_id, active);
+
+-- NEXA-M2-007 LMS synchronisation. One row per LMS item, and one per sync
+-- event received (the event log is the audit trail and the retry queue).
+CREATE TABLE IF NOT EXISTS lms_items (
+    item_key        TEXT PRIMARY KEY,           -- system:site_id:item_id
+    system          TEXT NOT NULL,
+    site_id         TEXT NOT NULL,
+    course_id       TEXT NOT NULL,
+    item_id         TEXT NOT NULL,
+    source_id       TEXT NOT NULL,
+    state           TEXT NOT NULL,              -- active | pending | withdrawn | rejected | failed
+    revision        TEXT,
+    checksum        TEXT,
+    version_id      TEXT,
+    last_event_id   TEXT,
+    last_event_at   TEXT,                       -- occurred_at of the newest applied event
+    detail          TEXT,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_lms_items_course ON lms_items(system, site_id, course_id);
+
+CREATE TABLE IF NOT EXISTS lms_events (
+    event_id        TEXT PRIMARY KEY,
+    item_key        TEXT NOT NULL,
+    op              TEXT NOT NULL,              -- upsert | delete
+    occurred_at     TEXT NOT NULL,
+    state           TEXT NOT NULL,              -- queued | applied | failed | rejected | stale
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    retryable       INTEGER NOT NULL DEFAULT 0,
+    error_code      TEXT,
+    error_detail    TEXT,
+    job_id          TEXT,
+    version_id      TEXT,
+    payload_json    TEXT NOT NULL,
+    principal       TEXT,
+    received_at     TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_lms_events_state ON lms_events(state);
+CREATE INDEX IF NOT EXISTS ix_lms_events_item ON lms_events(item_key, occurred_at);
 """
 
 
@@ -216,6 +256,30 @@ class Registry:
                 self._exec("UPDATE chunks SET active=0 WHERE version_id=?", (vid,))
         return ids
 
+    def withdraw_source(self, source_id: str) -> list[str]:
+        """Mark every version of a source withdrawn and deactivate its chunks.
+        Nothing is deleted: the versions stay in the registry as history."""
+        with self._lock:
+            rows = self._all("SELECT version_id FROM sources WHERE source_id=? AND status<>'withdrawn'", (source_id,))
+            ids = [r["version_id"] for r in rows]
+            for vid in ids:
+                self._exec("UPDATE sources SET status='withdrawn', updated_at=? WHERE version_id=?", (_now(), vid))
+                self._exec("UPDATE chunks SET active=0 WHERE version_id=?", (vid,))
+        return ids
+
+    def reactivate_source(self, version_id: str) -> None:
+        """A withdrawn version whose item came back unchanged: make it active
+        again, with its chunk set from its latest run."""
+        with self._lock:
+            src = self._one("SELECT status FROM sources WHERE version_id=?", (version_id,))
+            if not src or src["status"] != "withdrawn":
+                return
+            run = self._one("SELECT run_id FROM runs WHERE version_id=? ORDER BY created_at DESC LIMIT 1",
+                            (version_id,))
+            self._exec("UPDATE sources SET status='active', updated_at=? WHERE version_id=?", (_now(), version_id))
+            if run:
+                self._exec("UPDATE chunks SET active=1 WHERE version_id=? AND run_id=?", (version_id, run["run_id"]))
+
     def list_sources(self, status: Optional[str] = None) -> list[dict[str, Any]]:
         sql = "SELECT * FROM sources" + (" WHERE status=?" if status else "") + " ORDER BY source_id, created_at"
         rows = self._all(sql, (status,) if status else ())
@@ -272,6 +336,82 @@ class Registry:
             rec["embedded"] = bool(r["embedded"])
             out.append(rec)
         return out
+
+    def get_chunk(self, chunk_id: str) -> Optional[dict[str, Any]]:
+        r = self._one("SELECT record_json, active, version_id, run_id FROM chunks WHERE chunk_id=?", (chunk_id,))
+        if not r:
+            return None
+        rec = json.loads(r["record_json"])
+        rec.update(active=bool(r["active"]), version_id=r["version_id"], run_id=r["run_id"])
+        return rec
+
+    # ---- LMS synchronisation (NEXA-M2-007) ----
+
+    def get_lms_item(self, item_key: str) -> Optional[dict[str, Any]]:
+        return self._one("SELECT * FROM lms_items WHERE item_key=?", (item_key,))
+
+    def put_lms_item(self, item_key: str, **f: Any) -> dict[str, Any]:
+        f["updated_at"] = _now()
+        with self._lock:
+            if self.get_lms_item(item_key):
+                cols = ", ".join(f"{k}=?" for k in f)
+                self._exec(f"UPDATE lms_items SET {cols} WHERE item_key=?", (*f.values(), item_key))
+            else:
+                f["item_key"] = item_key
+                cols = ", ".join(f)
+                self._exec(f"INSERT INTO lms_items ({cols}) VALUES ({','.join('?' * len(f))})", tuple(f.values()))
+        return self.get_lms_item(item_key)  # type: ignore[return-value]
+
+    def lms_items_of(self, system: str, site_id: str, course_id: Optional[str] = None) -> list[dict[str, Any]]:
+        if course_id is None:
+            return self._all("SELECT * FROM lms_items WHERE system=? AND site_id=? ORDER BY item_key",
+                             (system, site_id))
+        return self._all("SELECT * FROM lms_items WHERE system=? AND site_id=? AND course_id=? ORDER BY item_key",
+                         (system, site_id, course_id))
+
+    def get_lms_event(self, event_id: str) -> Optional[dict[str, Any]]:
+        e = self._one("SELECT * FROM lms_events WHERE event_id=?", (event_id,))
+        if e:
+            e["payload"] = json.loads(e.pop("payload_json"))
+            e["retryable"] = bool(e["retryable"])
+        return e
+
+    def add_lms_event(self, event_id: str, item_key: str, op: str, occurred_at: str, payload: dict[str, Any],
+                      principal: Optional[str], state: str = "queued") -> dict[str, Any]:
+        now = _now()
+        self._exec("INSERT INTO lms_events (event_id, item_key, op, occurred_at, state, payload_json, principal, "
+                   "received_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                   (event_id, item_key, op, occurred_at, state, json.dumps(payload, default=str), principal, now, now))
+        return self.get_lms_event(event_id)  # type: ignore[return-value]
+
+    def update_lms_event(self, event_id: str, **f: Any) -> dict[str, Any]:
+        if "retryable" in f:
+            f["retryable"] = int(bool(f["retryable"]))
+        f["updated_at"] = _now()
+        cols = ", ".join(f"{k}=?" for k in f)
+        self._exec(f"UPDATE lms_events SET {cols} WHERE event_id=?", (*f.values(), event_id))
+        return self.get_lms_event(event_id)  # type: ignore[return-value]
+
+    def list_lms_events(self, state: Optional[str] = None, limit: int = 100,
+                        item_key: Optional[str] = None) -> list[dict[str, Any]]:
+        where, args = [], []
+        if state:
+            where.append("state=?")
+            args.append(state)
+        if item_key:
+            where.append("item_key=?")
+            args.append(item_key)
+        sql = "SELECT event_id FROM lms_events" + (" WHERE " + " AND ".join(where) if where else "")
+        rows = self._all(sql + " ORDER BY received_at DESC, event_id LIMIT ?", (*args, limit))
+        return [self.get_lms_event(r["event_id"]) for r in rows]  # type: ignore[misc]
+
+    def lms_counts(self) -> dict[str, Any]:
+        ev = {r["state"]: r["n"] for r in self._all("SELECT state, COUNT(*) n FROM lms_events GROUP BY state")}
+        it = {r["state"]: r["n"] for r in self._all("SELECT state, COUNT(*) n FROM lms_items GROUP BY state")}
+        oldest = self._one("SELECT MIN(received_at) t FROM lms_events WHERE state IN ('queued', 'failed')")
+        last = self._one("SELECT MAX(updated_at) t FROM lms_events WHERE state='applied'")
+        return {"events": ev, "items": it, "oldest_unapplied_event": oldest["t"] if oldest else None,
+                "last_applied_at": last["t"] if last else None}
 
     def unembedded_chunks(self, version_id: str) -> list[dict[str, Any]]:
         return [c for c in self.chunks_of(version_id) if not c["embedded"]]

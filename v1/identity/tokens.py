@@ -16,12 +16,24 @@ class TokenError(Exception):
     pass
 
 
+# Optional claims a token may carry beyond the core ones. school_id scopes a
+# user to one school's local content; lms_site and lms_national bind an LMS
+# sync token to one LMS site and say whether it may publish national content
+# (NEXA-M2-007).
+EXTRA_CLAIMS = ("school_id", "class_ids", "lms_site", "lms_national")
+_RESERVED = {"sub", "roles", "typ", "iss", "aud", "iat", "exp"}
+
+
 def issue_token(subject: str, roles, token_type: str = "service",
-                ttl: Optional[int] = None) -> str:
+                ttl: Optional[int] = None, extra: Optional[dict] = None) -> str:
     if not config.IDENTITY_SECRET:
         raise TokenError("NEXA_IDENTITY_SECRET not configured")
+    extra = dict(extra or {})
+    bad = (set(extra) & _RESERVED) | (set(extra) - set(EXTRA_CLAIMS))
+    if bad:
+        raise TokenError(f"unsupported extra claims: {sorted(bad)}")
     now = int(time.time())
-    claims = {
+    claims = {**extra,
         "sub": subject,
         "roles": list(roles),
         "typ": token_type,

@@ -1,4 +1,8 @@
-"""NEXA-M2-001 Curriculum Source and Metadata Standard, schema version 1.0.0.
+"""NEXA-M2-001 Curriculum Source and Metadata Standard, schema version 1.1.0.
+
+1.1.0 (NEXA-M2-007): optional LMS reference fields site_id, kind, url,
+owner_ref, and LMS systems moodle and learnx. Records written as 1.0.0 stay
+valid.
 
 This module is the single machine-readable contract for knowledge sources in
 NEXA v1. Ingestion writes it, chunking copies it onto every chunk, retrieval
@@ -21,7 +25,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _SOURCE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._:-]{2,127}$")
@@ -150,10 +154,15 @@ class Jurisdiction(BaseModel):
 class LmsReference(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    system: Literal["edunex", "lms"] = "edunex"
+    system: Literal["edunex", "lms", "moodle", "learnx"] = "edunex"
     course_id: str
     item_id: str
     revision: Optional[str] = None
+    # 1.1.0 (NEXA-M2-007)
+    site_id: Optional[str] = Field(None, description="The LMS site, as bound to its sync token")
+    kind: Optional[str] = Field(None, description="LMS activity type, e.g. resource, page, book")
+    url: Optional[str] = Field(None, description="Link to the item in the LMS")
+    owner_ref: Optional[str] = Field(None, description="Opaque reference to the owning teacher, never a name")
 
 
 class ExternalReference(BaseModel):
@@ -178,7 +187,7 @@ class SourceMetadata(BaseModel):
     """Metadata for one version of one knowledge source document."""
     model_config = ConfigDict(extra="forbid", use_enum_values=False)
 
-    schema_version: Literal["1.0.0"] = SCHEMA_VERSION
+    schema_version: Literal["1.0.0", "1.1.0"] = SCHEMA_VERSION
 
     # Identity and versioning
     source_id: str = Field(..., description="Stable across versions, e.g. png-ndoe:stem-chemistry-syllabus-gr12-t1")
@@ -344,6 +353,9 @@ class SourceMetadata(BaseModel):
             "effective_from": self.effective_from.isoformat(),
             "effective_to": self.effective_to.isoformat() if self.effective_to else None,
             "source_uri": self.source_uri,
+            **({"lms_system": self.lms.system, "lms_site_id": self.lms.site_id, "lms_course_id": self.lms.course_id,
+                "lms_item_id": self.lms.item_id, "lms_revision": self.lms.revision, "lms_url": self.lms.url}
+               if self.lms else {}),
         }
 
 

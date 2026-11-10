@@ -142,3 +142,126 @@ def resolve(
             authoritative = True
         ranked.append(Ranked(source=s, rank=i + 1, authoritative=authoritative, reasons=reasons))
     return Resolution(claim_class=claim_class, ranked=ranked, excluded=excluded)
+
+
+# ---------------------------------------------------------------- retrieval (NEXA-M2-005)
+#
+# resolve() orders whole sources for one claim. At retrieval time NEXA has
+# ranked passages, and must stop a lower-authority passage from silently
+# standing in for an official one. arbitrate() applies R3, R4, R5 and R7 to a
+# ranked result list:
+#
+# - Two passages "cover the same point" when they share an outcome code or a
+#   topic code, or (failing codes) the same subject and module code. This is a
+#   structural test: NEXA does not try to decide whether two texts contradict
+#   each other, only which one is authoritative where both apply.
+# - Within a group, a passage from a higher-authority source (lower tier, or
+#   national over local in the same tier) that ranks below a lower-authority
+#   one is moved up to just above it. Both stay in the results, so local and
+#   LMS material still supplements the official text; it just never replaces
+#   it. Each move is recorded on both passages and in the conflict list.
+# - For a curriculum-outcome question (R3) every tier-1 passage is placed
+#   first and only tier 1 is marked authoritative.
+# - Permitted external sources (tier 6) go after every curriculum source (R7)
+#   and are marked external.
+# Rank order is otherwise kept, so relevance still decides.
+
+import re as _re
+
+_OUTCOME_Q = _re.compile(
+    r"\b(learning outcomes?|outcomes?|content standards?|assessment criteria|syllabus|what (must|should|do) "
+    r"(students|learners|i) (learn|know)|\d{1,2}\.\d{1,2}\.\d{1,2}[a-z]?)\b", _re.I)
+
+
+def classify_claim(query: str) -> ClaimClass:
+    """A query about what must be learned is a curriculum_outcome claim;
+    everything else retrieval serves is instructional."""
+    return ClaimClass.CURRICULUM_OUTCOME if _OUTCOME_Q.search(query or "") else ClaimClass.INSTRUCTIONAL
+
+
+def _tier(md: dict) -> int:
+    try:
+        return int(md.get("authority_tier"))
+    except (TypeError, ValueError):
+        return 7  # no source contract (M1 raw documents): below every tier
+
+
+def _keys(md: dict) -> set[str]:
+    keys = {f"outcome:{c}" for c in str(md.get("outcome_codes") or "").split(",") if c}
+    if md.get("topic_code"):
+        keys.add(f"topic:{md['topic_code']}")
+    if not keys and md.get("module_code") and md.get("subject"):
+        keys.add(f"module:{md['subject']}:{md['module_code']}")
+    return keys
+
+
+def _rank_key(md: dict) -> tuple[int, int]:
+    """Lower is more authoritative: tier first, then scope (R5)."""
+    scope = {"national": 0, "provincial": 1, "school": 2, "class": 3}.get(md.get("scope") or "", 4)
+    return _tier(md), scope
+
+
+def arbitrate(results: list[dict], claim_class: ClaimClass = ClaimClass.INSTRUCTIONAL
+              ) -> tuple[list[dict], list[dict]]:
+    """Reorder ranked passages by the authority rules. Each passage gains an
+    'authority' block; returns (results, conflicts)."""
+    out = [dict(r) for r in results]
+    conflicts: list[dict] = []
+    for r in out:
+        md = r.get("metadata") or {}
+        r["authority"] = {"tier": _tier(md) if _tier(md) < 7 else None, "authoritative": True,
+                          "external": _tier(md) == 6, "notes": []}
+
+    # R3: outcome questions are answered by the syllabus.
+    if claim_class == ClaimClass.CURRICULUM_OUTCOME and any(_tier(r["metadata"]) == 1 for r in out):
+        tier1 = [r for r in out if _tier(r["metadata"]) == 1]
+        rest = [r for r in out if _tier(r["metadata"]) != 1]
+        for r in rest:
+            r["authority"]["authoritative"] = False
+            r["authority"]["notes"].append("R3: learning outcomes are defined only by the official syllabus")
+        if rest and out.index(tier1[0]) > 0:
+            conflicts.append({"rule": "R3", "promoted": [r["chunk_id"] for r in tier1],
+                              "over": [r["chunk_id"] for r in rest if out.index(r) < out.index(tier1[-1])]})
+        out = tier1 + rest
+
+    # R4/R5: within a point both cover, the more authoritative passage leads.
+    # Each move removes at least one authority inversion, so this ends.
+    changed = True
+    guard = 0
+    while changed and guard <= len(out) ** 2:
+        changed, guard = False, guard + 1
+        for i, low in enumerate(out):
+            kl = _keys(low["metadata"])
+            if not kl:
+                continue
+            for j in range(i + 1, len(out)):
+                high = out[j]
+                shared = kl & _keys(high["metadata"])
+                if not shared or high["metadata"].get("source_id") == low["metadata"].get("source_id"):
+                    continue
+                if _rank_key(high["metadata"]) < _rank_key(low["metadata"]):
+                    out.insert(i, out.pop(j))
+                    point = sorted(shared)[0]
+                    high["authority"]["notes"].append(
+                        f"R4: placed above lower-authority {low['metadata'].get('title')!r} on {point}")
+                    low["authority"]["notes"].append(
+                        f"R4: {high['metadata'].get('title')!r} is more authoritative on {point}; "
+                        "this passage supplements it")
+                    low["authority"]["authoritative"] = False
+                    conflicts.append({"rule": "R4", "point": point, "authoritative": high["chunk_id"],
+                                      "authoritative_tier": _tier(high["metadata"]),
+                                      "lower": low["chunk_id"], "lower_tier": _tier(low["metadata"])})
+                    changed = True
+                    break
+            if changed:
+                break
+
+    # R7: external sources only after every curriculum source.
+    if any(_tier(r["metadata"]) < 6 for r in out):
+        internal = [r for r in out if _tier(r["metadata"]) != 6]
+        external = [r for r in out if _tier(r["metadata"]) == 6]
+        for r in external:
+            r["authority"]["authoritative"] = False
+            r["authority"]["notes"].append("R7: external source, used only after curriculum sources")
+        out = internal + external
+    return out, conflicts

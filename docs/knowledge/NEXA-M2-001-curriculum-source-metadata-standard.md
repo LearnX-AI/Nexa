@@ -2,11 +2,11 @@
 
 Status: Draft for governance acceptance
 Milestone: M2 (Knowledge, RAG and Curriculum Intelligence)
-Schema version: 1.0.0
+Schema version: 1.1.0 (1.1.0 adds optional LMS reference fields for NEXA-M2-007; 1.0.0 records stay valid)
 Aligns with: NEXA-ARCH-001, NEXA-ADR-0002, NEXA-ADR-0004, NEXA-GOV-001, NEXA-MIG-001
 Implementation: `v1/knowledge/metadata.py`, `v1/knowledge/authority.py`, `v1/knowledge/access.py`,
 `v1/knowledge/curriculum.py`
-Machine-readable schema: `v1/knowledge/schemas/source-metadata.v1.0.0.json`
+Machine-readable schema: `v1/knowledge/schemas/source-metadata.v1.1.0.json` (previous: `source-metadata.v1.0.0.json`)
 Validated samples: `v1/knowledge/samples/source_records.sample.json`
 
 ## 1. Purpose
@@ -44,7 +44,7 @@ never taken from a caller.
 
 | Field | | Type | Meaning and rules |
 |---|---|---|---|
-| `schema_version` | R | `"1.0.0"` | Contract version. |
+| `schema_version` | R | `"1.0.0"` or `"1.1.0"` | Contract version. |
 | `source_id` | R | string | See section 3. |
 | `content_checksum` | R, P | string | See section 3. |
 | `version_label` | | string | Edition or version as printed (`2023`, `Edition 2`). |
@@ -68,7 +68,7 @@ never taken from a caller.
 | `ingested_at` | P | datetime | Set by ingestion. |
 | `source_uri` | R | URI | Scheme `repo`, `edunex`, `lms`, `s3`, `blob`, `file` or `https`. Must be percent-encoded (no spaces) and must not carry credentials or signed query parameters. |
 | `file_name`, `mime_type`, `file_size_bytes`, `page_count` | P | | From the upload. |
-| `lms` | R for `lms_content` | object | `system`, `course_id`, `item_id`, `revision`. |
+| `lms` | R for `lms_content` | object | `system` (`edunex`, `lms`, `moodle`, `learnx`), `course_id`, `item_id`, `revision`; since 1.1.0 optional `site_id`, `kind`, `url`, `owner_ref` (opaque, never a name). |
 | `external` | R for `external_reference` | object | `domain` (must be on the permitted list), `retrieved_at`, `license`. |
 | `tags` | | list | Free tags. |
 

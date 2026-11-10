@@ -1,7 +1,7 @@
 """Request and response models for the Knowledge Service."""
 from __future__ import annotations
-from typing import Any, Optional
-from pydantic import BaseModel
+from typing import Any, Literal, Optional
+from pydantic import BaseModel, Field
 
 
 class Document(BaseModel):
@@ -18,22 +18,60 @@ class IngestResponse(BaseModel):
     x_nexa: Optional[dict[str, Any]] = None
 
 
+class QueryFilters(BaseModel):
+    """Narrow retrieval (NEXA-M2-005). Filters only ever narrow what the
+    caller's access allows."""
+    model_config = {"extra": "forbid"}
+
+    subjects: Optional[list[str]] = None
+    grades: Optional[list[int]] = None
+    languages: Optional[list[str]] = None
+    source_types: Optional[list[str]] = None
+    module_codes: Optional[list[str]] = None
+    topic_codes: Optional[list[str]] = None
+    scopes: Optional[list[Literal["national", "provincial", "school", "class"]]] = None
+    max_tier: Optional[int] = Field(None, ge=1, le=6)
+
+
 class QueryRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = None
+    query: str = Field(..., min_length=1, max_length=2000)
+    top_k: Optional[int] = Field(None, ge=1, le=50)
+    filters: Optional[QueryFilters] = None
+    mode: Optional[Literal["hybrid", "vector", "lexical"]] = None
+    rerank: Optional[bool] = None
+    profile: Optional[Literal["central", "edge"]] = None
+    explain: bool = False
 
 
 class QueryResult(BaseModel):
     text: str
-    score: float
+    score: float = Field(..., description="Semantic similarity (cosine) of the passage to the query")
     metadata: dict[str, Any] = {}
     citation: Optional[str] = None
+    chunk_id: Optional[str] = None
+    rank: Optional[int] = None
+    scores: Optional[dict[str, Any]] = None
+    reasons: Optional[list[str]] = None
+    authority: Optional[dict[str, Any]] = None
+    provenance: Optional[dict[str, Any]] = None
 
 
 class QueryResponse(BaseModel):
     query: str
     results: list[QueryResult]
+    retrieval: Optional[dict[str, Any]] = None
     x_nexa: Optional[dict[str, Any]] = None
+
+
+class AnswerRequest(BaseModel):
+    """A grounded answer (NEXA-M2-006)."""
+    model_config = {"extra": "forbid"}
+
+    question: str = Field(..., min_length=1, max_length=2000)
+    top_k: Optional[int] = Field(None, ge=1, le=12)
+    filters: Optional[QueryFilters] = None
+    audience: Optional[Literal["student", "teacher"]] = None
+    explain: bool = False
 
 
 # ---- M2 ingestion API ----

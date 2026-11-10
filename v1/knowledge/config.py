@@ -56,6 +56,64 @@ HNSW_EF_SEARCH = int(os.environ.get("NEXA_HNSW_EF_SEARCH", "100"))
 # Default number of results per query.
 DEFAULT_TOP_K = int(os.environ.get("NEXA_KNOWLEDGE_TOP_K", "5"))
 
+# ---- M2-005 retrieval ----
+
+# PostgreSQL text search configuration for lexical retrieval. english stems
+# (photosynthesis / photosynthetic) and drops stop words; the corpus is English.
+FTS_CONFIG = os.environ.get("NEXA_KNOWLEDGE_FTS_CONFIG", "english")
+# hybrid (vector + lexical, fused), vector or lexical.
+RETRIEVAL_MODE = os.environ.get("NEXA_RETRIEVAL_MODE", "hybrid")
+# Reciprocal rank fusion constant and weights.
+RRF_K = int(os.environ.get("NEXA_RRF_K", "60"))
+RRF_WEIGHT_VECTOR = float(os.environ.get("NEXA_RRF_WEIGHT_VECTOR", "1.0"))
+RRF_WEIGHT_LEXICAL = float(os.environ.get("NEXA_RRF_WEIGHT_LEXICAL", "1.0"))
+# Reranking of the fused top candidates: on or off. Off by the M2-005 benchmark
+# on the DGX: with nomic v1.5 it lowered S by 4.0 (better recall@1, worse
+# recall@5), failing the fixed rule (docs/knowledge/NEXA-M2-005-*.md section 5).
+RERANK = os.environ.get("NEXA_RERANK", "off").lower() == "on"
+# Retrieval profile: central (DGX) or edge (school server). Sets how many
+# candidates each retriever returns and how many are reranked.
+RETRIEVAL_PROFILE = os.environ.get("NEXA_RETRIEVAL_PROFILE", "central")
+PROFILES = {
+    "central": {"candidates": 50, "rerank_pool": 30},
+    "edge": {"candidates": 20, "rerank_pool": 15},
+}
+
+# ---- M2-006 grounding ----
+
+# Evidence thresholds on the top passage's cosine similarity, per embedding
+# prefix scheme (cosine scales differ by model): below min with low word
+# coverage is no evidence; at or above strong is strong. Calibrated on the gold
+# set by v1/tools/knowledge_retrieval_bench.py (NEXA-M2-006 section 4).
+EVIDENCE_THRESHOLDS = {
+    "nomic-embed": {"min": 0.59, "strong": 0.69},   # DGX calibration 2026-11-10, separation 0.882
+    "bge-m3": {"min": 0.45, "strong": 0.58},
+    "default": {"min": 0.50, "strong": 0.62},
+}
+if os.environ.get("NEXA_EVIDENCE_MIN") and os.environ.get("NEXA_EVIDENCE_STRONG"):
+    EVIDENCE_THRESHOLDS = {"default": {"min": float(os.environ["NEXA_EVIDENCE_MIN"]),
+                                       "strong": float(os.environ["NEXA_EVIDENCE_STRONG"])}}
+# Share of the question's content words found in the top passage.
+EVIDENCE_COVERAGE_STRONG = float(os.environ.get("NEXA_EVIDENCE_COVERAGE_STRONG", "0.6"))
+EVIDENCE_COVERAGE_MIN = float(os.environ.get("NEXA_EVIDENCE_COVERAGE_MIN", "0.34"))
+# A cited sentence sharing less than this share of its words with the cited
+# passages is reported as weakly supported.
+CITATION_MIN_SUPPORT = float(os.environ.get("NEXA_CITATION_MIN_SUPPORT", "0.25"))
+# Answer generation through the Model Gateway.
+ANSWER_MODEL = os.environ.get("NEXA_ANSWER_MODEL", "nexa-chat-precise")
+ANSWER_TEMPERATURE = float(os.environ.get("NEXA_ANSWER_TEMPERATURE", "0.2"))
+ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
+ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
+ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
+
+# ---- M2-007 LMS synchronisation ----
+
+# Events per sync request, and how often failed retryable events are retried
+# by the service itself (0 disables; the LMS also resends).
+LMS_MAX_BATCH = int(os.environ.get("NEXA_LMS_MAX_BATCH", "100"))
+LMS_RETRY_INTERVAL_S = int(os.environ.get("NEXA_LMS_RETRY_INTERVAL", "300"))
+LMS_MAX_ATTEMPTS = int(os.environ.get("NEXA_LMS_MAX_ATTEMPTS", "5"))
+
 # ---- M2 ingestion (NEXA-M2-002) ----
 
 # Where the source registry, jobs and chunks are kept. sqlite:///path for DEV
