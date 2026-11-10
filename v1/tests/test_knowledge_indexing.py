@@ -141,7 +141,7 @@ def test_retrieval_filter_python_and_sql_agree():
     assert not f({**ok, "access_classification": "teacher_only"})
     assert not f({**ok, "scope": "school"}) and not f({**ok, "effective_from": "2026-01-01"})
     clause, params = f.sql()
-    assert "scope NOT IN" in clause and params == [["learner", "public"], "2025-01-01", "2025-01-01"]
+    assert "scope NOT IN" in clause and params == [["learner", "public"], "2025-01-01", "2025-01-01", None]
     admin = retrieval_filter(Principal("a", ("platform_admin",), "user"))
     assert "scope NOT IN" not in admin.sql()[0] and "restricted" in admin.sql()[1][0]
 

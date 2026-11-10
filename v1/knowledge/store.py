@@ -77,6 +77,29 @@ class StoreError(Exception):
     pass
 
 
+def lexical_text(item: dict[str, Any]) -> str:
+    md = item.get("metadata") or {}
+    return f"{md.get('title') or ''} {md.get('section_path') or ''}\n{item.get('text') or ''}"
+
+
+_SUFFIXES = ("ational", "ations", "ation", "ities", "ness", "ments", "ment", "ings", "ing", "ies", "ied",
+             "ses", "es", "ed", "ly", "s")
+
+
+def stem(word: str) -> str:
+    """A deliberately small suffix stripper, so plural and inflected forms meet
+    (cells / cell, replicates / replication). Used by the in-memory store only."""
+    for suf in _SUFFIXES:
+        if len(word) > len(suf) + 3 and word.endswith(suf):
+            return word[: -len(suf)]
+    return word
+
+
+def stem_text(text: str) -> str:
+    import re
+    return " ".join(stem(w) for w in re.findall(r"[a-z0-9]+", text.lower()))
+
+
 class VectorStore:
     """Store contract. Items are {chunk_id, version_id, text, vector, metadata}."""
 
@@ -107,6 +130,15 @@ class VectorStore:
     async def get_vectors(self, index_id: str, chunk_ids: list[str]) -> dict[str, list[float]]:
         raise NotImplementedError
 
+    # M2-005 lexical retrieval and item lookup
+    async def lexical_query(self, index_id: str, query: str, top_k: int,
+                            where: Optional[Filter] = None) -> list[dict[str, Any]]: raise NotImplementedError
+    async def get_items(self, index_id: str, chunk_ids: list[str]) -> dict[str, dict[str, Any]]:
+        raise NotImplementedError
+
+    def lexical_available(self, index_id: str) -> bool:
+        return True
+
     # embedding cache (embeddings.EmbeddingCache protocol)
     async def get_many(self, fingerprint: str, keys: list[str]) -> dict[str, list[float]]: raise NotImplementedError
     async def put_many(self, fingerprint: str, items: dict[str, list[float]]) -> None: raise NotImplementedError
@@ -122,6 +154,8 @@ class InMemoryStore(VectorStore):
         self._items: dict[str, dict[str, dict[str, Any]]] = {}
         self._active: Optional[str] = None
         self._cache: dict[tuple[str, str], list[float]] = {}
+        self._lex: dict[str, tuple[int, Any, list[str]]] = {}   # index -> (generation, BM25, chunk ids)
+        self._gen: dict[str, int] = {}
 
     # Records are copied in and out, as a database would, so a caller's
     # snapshot never changes underneath it.
@@ -176,6 +210,7 @@ class InMemoryStore(VectorStore):
             if len(it["vector"]) != dim:
                 raise StoreError(f"vector dimension {len(it['vector'])} does not match index dimension {dim}")
             bucket[it["chunk_id"]] = it
+        self._gen[index_id] = self._gen.get(index_id, 0) + 1
         return len(items)
 
     async def delete_version(self, version_id, index_id=None):
@@ -187,6 +222,7 @@ class InMemoryStore(VectorStore):
             for cid in gone:
                 del bucket[cid]
             n += len(gone)
+            self._gen[iid] = self._gen.get(iid, 0) + 1
         return n
 
     async def delete_chunks(self, index_id, chunk_ids):
@@ -194,6 +230,7 @@ class InMemoryStore(VectorStore):
         n = 0
         for c in chunk_ids:
             n += bucket.pop(c, None) is not None
+        self._gen[index_id] = self._gen.get(index_id, 0) + 1
         return n
 
     async def query(self, index_id, vector, top_k, where=None):
@@ -213,6 +250,35 @@ class InMemoryStore(VectorStore):
     async def get_vectors(self, index_id, chunk_ids):
         bucket = self._items.get(index_id, {})
         return {c: bucket[c]["vector"] for c in chunk_ids if c in bucket}
+
+    async def lexical_query(self, index_id, query, top_k, where=None):
+        """BM25 over title, section path and text, with light suffix stemming.
+        The pgvector store uses PostgreSQL full-text search instead; the two
+        rank similarly but not identically (tests compare membership)."""
+        from .benchmark.bm25 import BM25
+        bucket = self._items.get(index_id, {})
+        gen = self._gen.get(index_id, 0)
+        cached = self._lex.get(index_id)
+        if cached is None or cached[0] != gen:
+            ids = sorted(bucket)
+            docs = [lexical_text(bucket[c]) for c in ids]
+            cached = (gen, BM25([stem_text(d) for d in docs]), ids)
+            self._lex[index_id] = cached
+        _, bm, ids = cached
+        out = []
+        for i, score in bm.search(stem_text(query), k=len(ids)):
+            it = bucket[ids[i]]
+            if where is not None and not where(it.get("metadata") or {}):
+                continue
+            out.append({"chunk_id": it["chunk_id"], "text": it["text"], "metadata": it.get("metadata", {}),
+                        "score": score})
+            if len(out) >= top_k:
+                break
+        return out
+
+    async def get_items(self, index_id, chunk_ids):
+        bucket = self._items.get(index_id, {})
+        return {c: copy.deepcopy(bucket[c]) for c in chunk_ids if c in bucket}
 
     async def get_many(self, fingerprint, keys):
         return {k: self._cache[(fingerprint, k)] for k in keys if (fingerprint, k) in self._cache}

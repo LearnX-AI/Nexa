@@ -75,7 +75,7 @@ jobs:
         run: |
           python -m pytest v1/tests -q -rs
           # The pgvector tests must run in CI, never skip.
-          python -m pytest v1/tests/test_knowledge_indexing.py -q -k pgvector -rs | tee pg.log
+          python -m pytest v1/tests/test_knowledge_indexing.py v1/tests/test_knowledge_retrieval.py -q -k pgvector -rs | tee pg.log
           ! grep -q "skipped" pg.log
 
       - name: Config validation gate

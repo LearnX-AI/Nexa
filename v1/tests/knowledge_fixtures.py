@@ -179,3 +179,35 @@ class FakeGateway:
         self.models.append(model)
         return ([bow_vector(t, self.dim) for t in texts],
                 {"model_version": self.version, "runtime": self.runtime, "model": model})
+
+
+def text_pdf(pages: list[list[str]], title: str = "") -> bytes:
+    """A real text PDF (Helvetica, one line per entry, one list per page),
+    built by hand so no PDF library is needed."""
+    objs: list[bytes] = []
+    n_pages = len(pages)
+    # 1 catalog, 2 pages, 3 font, then (page, content) pairs
+    kids = " ".join(f"{4 + 2 * i} 0 R" for i in range(n_pages))
+    objs.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    objs.append(f"<< /Type /Pages /Kids [{kids}] /Count {n_pages} >>".encode())
+    objs.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    for i, lines in enumerate(pages):
+        def esc(t):
+            return t.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        ops = ["BT", "/F1 12 Tf", "72 760 Td", "16 TL"] + [f"({esc(t)}) Tj T*" for t in lines] + ["ET"]
+        stream = "\n".join(ops).encode("latin-1")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> "
+                    f">> /Contents {5 + 2 * i} 0 R >>".encode())
+        objs.append(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for k, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{k} 0 obj\n".encode() + body + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode()
+    info = f" /Info << /Title ({title}) >>" if title else ""
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R{info} >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)

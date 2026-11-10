@@ -29,4 +29,6 @@ async def require_principal(
         subject=claims["sub"],
         roles=tuple(claims.get("roles", ())),
         token_type=claims.get("typ", "service"),
+        school_id=claims.get("school_id"),
+        attrs={k: claims[k] for k in ("lms_site", "lms_national", "class_ids") if k in claims},
     )

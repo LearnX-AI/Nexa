@@ -90,7 +90,7 @@ def test_locator_citation():
 
 def test_json_schema_published():
     s = json_schema()
-    assert s["$id"].endswith("/1.0.0.json")
+    assert s["$id"].endswith("/1.1.0.json")
     assert {"source_id", "content_checksum", "source_type", "subject", "grade_levels", "scope",
             "approval_status", "access_classification", "effective_from", "source_uri"} <= set(s["required"])
 
