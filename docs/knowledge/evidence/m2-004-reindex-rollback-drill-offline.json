@@ -1,0 +1,184 @@
+{
+  "mode": "offline",
+  "generated_at": "2026-11-10T03:47:06+00:00",
+  "model_a": "nexa-embed-default",
+  "model_b": "embed-cand-bge-m3",
+  "passed": true,
+  "steps": [
+    {
+      "step": 1,
+      "name": "build and activate index A",
+      "result": "pass",
+      "t_seconds": 7.48,
+      "index": "idx_20261110034643_48409fef",
+      "fingerprint": "nexa-embed-default|nomic-embed-text:v1.5|offline-standin|768|nomic-embed",
+      "tokenizer": "BERT WordPiece (bert-base-uncased)",
+      "validation": {
+        "missing": 0,
+        "stale": 0,
+        "self_recall_at_5": 1.0
+      }
+    },
+    {
+      "step": 2,
+      "name": "record top-5 answers from A",
+      "result": "pass",
+      "t_seconds": 7.63,
+      "questions": 56
+    },
+    {
+      "step": 3,
+      "name": "re-index one reprocessed source (new chunk config)",
+      "result": "pass",
+      "t_seconds": 8.21,
+      "source": "edunex:cm8870",
+      "old_chunks": 17,
+      "new_chunks": 23,
+      "validation_missing": 0,
+      "validation_stale": 0
+    },
+    {
+      "step": 4,
+      "name": "full re-index is idempotent and cached",
+      "result": "pass",
+      "t_seconds": 11.76,
+      "chunks": 1817,
+      "gateway_calls": 0,
+      "indexed_sources": 72,
+      "failed_sources": 0
+    },
+    {
+      "step": 5,
+      "name": "build index B in parallel while A keeps serving",
+      "result": "pass",
+      "t_seconds": 21.67,
+      "index": "idx_20261110034655_afaa157e",
+      "fingerprint": "embed-cand-bge-m3|bge-m3|offline-standin|1024|bge-m3",
+      "queries_served_by_A_during_build": 2281,
+      "query_errors": 0,
+      "build_stats": {
+        "indexed_sources": 72,
+        "failed_sources": 0,
+        "gateway_calls": 105,
+        "cache_hits": 0,
+        "seconds": 9.5
+      }
+    },
+    {
+      "step": 6,
+      "name": "activate B; queries now answered by B",
+      "result": "pass",
+      "t_seconds": 22.05,
+      "active": "idx_20261110034655_afaa157e",
+      "previous": "idx_20261110034643_48409fef"
+    },
+    {
+      "step": 7,
+      "name": "collection A refuses vectors of another model's dimension",
+      "result": "pass",
+      "t_seconds": 22.05,
+      "error": "vector dimension 1024 does not match index dimension 768"
+    },
+    {
+      "step": 8,
+      "name": "a query embedded with model B is refused by index A",
+      "result": "pass",
+      "t_seconds": 22.05,
+      "error": "embedding model changed: index built with nexa-embed-default|nomic-embed-text:v1.5|offline-standin|768|nomic-embed, gateway now serves embed-cand-bge-m3|bge-m3|"
+    },
+    {
+      "step": 9,
+      "name": "roll back to A; answers identical to before the switch",
+      "result": "pass",
+      "t_seconds": 23.71,
+      "active": "idx_20261110034643_48409fef",
+      "identical_answers": "56/56",
+      "changed_chunks_in_step_3": 23
+    },
+    {
+      "step": 10,
+      "name": "retire B; the active index cannot be retired",
+      "result": "pass",
+      "t_seconds": 23.72,
+      "retired": "idx_20261110034655_afaa157e"
+    }
+  ],
+  "indexes": [
+    {
+      "index_id": "idx_20261110034643_48409fef",
+      "logical": "nexa-embed-default",
+      "version": "nomic-embed-text:v1.5",
+      "runtime": "offline-standin",
+      "dim": 768,
+      "prefix_scheme": "nomic-embed",
+      "tokenizer": "BERT WordPiece (bert-base-uncased)",
+      "max_input_tokens": 8192,
+      "normalization": "l2",
+      "distance": "cosine",
+      "status": "active",
+      "created_at": "2026-11-10T03:46:43+00:00",
+      "activated_at": "2026-11-10T03:47:06+00:00",
+      "previous_index_id": "idx_20261110034655_afaa157e",
+      "stats": {
+        "seconds": 7.1,
+        "cache_hits": 0,
+        "gateway_calls": 105,
+        "failed_sources": 0,
+        "indexed_sources": 72
+      },
+      "validation": {
+        "stale": 0,
+        "passed": true,
+        "missing": 0,
+        "sampled": 50,
+        "threshold": 0.8,
+        "checked_at": "2026-11-10T03:47:06+00:00",
+        "stale_sample": [],
+        "stored_chunks": 1817,
+        "missing_sample": [],
+        "expected_chunks": 1817,
+        "self_recall_at_5": 0.92
+      },
+      "note": "drill: index A",
+      "fingerprint": "nexa-embed-default|nomic-embed-text:v1.5|offline-standin|768|nomic-embed"
+    },
+    {
+      "index_id": "idx_20261110034655_afaa157e",
+      "logical": "embed-cand-bge-m3",
+      "version": "bge-m3",
+      "runtime": "offline-standin",
+      "dim": 1024,
+      "prefix_scheme": "bge-m3",
+      "tokenizer": "XLM-RoBERTa SentencePiece",
+      "max_input_tokens": 8192,
+      "normalization": "l2",
+      "distance": "cosine",
+      "status": "retired",
+      "created_at": "2026-11-10T03:46:55+00:00",
+      "activated_at": "2026-11-10T03:47:05+00:00",
+      "previous_index_id": "idx_20261110034643_48409fef",
+      "stats": {
+        "seconds": 9.5,
+        "cache_hits": 0,
+        "gateway_calls": 105,
+        "failed_sources": 0,
+        "indexed_sources": 72
+      },
+      "validation": {
+        "stale": 0,
+        "passed": true,
+        "missing": 0,
+        "sampled": 50,
+        "threshold": 0.8,
+        "checked_at": "2026-11-10T03:47:05+00:00",
+        "stale_sample": [],
+        "stored_chunks": 1817,
+        "missing_sample": [],
+        "expected_chunks": 1817,
+        "self_recall_at_5": 0.96
+      },
+      "note": "drill: index B",
+      "fingerprint": "embed-cand-bge-m3|bge-m3|offline-standin|1024|bge-m3"
+    }
+  ]
+}

@@ -176,7 +176,8 @@ def main() -> int:
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     reg = Registry(f"sqlite:///{os.path.join(args.corpus, 'registry.db')}")
-    gold = json.load(open(GOLD))["questions"]
+    # English items only: the M2-003 figures were published on the 40 English questions.
+    gold = [q for q in json.load(open(GOLD))["questions"] if q.get("language", "en") == "en"]
 
     # v1 chunks and the file each came from
     v1_texts, v1_files, v1_metas, v1_emb, v1_weights = [], [], [], [], []

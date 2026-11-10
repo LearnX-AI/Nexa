@@ -201,6 +201,32 @@ def test_store_contract(kind):
 
 
 @pytest.mark.skipif(not PG_DSN, reason="NEXA_TEST_PG_DSN not set")
+def test_pgvector_identical_upsert_leaves_rows_untouched():
+    """Re-writing unchanged rows would add HNSW entries and shift approximate
+    results, which made rollback answers differ in the M2-004 drill."""
+    async def body(s):
+        await s.create_index(_rec())
+        await s.upsert("idx_test_a", [_item("c1", [1, 0, 0, 0]), _item("c2", [0, 1, 0, 0])])
+
+        async def xmins():
+            async with s._conn() as conn:
+                rows = await (await conn.execute(
+                    f"SELECT chunk_id, xmin::text FROM {s.schema}.vec_idx_test_a ORDER BY chunk_id")).fetchall()
+            return dict(rows)
+        first = await xmins()
+        await s.upsert("idx_test_a", [_item("c1", [1, 0, 0, 0]), _item("c2", [0, 1, 0, 0])])
+        assert await xmins() == first  # nothing rewritten
+        await s.upsert("idx_test_a", [_item("c2", [0, 1, 0, 0], access_classification="teacher_only")])
+        after = await xmins()
+        assert after["c1"] == first["c1"] and after["c2"] != first["c2"]  # metadata change still applied
+        async with s._conn() as conn:
+            comment = await (await conn.execute(
+                "SELECT obj_description(%s::regclass)", (f"{s.schema}.vec_idx_test_a",))).fetchone()
+        assert comment[0].startswith("NEXA index idx_test_a; embedding m|v|r|4|none; tokenizer")
+    with_store("pgvector", body)
+
+
+@pytest.mark.skipif(not PG_DSN, reason="NEXA_TEST_PG_DSN not set")
 def test_pgvector_persists_across_reopen():
     from v1.knowledge.pgstore import PgVectorStore
 
@@ -261,10 +287,22 @@ def test_pgvector_rejects_unsafe_identifiers():
 
 # ---------------------------------------------------------------- lifecycle
 
+_DOCX_CACHE: dict = {}
+
+
+def _docx(item, other=False):
+    """Built once per key: python-docx stamps the time into the file, so two
+    builds a second apart would be two different versions of the source."""
+    key = (item, other)
+    if key not in _DOCX_CACHE:
+        _DOCX_CACHE[key] = make_docx(extra_paragraphs=4, title=item) if not other else make_docx(
+            body=[("Heading 1", "Biogas"), ("Normal", "Biogas digesters work slowly in cold conditions.")],
+            with_table=False)
+    return _DOCX_CACHE[key]
+
+
 def _ingest(pipe, item="cm9001", **extra):
-    data = make_docx(extra_paragraphs=4, title=item) if not extra.pop("other", False) else \
-        make_docx(body=[("Heading 1", "Biogas"), ("Normal", "Biogas digesters work slowly in cold conditions.")],
-                  with_table=False)
+    data = _docx(item, extra.pop("other", False))
     job = pipe.process(pipe.submit(f"{item}.docx", data, lesson_manifest(item, **extra))[0]["job_id"])
     assert job["state"] == "succeeded", job
     return job["version_id"]
@@ -358,7 +396,7 @@ def test_reprocess_and_supersede_keep_index_exact(kind, gw):
         # Reprocess the same bytes with a smaller chunk size: new chunk set replaces the old.
         m = lesson_manifest("cm9001")
         m["chunking"] = {"target_tokens": 96, "max_tokens": 128, "min_tokens": 20}
-        job = pipe.process(pipe.submit("cm9001.docx", make_docx(extra_paragraphs=4, title="cm9001"), m)[0]["job_id"])
+        job = pipe.process(pipe.submit("cm9001.docx", _docx("cm9001"), m)[0]["job_id"])
         await mgr.index_version(job["version_id"])
         now = await store.chunk_ids(rec.index_id)
         assert now == {c["chunk_id"] for c in pipe.registry.chunks_of(v1)} and now.isdisjoint(old_ids)

@@ -30,6 +30,11 @@ _ID_RE = re.compile(r"^[a-z0-9_]{3,48}$")
 _RECORD_FIELDS = set(IndexRecord.__dataclass_fields__)
 
 
+def _literal(text: str) -> str:
+    """SQL string literal for DDL that takes no parameters (COMMENT ON)."""
+    return "'" + text.replace("'", "''") + "'"
+
+
 def _vec(v: list[float]) -> str:
     return "[" + ",".join(f"{x:.8g}" for x in v) + "]"
 
@@ -130,6 +135,10 @@ class PgVectorStore(VectorStore):
                     effective_to          date,
                     embedding             vector({int(rec.dim)}) NOT NULL)""")
             await conn.execute(f"CREATE INDEX ON {t} (version_id)")
+            # The collection itself carries its version, for anyone reading the database directly.
+            await conn.execute(f"COMMENT ON TABLE {t} IS " + _literal(
+                f"NEXA index {rec.index_id}; embedding {rec.fingerprint}; tokenizer {rec.tokenizer}; "
+                f"normalization {rec.normalization}; distance {rec.distance}"))
             if rec.dim <= 2000:  # pgvector HNSW limit for vector
                 await conn.execute(
                     f"CREATE INDEX ON {t} USING hnsw (embedding vector_cosine_ops) "
@@ -228,7 +237,12 @@ class PgVectorStore(VectorStore):
                 f"metadata = EXCLUDED.metadata, approval_status = EXCLUDED.approval_status, "
                 f"access_classification = EXCLUDED.access_classification, scope = EXCLUDED.scope, "
                 f"effective_from = EXCLUDED.effective_from, effective_to = EXCLUDED.effective_to, "
-                f"embedding = EXCLUDED.embedding", rows)
+                f"embedding = EXCLUDED.embedding "
+                # Leave identical rows untouched. Every rewritten row is a new
+                # entry in the HNSW graph, which shifts approximate results; a
+                # re-index or rollback catch-up of unchanged content must not.
+                f"WHERE ({t}.version_id, {t}.text, {t}.metadata, {t}.embedding) IS DISTINCT FROM "
+                f"(EXCLUDED.version_id, EXCLUDED.text, EXCLUDED.metadata, EXCLUDED.embedding)", rows)
         return len(rows)
 
     async def _live_tables(self, index_id: Optional[str]) -> list[str]:

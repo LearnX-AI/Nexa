@@ -1,6 +1,6 @@
 {
- "version": "1.0.0",
- "description": "NEXA-M2-003 retrieval gold set over the PNG STEM curriculum corpus. Questions are written in learner and teacher wording, not copied from the source. A retrieved chunk is a hit when it comes from one of the expected files and contains every evidence phrase (compared after lower-casing and collapsing non-alphanumerics). Categories: pdf_text, syllabus_outcome, docx_text, docx_table, pptx, ocr.",
+ "version": "1.1.0",
+ "description": "NEXA-M2-003 retrieval gold set over the PNG STEM curriculum corpus. Questions are written in learner and teacher wording, not copied from the source. A retrieved chunk is a hit when it comes from one of the expected files and contains every evidence phrase (compared after lower-casing and collapsing non-alphanumerics). Categories: pdf_text, syllabus_outcome, docx_text, docx_table, pptx, ocr. Version 1.1.0 adds 16 Tok Pisin (tpi) questions that mirror English items: the question is in Tok Pisin and the answer is in the English curriculum (cross-lingual retrieval). Their evidence phrases stay English. The translations are drafts pending review by a Tok Pisin speaker; Hiri Motu items are still to be written.",
  "questions": [
   {
    "id": "q01",
@@ -11,7 +11,8 @@
    ],
    "evidence": [
     "double trace layers"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q02",
@@ -22,7 +23,8 @@
    ],
    "evidence": [
     "lethal shock"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q03",
@@ -33,7 +35,8 @@
    ],
    "evidence": [
     "affinity beads are made by attaching ligands"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q04",
@@ -44,7 +47,8 @@
    ],
    "evidence": [
     "99mTc"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q05",
@@ -55,7 +59,8 @@
    ],
    "evidence": [
     "proteome is ever-changing"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q06",
@@ -66,7 +71,8 @@
    ],
    "evidence": [
     "without having to plug the device directly into a power socket"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q07",
@@ -77,7 +83,8 @@
    ],
    "evidence": [
     "much heavier than a petrol tank"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q08",
@@ -89,7 +96,8 @@
    "evidence": [
     "six main branches",
     "Fuzzy Logic"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q09",
@@ -100,7 +108,8 @@
    ],
    "evidence": [
     "Molecular hinges revolve around a stiff axis"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q10",
@@ -111,7 +120,8 @@
    ],
    "evidence": [
     "79 families and 730 species"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q11",
@@ -122,7 +132,8 @@
    ],
    "evidence": [
     "compete with the metabolisation enzymes"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q12",
@@ -133,7 +144,8 @@
    ],
    "evidence": [
     "homeostatic mechanisms are fully functional"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q13",
@@ -144,7 +156,8 @@
    ],
    "evidence": [
     "Natural Language Processing (NLP)"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q14",
@@ -155,7 +168,8 @@
    ],
    "evidence": [
     "day and night without ever complaining"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q15",
@@ -166,7 +180,8 @@
    ],
    "evidence": [
     "multidisciplinary field combining computer science and engineering"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q16",
@@ -178,7 +193,8 @@
    "evidence": [
     "12.1.1c",
     "electromagnets and transformers"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q17",
@@ -190,7 +206,8 @@
    "evidence": [
     "12.1.2a",
     "four organizational levels"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q18",
@@ -201,7 +218,8 @@
    ],
    "evidence": [
     "one-letter code and three-letter code"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q19",
@@ -212,7 +230,8 @@
    ],
    "evidence": [
     "determine the amino acid sequence of a protein"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q20",
@@ -224,7 +243,8 @@
    "evidence": [
     "12.1.1b",
     "magnetic field generates current"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q21",
@@ -235,7 +255,8 @@
    ],
    "evidence": [
     "S (Synthesis) phase"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q22",
@@ -246,7 +267,8 @@
    ],
    "evidence": [
     "unwinds the DNA double helix by breaking the hydrogen bonds"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q23",
@@ -257,7 +279,8 @@
    ],
    "evidence": [
     "provides a starting point for DNA polymerase"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q24",
@@ -268,7 +291,8 @@
    ],
    "evidence": [
     "studies the molecules responsible for storing"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q25",
@@ -279,7 +303,8 @@
    ],
    "evidence": [
     "Plant height or growth rate"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q26",
@@ -290,7 +315,8 @@
    ],
    "evidence": [
     "Helps ribosomes recognise the transcript"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q27",
@@ -301,7 +327,8 @@
    ],
    "evidence": [
     "Millions of fragments at once"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q28",
@@ -312,7 +339,8 @@
    ],
    "evidence": [
     "ATP, NADPH, Oxygen"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q29",
@@ -323,7 +351,8 @@
    ],
    "evidence": [
     "competes with food crops for land"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q30",
@@ -334,7 +363,8 @@
    ],
    "evidence": [
     "Works slowly in cold conditions"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q31",
@@ -345,7 +375,8 @@
    ],
    "evidence": [
     "Enzymes are damaged by oxygen"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q32",
@@ -356,7 +387,8 @@
    ],
    "evidence": [
     "controlled teacher demonstration only"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q33",
@@ -367,7 +399,8 @@
    ],
    "evidence": [
     "Enzymes/microbes can be short-lived"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q34",
@@ -378,7 +411,8 @@
    ],
    "evidence": [
     "damaged by water or tearing"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q35",
@@ -389,7 +423,8 @@
    ],
    "evidence": [
     "Enzymes wear out and must be replaced"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q36",
@@ -400,7 +435,8 @@
    ],
    "evidence": [
     "Treats wastewater and makes energy at once"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q37",
@@ -411,7 +447,8 @@
    ],
    "evidence": [
     "Insulin and glucagon (pancreas)"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q38",
@@ -422,7 +459,8 @@
    ],
    "evidence": [
     "Beta cells are destroyed"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q39",
@@ -434,7 +472,8 @@
    ],
    "evidence": [
     "uracil (U) in place of thymine"
-   ]
+   ],
+   "language": "en"
   },
   {
    "id": "q40",
@@ -447,7 +486,233 @@
    "evidence": [
     "12.1.1c",
     "Differentiate between Genomics and Proteomics"
-   ]
+   ],
+   "language": "en"
+  },
+  {
+   "id": "q01-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q01",
+   "question": "Wanem samting em i double-sided printed circuit board?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "double trace layers"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q02-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q02",
+   "question": "Bilong wanem ol teknisen i mas yusim isolated power supply taim ol i testim wanpela circuit?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "lethal shock"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q04-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q04",
+   "question": "Wanem ol radioisotope ol i save yusim long SPECT imaging, na i narakain olsem wanem long PET?",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "99mTc"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q06-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q06",
+   "question": "Inductive o wireless charging bilong ol divais em i wanem samting?",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "without having to plug the device directly into a power socket"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q07-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q07",
+   "question": "Bilong wanem hydrogen cylinder i no gutpela long ol ka taim yumi skelim wantaim petrol tank?",
+   "files": [
+    "STEMChem-Term2-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "much heavier than a petrol tank"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q08-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q08",
+   "question": "Wanem ol sikispela bikpela hap (branch) bilong artificial intelligence?",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "six main branches",
+    "Fuzzy Logic"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q10-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q10",
+   "question": "Hamas famili na hamas kain pisin i stap long Papua Niugini?",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "79 families and 730 species"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q14-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q14",
+   "question": "Bilong wanem ol robot long faktori i wok winim ol wokman long longpela taim, de na nait?",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "day and night without ever complaining"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q21-tpi",
+   "category": "docx_text",
+   "language": "tpi",
+   "translation_of": "q21",
+   "question": "Long wanem hap (phase) bilong cell cycle DNA i save kopi?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "S (Synthesis) phase"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q22-tpi",
+   "category": "docx_text",
+   "language": "tpi",
+   "translation_of": "q22",
+   "question": "Wanem enzyme i save opim DNA double helix, na em i mekim olsem wanem?",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "unwinds the DNA double helix by breaking the hydrogen bonds"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q28-tpi",
+   "category": "docx_table",
+   "language": "tpi",
+   "translation_of": "q28",
+   "question": "Wanem ol samting i kamap long ol light-dependent reaction bilong photosynthesis?",
+   "files": [
+    "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "ATP, NADPH, Oxygen"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q30-tpi",
+   "category": "docx_table",
+   "language": "tpi",
+   "translation_of": "q30",
+   "question": "Bilong wanem biogas digester i mekim liklik gas tasol taim ples i kol?",
+   "files": [
+    "s16_cm8915_12.4_Bioenergetics_3_Biogas Production.docx"
+   ],
+   "evidence": [
+    "Works slowly in cold conditions"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q35-tpi",
+   "category": "docx_table",
+   "language": "tpi",
+   "translation_of": "q35",
+   "question": "Bilong wanem ol sugar battery i mas senisim ol enzyme bilong en?",
+   "files": [
+    "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes wear out and must be replaced"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q37-tpi",
+   "category": "docx_table",
+   "language": "tpi",
+   "translation_of": "q37",
+   "question": "Wanem ol hormone na wanem ogen i save lukautim sugar long blut long homeostasis?",
+   "files": [
+    "s23_cm8936_12.6_Health and Medical_1_Homeostasis (Concept  Mechanisms).docx"
+   ],
+   "evidence": [
+    "Insulin and glucagon (pancreas)"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q38-tpi",
+   "category": "docx_table",
+   "language": "tpi",
+   "translation_of": "q38",
+   "question": "Wanem samting i kamap long ol beta cell long type 1 diabetes?",
+   "files": [
+    "s24_cm8940_12.6_Health and Medical_2_Disease - Disruption of Homeostasis.docx"
+   ],
+   "evidence": [
+    "Beta cells are destroyed"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
+  },
+  {
+   "id": "q12-tpi",
+   "category": "pdf_text",
+   "language": "tpi",
+   "translation_of": "q12",
+   "question": "Long health na medical biology, wanem taim bodi bilong man i wok gut olgeta?",
+   "files": [
+    "STEMBio-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "homeostatic mechanisms are fully functional"
+   ],
+   "review": "draft translation by the NEXA engineering team; needs review by a Tok Pisin speaker"
   }
  ]
 }
