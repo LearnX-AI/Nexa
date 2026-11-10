@@ -58,7 +58,7 @@ def main() -> int:
             extra = ", ".join(str(md[k]) for k in ("subject", "grade_level", "audience") if md.get(k))
             print(f"\n[{i}] score {res['score']:.3f}  {cite}" + (f"  ({extra})" if extra else ""))
             print("    " + " ".join(res["text"].split())[:400] + ("..." if len(res["text"]) > 400 else ""))
-            passages.append(f"[{i}] {cite}\n{res['text']}")
+            passages.append(f"[{i}] {cite}\n{res['text'][:1400]}")
         if a.search_only:
             return 0
 
@@ -68,6 +68,7 @@ def main() -> int:
                    "answer, say so.\n\n" + "\n\n".join(passages) + f"\n\nQuestion: {a.question}")
     else:
         content = a.question
+    content = content[:7900]  # the API accepts at most 8,000 characters per message
     t = time.time()
     r = c.post(f"{API}/v1/agents/{a.agent}/run", headers=h,
                json={"messages": [{"role": "user", "content": content}]})
