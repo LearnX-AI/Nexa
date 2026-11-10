@@ -10,6 +10,21 @@ import zipfile
 from typing import Optional
 
 
+def _stable_zip(data: bytes) -> bytes:
+    """Rewrite an Office zip with fixed entry timestamps. The zip format stores
+    the save time, so without this the same document built a second later has
+    different bytes, and so a different checksum and source version."""
+    src = zipfile.ZipFile(io.BytesIO(data))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for info in src.infolist():
+            fixed = zipfile.ZipInfo(info.filename, date_time=(2024, 1, 1, 0, 0, 0))
+            fixed.compress_type = zipfile.ZIP_DEFLATED
+            fixed.external_attr = info.external_attr
+            z.writestr(fixed, src.read(info.filename))
+    return out.getvalue()
+
+
 def make_docx(title: str = "DNA Replication", extra_paragraphs: int = 0, with_table: bool = True,
               page_break: bool = True, body: Optional[list[tuple[str, str]]] = None) -> bytes:
     import docx
@@ -49,9 +64,11 @@ def make_docx(title: str = "DNA Replication", extra_paragraphs: int = 0, with_ta
         for r, row in enumerate(rows):
             for c, val in enumerate(row):
                 t.cell(r, c).text = val
+    import datetime as _dt
+    d.core_properties.created = d.core_properties.modified = _dt.datetime(2024, 1, 1)
     buf = io.BytesIO()
     d.save(buf)
-    return buf.getvalue()
+    return _stable_zip(buf.getvalue())
 
 
 def make_pptx() -> bytes:
@@ -77,7 +94,7 @@ def make_pptx() -> bytes:
         tbl.cell(r, c).text = v
     buf = io.BytesIO()
     prs.save(buf)
-    return buf.getvalue()
+    return _stable_zip(buf.getvalue())
 
 
 def make_zip(members: dict[str, bytes]) -> bytes:

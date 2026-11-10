@@ -34,14 +34,61 @@ class EmbeddingError(Exception):
     pass
 
 
-# model version prefix -> (document prefix, query prefix)
+# model version prefix -> (document prefix, query prefix), from each model's card.
 PREFIX_SCHEMES: dict[str, tuple[str, str]] = {
     "nomic-embed": ("search_document: ", "search_query: "),
     "e5": ("passage: ", "query: "),
     "multilingual-e5": ("passage: ", "query: "),
+    "bge-m3": ("", ""),  # bge-m3 dense retrieval takes no instruction
     "bge": ("", "Represent this sentence for searching relevant passages: "),
     "mxbai-embed": ("", "Represent this sentence for searching relevant passages: "),
+    "snowflake-arctic-embed": ("", "query: "),
+    "embeddinggemma": ("title: none | text: ", "task: search result | query: "),
+    "qwen3-embedding": ("", "Instruct: Given a question from a school student or teacher, retrieve curriculum "
+                            "passages that answer it\nQuery: "),
+    "granite-embedding": ("", ""),
+    "all-minilm": ("", ""),
 }
+
+
+@dataclass(frozen=True)
+class ModelCard:
+    """What is known about a model family, recorded on every index built with it
+    (NEXA-M2-004: tokenizer, context, normalisation) and used by the selection
+    gates. Figures are from the model publishers' cards."""
+    family: str
+    tokenizer: str
+    max_input_tokens: int
+    params_m: int
+    multilingual: bool
+    license: str
+    edge_feasible: bool  # runnable on a CPU-only school server (see NEXA-M2-004 section 7)
+
+
+MODEL_CARDS: dict[str, ModelCard] = {c.family: c for c in [
+    ModelCard("nomic-embed-text-v2", "XLM-RoBERTa SentencePiece", 512, 475, True, "Apache-2.0", True),
+    ModelCard("nomic-embed", "BERT WordPiece (bert-base-uncased)", 8192, 137, False, "Apache-2.0", True),
+    ModelCard("bge-m3", "XLM-RoBERTa SentencePiece", 8192, 568, True, "MIT", True),
+    ModelCard("mxbai-embed", "BERT WordPiece", 512, 335, False, "Apache-2.0", True),
+    ModelCard("snowflake-arctic-embed2", "XLM-RoBERTa SentencePiece", 8192, 568, True, "Apache-2.0", True),
+    ModelCard("snowflake-arctic-embed", "BERT WordPiece", 512, 335, False, "Apache-2.0", True),
+    ModelCard("embeddinggemma", "Gemma 3 SentencePiece", 2048, 308, True, "Gemma Terms of Use", True),
+    ModelCard("qwen3-embedding:0.6b", "Qwen2 BPE", 32768, 600, True, "Apache-2.0", True),
+    ModelCard("qwen3-embedding:4b", "Qwen2 BPE", 40960, 4000, True, "Apache-2.0", False),
+    ModelCard("qwen3-embedding:8b", "Qwen2 BPE", 40960, 8000, True, "Apache-2.0", False),
+    ModelCard("granite-embedding:278m", "XLM-RoBERTa SentencePiece", 512, 278, True, "Apache-2.0", True),
+    ModelCard("granite-embedding", "RoBERTa BPE", 512, 30, False, "Apache-2.0", True),
+    ModelCard("all-minilm", "BERT WordPiece", 256, 33, False, "Apache-2.0", True),
+]}
+
+
+def card_for(model_version: str) -> Optional[ModelCard]:
+    """Most specific card whose family prefixes the reported model version."""
+    v = (model_version or "").lower().split("/")[-1]
+    for fam in sorted(MODEL_CARDS, key=len, reverse=True):
+        if v.startswith(fam):
+            return MODEL_CARDS[fam]
+    return None
 
 
 def prefix_scheme_for(model_version: str) -> tuple[str, str, str]:

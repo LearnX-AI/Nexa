@@ -1,0 +1,65 @@
+{
+  "_doc": "NEXA-M2-004 embedding candidates. The evaluation (v1/tools/knowledge_embed_eval.py) builds one index per candidate through the Model Gateway. Register each logical name in the gateway (merge v1/model_gateway/models.embedding-candidates.json) and `ollama pull` each tag on the DGX first. Pin exact tags: the tag is the model version recorded on every index.",
+  "candidates": [
+    {
+      "logical": "embed-cand-nomic-embed-text-v1-5",
+      "ollama_tag": "nomic-embed-text:v1.5",
+      "role": "incumbent",
+      "why": "Current NEXA default (English, 768-d)."
+    },
+    {
+      "logical": "embed-cand-nomic-embed-text-v2-moe",
+      "ollama_tag": "nomic-embed-text-v2-moe",
+      "role": "candidate",
+      "why": "Multilingual successor to the incumbent; 512-token context."
+    },
+    {
+      "logical": "embed-cand-bge-m3",
+      "ollama_tag": "bge-m3",
+      "role": "candidate",
+      "why": "Multilingual, 8K context, widely used retrieval baseline."
+    },
+    {
+      "logical": "embed-cand-snowflake-arctic-embed2",
+      "ollama_tag": "snowflake-arctic-embed2",
+      "role": "candidate",
+      "why": "Multilingual retrieval model, 8K context."
+    },
+    {
+      "logical": "embed-cand-embeddinggemma",
+      "ollama_tag": "embeddinggemma",
+      "role": "candidate",
+      "why": "Small multilingual model aimed at on-device use; Gemma licence terms."
+    },
+    {
+      "logical": "embed-cand-qwen3-embedding-0-6b",
+      "ollama_tag": "qwen3-embedding:0.6b",
+      "role": "candidate",
+      "why": "Small multilingual instruction-following embedder, long context."
+    },
+    {
+      "logical": "embed-cand-granite-embedding-278m",
+      "ollama_tag": "granite-embedding:278m",
+      "role": "candidate",
+      "why": "Multilingual, Apache-2.0, 512-token context."
+    },
+    {
+      "logical": "embed-cand-mxbai-embed-large",
+      "ollama_tag": "mxbai-embed-large",
+      "role": "control",
+      "why": "Strong English-only model: shows what multilinguality costs or gains."
+    },
+    {
+      "logical": "embed-cand-all-minilm-33m",
+      "ollama_tag": "all-minilm:33m",
+      "role": "control",
+      "why": "Smallest edge floor; 256-token context, expected to truncate."
+    },
+    {
+      "logical": "embed-cand-qwen3-embedding-4b",
+      "ollama_tag": "qwen3-embedding:4b",
+      "role": "reference",
+      "why": "Central-only upper bound; too large for school servers."
+    }
+  ]
+}

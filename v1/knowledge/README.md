@@ -80,6 +80,10 @@ See `.env.example`. The main settings:
 - `python v1/tools/knowledge_benchmark.py --corpus DIR`  v0 against v1 chunking benchmark.
 - `python v1/tools/knowledge_index_bench.py --corpus DIR --pg-dsn DSN [--offline] [--compare-prefixes]`
   index build, cache, HNSW quality and latency; gold-set recall through the gateway.
+- `python v1/tools/knowledge_embed_eval.py --corpus DIR --pg-dsn DSN --out DIR [--offline]`
+  M2-004 candidate embedding model evaluation (English and Tok Pisin) and baseline selection.
+- `python v1/tools/knowledge_index_drill.py --corpus DIR --pg-dsn DSN --out DIR [--offline]`
+  re-index and rollback drill with a pass/fail transcript.
 
 ## Not built yet, by design
 

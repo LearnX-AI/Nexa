@@ -26,7 +26,7 @@ import logging
 from typing import Any, Optional
 
 from . import config
-from .embeddings import Embedder, EmbeddingError, ModelChanged, ModelInfo
+from .embeddings import Embedder, EmbeddingError, ModelChanged, ModelInfo, card_for
 from .ingestion.registry import Registry
 from .store import IndexRecord, StoreError, VectorStore
 
@@ -93,8 +93,11 @@ class IndexManager:
         while iid in existing:
             n += 1
             iid = f"{base}_{n}"
+        card = card_for(info.version)
         rec = IndexRecord(index_id=iid, logical=info.logical, version=info.version, runtime=info.runtime,
-                          dim=info.dim, prefix_scheme=info.prefix_scheme, note=note)
+                          dim=info.dim, prefix_scheme=info.prefix_scheme, note=note,
+                          tokenizer=card.tokenizer if card else "unknown",
+                          max_input_tokens=card.max_input_tokens if card else None)
         return await self.store.create_index(rec)
 
     async def ensure_active(self, trace_id: Optional[str] = None) -> IndexRecord:
