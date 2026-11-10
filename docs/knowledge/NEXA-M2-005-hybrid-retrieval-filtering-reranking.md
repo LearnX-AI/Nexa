@@ -1,6 +1,6 @@
 # NEXA-M2-005: Hybrid Retrieval, Filtering and Reranking
 
-Status: Implemented; real-model benchmark to run on the DGX (section 5)
+Status: Complete. Benchmarked with real models on the DGX, 2026-11-10 (section 5).
 Milestone: M2
 Aligns with: NEXA-ADR-0002 (PostgreSQL + pgvector), NEXA-ADR-0004 (Knowledge Service), NEXA-M2-001 (authority), NEXA-M2-004 (index versions)
 Implementation: `v1/knowledge/retrieval.py`, `access.py`, `authority.py` (`arbitrate`), `pgstore.py`, `store.py`; endpoint `POST /v1/knowledge/query`
@@ -8,9 +8,7 @@ Tool: `v1/tools/knowledge_retrieval_bench.py`
 Tests: `v1/tests/test_knowledge_retrieval.py` (16), and the M2-004 and service suites, which now run through this pipeline
 Evidence: `docs/knowledge/evidence/m2-005-*`
 
-**Status against the acceptance criteria (section 9):**
-- **Met:** filtering correctness, authority weighting with conflicting sources, latency targets documented, and API access.
-- **Not yet evidenced with real models:** improvement over the v0 baseline. The benchmark harness runs end to end on pgvector here, but only with stand-in embedders, because the sandbox cannot reach a real embedding model. The DGX run produces the real numbers.
+**Status against the acceptance criteria (section 9):** all five are met. On the DGX with real models, v1 retrieval beats the v0 baseline by 40 points of S with the live model (nomic v1.5: 91.0 against 51.0) and by 45 with the selected model (bge-m3 on CPU: 96.0). The best configuration differs by model, so the default follows the active index's model (section 5).
 
 ## 1. Pipeline
 
@@ -25,7 +23,7 @@ One request runs six stages. Each stage is timed and reported in the response.
 | 5. Authority | `authority.arbitrate()` applies the M2-001 rules to the top passages (section 4). |
 | 6. Cut | The top `top_k` are returned with their stage scores, the reasons they were selected, and their provenance (M2-006). |
 
-Modes: `hybrid` (default), `vector`, or `lexical`, per request or as `NEXA_RETRIEVAL_MODE`. If an index's lexical columns are unavailable, hybrid degrades to vector and the response says so (`retrieval.degraded`).
+Modes: `hybrid`, `vector`, or `lexical`, per request or as `NEXA_RETRIEVAL_MODE`. The default, `auto`, picks the mode the benchmark found best for the active index's embedding model (section 5). If an index's lexical columns are unavailable, hybrid degrades to vector and the response says so (`retrieval.degraded`).
 
 A result's `score` is its cosine similarity to the query. That is the same meaning `score` had in M1, so it can be compared across queries and used to judge evidence strength. Results come in final rank order, which is not always score order. For a passage found only by the lexical retriever, the similarity is computed from its stored vector.
 
@@ -106,23 +104,47 @@ It runs the gold set (40 English and 16 Tok Pisin questions) through nine config
 
 For each configuration it reports recall@1/5, MRR, the M2-004 score S, paired bootstrap comparisons, and stage latency.
 
-**Reranker rule (fixed before the real run):** reranking is on by default only if it improves S by at least 1 point with P(better) ≥ 0.90 and lowers neither language's recall@5. Until the DGX run, `NEXA_RERANK` defaults to `off`.
+**Reranker rule (fixed before the real run):** reranking is on by default only if it improves S by at least 1 point with P(better) ≥ 0.90 and lowers neither language's recall@5.
 
-**Results so far.** This sandbox run is a self-test with stand-in embedders. Only its lexical numbers measure anything real (`m2-005-retrieval-benchmark-offline.md`):
+### 5.1 Results on the DGX (2026-11-10)
 
-| Config | EN R@5 | TPI R@5 | S |
-|---|---|---|---|
-| v0 baseline | 30.0 | 12.5 | 23.0 |
-| v1 lexical (real) | 82.5 | 68.8 | 77.0 |
-| v1 hybrid | 75.0 | 50.0 | 65.0 |
-| v1 hybrid + rerank | 90.0 | 50.0 | 74.0 |
-| v1 hybrid, filtered | 85.0 | 62.5 | 76.0 |
+Gateway, real models, pgvector, 1,811 v1 chunks and 2,310 v0 chunks. The v0 baseline is nomic v1.5 on v0's chunks, vector only. Reports: `evidence/m2-005-retrieval-benchmark-nomic.md` and `-bge-m3.md`.
 
-**DGX run, to do.** Commit `m2-005-retrieval-benchmark.json` and `.md`, then fill in the following:
-- **Final numbers:** *(table)*
-- **v1 hybrid against v0:** ΔS and P(better)
-- **Reranker default:** on or off, with ΔS and P(better)
-- **RRF weights:** the setting the benchmark supports
+| Config | nomic v1.5 (live): EN R@5 / TPI R@5 / **S** | bge-m3 on CPU (selected in M2-004): EN R@5 / TPI R@5 / **S** |
+|---|---|---|
+| v0 baseline | 60.0 / 37.5 / **51.0** | 60.0 / 37.5 / **51.0** |
+| v1 vector | 90.0 / 62.5 / **79.0** | 97.5 / 93.8 / **96.0** |
+| v1 lexical | 82.5 / 68.8 / **77.0** | 82.5 / 68.8 / **77.0** |
+| v1 hybrid | 97.5 / 81.2 / **91.0** | 92.5 / 68.8 / **83.0** |
+| v1 hybrid + rerank | 95.0 / 75.0 / **87.0** | 100.0 / 87.5 / **95.0** |
+| v1 hybrid, filtered | 97.5 / 81.2 / **91.0** | 95.0 / 68.8 / **84.5** |
+| edge profile, hybrid | 97.5 / 81.2 / **91.0** | 92.5 / 68.8 / **83.0** |
+
+**Improvement over v0:**
+- **nomic, hybrid:** +40.0, P(better) 1.0.
+- **bge-m3, vector:** +45.0, P(better) 1.0.
+
+**What the two models show:**
+- **nomic, which is English-only, gains from keyword matches.** Hybrid beats vector by 12.0 (P 0.994), mostly through Tok Pisin questions, whose English terms (DNA, enzyme names) the lexical retriever finds.
+- **bge-m3 gains nothing from them.** It is multilingual and already strong alone. Equal-weight fusion lets English keyword matches outrank its correct cross-lingual matches: Tok Pisin top-5 falls from 93.8 to 68.8 and S drops by 13.0. Reranking repairs most of that (+12.0, P 0.998, so the rule says on for bge-m3 hybrid), but not past vector alone.
+- **Filters** made no difference on this corpus. Hybrid already finds the right subject; the filters matter for access, scope and narrowing.
+- **The edge profile**, with fewer candidates, scored the same as central.
+
+### 5.2 Decision: the default follows the model
+
+`NEXA_RETRIEVAL_MODE=auto` and `NEXA_RERANK=auto` take the defaults per embedding model (`config.RETRIEVAL_DEFAULTS`). The rule: the configuration with the highest S; within 2 points of the best (the M2-004 near-tie rule), the simpler and faster one.
+
+| Model | Default | Why |
+|---|---|---|
+| nomic-embed v1.5 | hybrid, no rerank | hybrid 91.0 is best; rerank lowers S by 4.0 (fails the reranker rule) |
+| bge-m3 | vector, no rerank | vector 96.0 is best; hybrid + rerank 95.0 is within 2 points and is slower |
+| other models | hybrid, no rerank | until benchmarked |
+
+When the live index switches to bge-m3 (M2-004 section 6.6), retrieval switches to vector only with it, with no configuration change.
+
+**Follow-up for M2-008:**
+- **Tuning.** Lower lexical fusion weight (`NEXA_RRF_WEIGHT_LEXICAL`) for multilingual models, and language-aware fusion (lexical only for English questions), are the obvious things to tune.
+- **The cost of hybrid.** It places the right passage first less often than vector alone with nomic (R@1 50.0 against 60.0). This is acceptable for grounded answers, which use the top 5, and worth tuning.
 
 ## 6. Observability
 
@@ -160,7 +182,9 @@ Measured so far:
 | Sandbox, pgvector 0.6, 1,811 chunks, stand-in embedder | hybrid | 29 ms | vector 7.3, lexical 6.2, similarity fetch 2.6, authority 0.3 ms |
 | Same | hybrid + rerank | 43 ms | rerank 10.5 ms |
 | Same | edge profile + rerank | 28 ms | |
-| DGX | | *(run to fill)* | |
+| DGX, real models, 1,811 chunks | nomic hybrid (live default) | 14.8 ms (total p95 96 ms) | |
+| Same | bge-m3 vector (selected default) | 14.9 ms (total p95 237 ms; query embedding on CPU) | |
+| Same | edge profile, nomic hybrid | 18.7 ms (total p95 104 ms) | |
 
 The live service before M2-005 measured 70 ms p50 and 84 ms p95 total, vector only, with nomic.
 
@@ -180,10 +204,10 @@ Each result adds `chunk_id`, `rank`, `scores`, `reasons`, `authority` and `prove
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Retrieval benchmark demonstrates measurable improvement over v0 baseline | **Harness done. Real-model run is on the DGX, not yet run.** The offline self-test shows the pipeline end to end, including the v0 baseline index built from v0's own chunking. | Section 5; `knowledge_retrieval_bench.py`; offline report |
+| Retrieval benchmark demonstrates measurable improvement over v0 baseline | **Met.** On the DGX, S rose from 51.0 (v0) to 91.0 with nomic hybrid (+40.0, P 1.0) and to 96.0 with bge-m3 vector (+45.0, P 1.0). English top-5 rose from 60.0 to 97.5; Tok Pisin from 37.5 to 81.2 and 93.8. | Section 5; `evidence/m2-005-retrieval-benchmark-nomic.md`, `-bge-m3.md` |
 | Filtering correctness tested | **Met** | `test_filtering_correctness_all_modes_and_stores` (both stores, three modes, 10 filters × 3 roles × 2 schools); `test_filter_rules_access_and_scope`; SQL/Python parity |
 | Authority weighting tested with conflicting-source scenarios | **Met** | Section 4; seven `test_authority_*` scenarios, plus the conflict in the M2-006 answer test |
-| Latency targets documented for central and edge profiles | **Met.** Targets set; measured in the sandbox; DGX and edge-hardware measurements to add | Section 7 |
+| Latency targets documented for central and edge profiles | **Met.** Targets set, and central measured on the DGX within them (p95 96 ms nomic, 237 ms bge-m3). Edge-hardware measurement is in M2-009. | Section 7 |
 | Retrieval pipeline is accessible through the NEXA Knowledge Service API | **Met** | `POST /v1/knowledge/query`; `test_query_api_filters_explain_and_validation` |
 
 ## 10. Limitations
