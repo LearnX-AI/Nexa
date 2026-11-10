@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "description": "NEXA-M2-006 calibration set: questions the PNG STEM curriculum corpus does not answer. Used with the M2-003 gold set (answerable) to set the evidence thresholds, so that NEXA says it found nothing instead of answering from general knowledge. Mix of off-curriculum questions in learner wording and on-subject questions the corpus does not cover. A hit is any retrieved passage; the target is evidence level 'none' or at most 'weak'.",
+  "questions": [
+    {"id": "u01", "category": "off_curriculum", "question": "Who won the rugby league State of Origin last year?"},
+    {"id": "u02", "category": "off_curriculum", "question": "How do I cook mumu with pork and kaukau?"},
+    {"id": "u03", "category": "off_curriculum", "question": "What is the best mobile phone to buy in Port Moresby?"},
+    {"id": "u04", "category": "off_curriculum", "question": "When does the next flight leave Jacksons airport for Lae?"},
+    {"id": "u05", "category": "off_curriculum", "question": "Write me a love song for my girlfriend."},
+    {"id": "u06", "category": "off_curriculum", "question": "What time does the Boroko market open on Saturday?"},
+    {"id": "u07", "category": "off_curriculum", "question": "How many goals did the Kumuls score in the final?"},
+    {"id": "u08", "category": "off_curriculum", "question": "Which movie should I watch this weekend?"},
+    {"id": "u09", "category": "on_subject_not_covered", "question": "Explain the Schwarzschild radius of a black hole in general relativity."},
+    {"id": "u10", "category": "on_subject_not_covered", "question": "How does the CRISPR-Cas9 guide RNA find its target in a plant genome?"},
+    {"id": "u11", "category": "on_subject_not_covered", "question": "Derive the Black-Scholes equation for option pricing."},
+    {"id": "u12", "category": "on_subject_not_covered", "question": "What is the boiling point of liquid nitrogen in Fahrenheit?"},
+    {"id": "u13", "category": "on_subject_not_covered", "question": "How do quantum computers use qubits and entanglement?"},
+    {"id": "u14", "category": "on_subject_not_covered", "question": "Who painted the Mona Lisa and in what year?"},
+    {"id": "u15", "category": "tok_pisin_off_curriculum", "language": "tpi", "question": "Husat i winim futbol long Sarere?"},
+    {"id": "u16", "category": "tok_pisin_off_curriculum", "language": "tpi", "question": "Wanem taim bai balus i lusim Mosbi?"}
+  ]
+}

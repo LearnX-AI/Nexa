@@ -1,167 +1,134 @@
 <?php
+// This file is part of the local_nexa_integration plugin.
+
 namespace local_nexa_integration\task;
+
+use local_nexa_integration\sync\client;
+use local_nexa_integration\sync\client_exception;
+use local_nexa_integration\sync\collector;
+use local_nexa_integration\sync\outbox;
 
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * Scheduled task: walk every course, find uploaded pdf/docx/pptx files, and
- * push new or changed ones to the Nexa /ingest-material endpoint so Nexa can
- * answer from them. A manifest (stored in plugin config) records what has
- * already been sent, so each run only ships what changed.
+ * Nightly safety net for knowledge sync (NEXA-M2-007).
+ *
+ * Event observers queue changes as they happen; this task catches anything
+ * they missed (changes made while the plugin was off, bulk restores, direct
+ * database edits):
+ *
+ * 1. Scan every course's supported activities and queue an upsert for any
+ *    whose fingerprint (content revision, visibility, approval, title,
+ *    curriculum, scope) differs from what NEXA was last told.
+ * 2. Queue a delete for every item NEXA holds that no longer exists.
+ * 3. Reconcile each course with NEXA: NEXA reports items it is missing or
+ *    holds at an older revision (queued again here), and withdraws items
+ *    Moodle no longer has.
  */
 class sync_materials extends \core\task\scheduled_task {
-
-    /** Extensions Nexa can extract text from. */
-    const ALLOWED = ['pdf', 'docx', 'pptx'];
 
     public function get_name() {
         return get_string('syncmaterialstask', 'local_nexa_integration');
     }
 
     public function execute() {
-        global $CFG;
-        require_once($CFG->libdir . '/filelib.php');
-
-        $base = trim((string) get_config('local_nexa_integration', 'nexa_base_url'));
-        if ($base === '') {
-            mtrace('nexa sync: no base URL configured, skipping.');
+        global $DB;
+        if (!collector::enabled()) {
+            mtrace('nexa sync: not configured, skipping.');
             return;
         }
-        $token = trim((string) get_config('local_nexa_integration', 'ingest_token'));
-        if ($token === '') {
-            mtrace('nexa sync: no ingest token configured, skipping.');
-            return;
+        $known = [];
+        foreach ($DB->get_records(outbox::ITEMS) as $it) {
+            $known[$it->itemid] = $it;
         }
-        $endpoint = rtrim($base, '/') . '/ingest-material';
-
-        // Load the manifest of already-sent files: {contenthash => timemodified}.
-        $manifest = json_decode(
-            (string) get_config('local_nexa_integration', 'sync_manifest'), true);
-        if (!is_array($manifest)) {
-            $manifest = [];
-        }
-
-        $fs = get_file_storage();
-        $courses = get_courses();
-        $sent = 0;
-        $skipped = 0;
-
-        foreach ($courses as $course) {
+        $client = new client();
+        $site = collector::site();
+        $queued = $deleted = 0;
+        foreach (get_courses('all', 'c.id ASC', 'c.id') as $course) {
             if ($course->id == SITEID) {
                 continue;
             }
-            $coursename = format_string($course->fullname);
-            list($subject, $grade) = $this->subject_grade($coursename, $course->shortname ?? '');
-
+            $present = [];
             try {
                 $modinfo = get_fast_modinfo($course->id);
             } catch (\Throwable $e) {
-                mtrace("nexa sync: modinfo failed for course {$course->id}: " . $e->getMessage());
+                mtrace("nexa sync: course {$course->id}: " . $e->getMessage());
                 continue;
             }
-
             foreach ($modinfo->get_cms() as $cm) {
-                // 'resource' = a file a teacher uploaded. Extend here for others.
-                if ($cm->modname !== 'resource') {
+                if (!in_array($cm->modname, collector::KINDS, true) || !empty($cm->deletioninprogress)) {
                     continue;
                 }
-                $context = \context_module::instance($cm->id);
-                $files = $fs->get_area_files(
-                    $context->id, 'mod_resource', 'content', 0, 'sortorder', false);
-
-                foreach ($files as $file) {
-                    $name = $file->get_filename();
-                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-                    if (!in_array($ext, self::ALLOWED, true)) {
-                        continue;
+                $itemid = collector::item_id($cm->id);
+                $facts = collector::facts($course->id, $cm->id);
+                $content = $facts ? collector::content($cm) : null;
+                if (!$facts || !$content || empty($facts['curriculum']['grade_levels'])) {
+                    if (isset($known[$itemid]) && $known[$itemid]->state === 'sent') {
+                        outbox::delete((string) $course->id, $cm->id);
+                        $deleted++;
                     }
-                    $hash = $file->get_contenthash();
-                    $mtime = (int) $file->get_timemodified();
-                    // Already sent and unchanged -> skip.
-                    if (isset($manifest[$hash]) && $manifest[$hash] >= $mtime) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    $ok = $this->send_file($endpoint, $token, $file, $coursename, $subject, $grade);
-                    if ($ok) {
-                        $manifest[$hash] = $mtime;
-                        $sent++;
-                        mtrace("nexa sync: sent {$name} ({$subject} {$grade}) from {$coursename}");
-                        // Persist after each success so a mid-run failure doesn't resend.
-                        set_config('sync_manifest', json_encode($manifest), 'local_nexa_integration');
-                    } else {
-                        mtrace("nexa sync: FAILED {$name} from {$coursename}");
+                    continue;
+                }
+                $present[$itemid] = $content['revision'];
+                $fp = collector::fingerprint($facts, $content);
+                $k = $known[$itemid] ?? null;
+                if (!$k || $k->fingerprint !== $fp || !in_array($k->state, ['sent', 'rejected'], true)) {
+                    if ($this->not_already_queued($itemid, $fp)) {
+                        outbox::upsert($course->id, $cm->id);
+                        $queued++;
                     }
                 }
             }
-        }
-
-        mtrace("nexa sync: done. sent={$sent}, skipped(existing)={$skipped}");
-    }
-
-    /**
-     * Derive subject and grade from the course name/shortname.
-     */
-    protected function subject_grade(string $name, string $short): array {
-        $hay = strtolower($name . ' ' . $short);
-        $subject = '';
-        $map = [
-            'biology' => 'Biology', 'chemistry' => 'Chemistry', 'physics' => 'Physics',
-            'mathematics' => 'Mathematics', 'maths' => 'Mathematics', 'math' => 'Mathematics',
-            'english' => 'English', 'accounting' => 'Accounting', 'economics' => 'Economics',
-            'geology' => 'Geology', 'agriculture' => 'Agriculture',
-            'business' => 'Business Studies', 'ict' => 'ICT',
-        ];
-        foreach ($map as $key => $val) {
-            if (strpos($hay, $key) !== false) {
-                $subject = $val;
-                break;
+            foreach ($known as $itemid => $k) {
+                if ((string) $k->courseid === (string) $course->id && $k->state === 'sent' && !isset($present[$itemid])) {
+                    outbox::delete((string) $course->id, (int) substr($itemid, 2));
+                    $deleted++;
+                }
+            }
+            if ($present || $this->course_known($known, (string) $course->id)) {
+                $this->reconcile($client, $site, (string) $course->id, $present);
             }
         }
-        $grade = '';
-        if (preg_match('/grade\s*(\d{1,2})/', $hay, $m)) {
-            $grade = $m[1];
-        }
-        return [$subject, $grade];
+        mtrace("nexa sync: scan queued={$queued} deletes={$deleted}");
     }
 
-    /**
-     * POST one file to Nexa's ingest endpoint. Returns true on HTTP 200.
-     */
-    protected function send_file($endpoint, $token, \stored_file $file, $course, $subject, $grade): bool {
-        // Write the file to a temp path so curl can multipart-upload it.
-        $tmp = make_request_directory() . '/' . $file->get_filename();
+    protected function not_already_queued(string $itemid, string $fp): bool {
+        global $DB;
+        return !$DB->record_exists(outbox::TABLE, ['itemid' => $itemid, 'status' => 'pending', 'fingerprint' => $fp]);
+    }
+
+    protected function course_known(array $known, string $courseid): bool {
+        foreach ($known as $k) {
+            if ((string) $k->courseid === $courseid && $k->state === 'sent') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    protected function reconcile(client $client, array $site, string $courseid, array $present): void {
+        $items = [];
+        foreach ($present as $itemid => $rev) {
+            $items[] = ['item_id' => $itemid, 'revision' => (string) $rev];
+        }
         try {
-            $file->copy_content_to($tmp);
-        } catch (\Throwable $e) {
-            mtrace('nexa sync: copy failed - ' . $e->getMessage());
-            return false;
+            $r = $client->reconcile($site, $courseid, $items, true);
+        } catch (client_exception $e) {
+            mtrace("nexa sync: reconcile course {$courseid} failed: " . $e->getMessage());
+            return;
         }
-
-        $curl = new \curl();
-        $curl->setopt([
-            'CURLOPT_TIMEOUT'        => 120,
-            'CURLOPT_CONNECTTIMEOUT' => 15,
-            'CURLOPT_FOLLOWLOCATION' => 0,
-        ]);
-        $params = [
-            'file'    => new \CURLFile($tmp, '', $file->get_filename()),
-            'course'  => $course,
-            'subject' => $subject,
-            'grade'   => $grade,
-            'token'   => $token,
-        ];
-        $response = $curl->post($endpoint, $params);
-        $info = $curl->get_info();
-        $code = (int) ($info['http_code'] ?? 0);
-
-        @unlink($tmp);
-
-        if (!empty($curl->error) || $code !== 200) {
-            mtrace('nexa sync: HTTP ' . $code . ' ' . ($curl->error ?: substr((string) $response, 0, 200)));
-            return false;
+        foreach (array_merge($r['missing_in_nexa'] ?? [], $r['revision_mismatch'] ?? []) as $itemid) {
+            if ($this->not_queued_at_all($itemid)) {
+                outbox::upsert((int) $courseid, (int) substr($itemid, 2));
+            }
         }
-        return true;
+        if (!empty($r['withdrawn'])) {
+            mtrace("nexa sync: NEXA withdrew from course {$courseid}: " . implode(', ', $r['withdrawn']));
+        }
+    }
+
+    protected function not_queued_at_all(string $itemid): bool {
+        global $DB;
+        return !$DB->record_exists(outbox::TABLE, ['itemid' => $itemid, 'status' => 'pending']);
     }
 }

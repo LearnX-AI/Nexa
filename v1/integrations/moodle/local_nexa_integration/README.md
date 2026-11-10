@@ -1,6 +1,67 @@
-# Nexa Chatbot Integration (local_nexa_integration) v1.1
+# Nexa Chatbot Integration (local_nexa_integration) v2.0
 
-Embeds the Nexa AI assistant into Moodle as a floating launcher.
+Embeds the Nexa AI assistant into Moodle as a floating launcher and, since
+2.0, keeps the NEXA Knowledge Service in step with approved course content, so
+Nexa answers from the school's own material, with citations
+(NEXA-M2-007, contract `nexa.lms-sync/1.0`).
+
+## What changed in 2.0: knowledge sync
+
+1.x pushed every course file, nightly, to the v0 chat's `/ingest-material`.
+It sent hidden and restricted files too (so answer keys became answerable),
+never removed anything that was deleted in Moodle, sent a file shared by two
+courses only once, and kept its "already sent" list in one ever-growing
+config value. 2.0 replaces it:
+
+| | 1.x | 2.0 |
+|---|---|---|
+| Target | v0 chat `/ingest-material` | NEXA v1 Knowledge Service, `nexa.lms-sync/1.0` |
+| What | resource files | pages, labels, books, and PDF, DOCX, PPTX files |
+| When | nightly | as it happens (event observers), plus a nightly scan and reconcile |
+| Approval | none: everything served | only activities tagged `nexa-approved`, or in an auto-approved category, are served; others are sent as pending review |
+| Hidden or restricted | sent, served to students | sent as teacher-only |
+| Deleted in Moodle | stayed in Nexa forever | withdrawn in NEXA (history kept) |
+| Offline or NEXA down | changes lost until the next night | queued in `local_nexa_outbox`, retried with backoff, never lost |
+| Who can see it in NEXA | everyone | this school's users only (school scope), unless the site has a national token |
+| Auth | token in a form field | per-site sync token in the `Authorization` header |
+
+The 1.x push still exists as the **legacy_v0_push** task for the v0 chat,
+**disabled by default**, and now sends only activities students can see.
+
+### Setting up knowledge sync
+
+1. Ask the NEXA operators for a sync token for this site. They mint it with:
+   `python -m v1.identity.cli --subject lms:<site-id> --roles lms_sync --lms-site <site-id> --school-id <school-id> --ttl 31536000`
+2. Site administration > Plugins > Local plugins > Nexa Chatbot Integration > Knowledge sync:
+   NEXA Knowledge Service URL, sync token, site ID and school ID (both must
+   match the token), scope, approval tag or auto-approved categories.
+3. If NEXA is on a private address, allow it under Site administration >
+   General > Security > HTTP security (cURL blocked hosts and allowed ports);
+   Moodle blocks private addresses by default.
+4. Tick **Enable knowledge sync**. Run the **NEXA knowledge sync: nightly scan
+   and reconcile** task once (Scheduled tasks > Run now) to send existing content.
+5. Mark content for Nexa by adding the tag `nexa-approved` to an activity
+   (Edit settings > Tags), or list whole categories as auto-approved.
+
+Subject and grade come from the course custom fields `nexa_subject` and
+`nexa_grade` when they exist, otherwise from the course name ("Grade 12
+Biology"). Activities in a course with no grade are not sent (NEXA needs the
+grade to filter); the reason is recorded in `local_nexa_items.detail`.
+
+### Monitoring
+
+- Moodle: `local_nexa_outbox` (`status` pending, sent, rejected; `lasterror`), the task logs.
+- NEXA: `GET /v1/knowledge/lms/status` with the site's token (counts, recent
+  failures), and `GET /v1/knowledge/lms/events?state=failed`.
+
+### Tests
+
+- `php tests/contract_check.php` checks the mapping rules without Moodle; NEXA's
+  test suite (`v1/tests/test_moodle_contract.py`) feeds its output through NEXA's
+  own contract model and sync endpoint.
+- `tests/mapper_test.php` is a Moodle PHPUnit test of the same rules.
+
+## Chat launcher (1.1)
 
 ## What changed in 1.1
 
@@ -27,7 +88,7 @@ Embeds the Nexa AI assistant into Moodle as a floating launcher.
   Nexa was slow or unreachable.
 - The "Welcome, name" login notification is now opt-in (off by default).
 
-## Install
+## Install (both features)
 
 1. Copy the `nexa_integration` folder to `<moodleroot>/local/nexa_integration`.
    On this server that is `/var/www/html/moodle2/public/local/nexa_integration`.
@@ -94,5 +155,11 @@ While closed this should report roughly 96x96 at the bottom-right. Anything larg
 
 ## Privacy
 
-The plugin transmits the logged-in user's email address and full name to the configured
-external Nexa service, both as iframe query parameters and via the login notification task.
+The chat launcher transmits the logged-in user's email address and full name to the configured
+external Nexa chat service, both as iframe query parameters and via the login notification task.
+Knowledge sync transmits course content only, never user data.
+
+**Known issue (chat launcher, unchanged in 2.0):** the chat trusts the email in the iframe URL
+to decide teacher or student mode, so anyone who edits the URL can claim to be a teacher. The fix
+is for Moodle to pass a short-lived signed identity token instead, verified by NEXA's identity
+service; it is tracked separately from knowledge sync.
