@@ -1,6 +1,6 @@
 # NEXA-M2-004: Embedding Service and Index Versioning
 
-Status: Draft for governance acceptance
+Status: Complete; baseline awaiting governance sign-off
 Milestone: M2
 Aligns with: NEXA-ADR-0001 (Model Gateway), NEXA-ADR-0002 (PostgreSQL + pgvector), NEXA-ADR-0004
 Implementation: `v1/knowledge/embeddings.py`, `indexing.py`, `store.py`, `pgstore.py`,
@@ -8,11 +8,13 @@ Implementation: `v1/knowledge/embeddings.py`, `indexing.py`, `store.py`, `pgstor
 tools `knowledge_embed_eval.py`, `knowledge_index_drill.py`, `knowledge_index_bench.py`
 Evidence: `docs/knowledge/evidence/m2-004-*`
 
-**Status against the acceptance criteria (section 13):** version recording,
-the re-index procedure and rollback are met and demonstrated. The candidate
-evaluation is built, self-tested and ready to run, but it needs the real models,
-which only the DGX can serve; until that run, the baseline is the incumbent,
-provisionally (section 6).
+**Status against the acceptance criteria (section 13):** all five are met.
+Ten candidate models were evaluated through the gateway on the DGX, and the
+selection rule picked **bge-m3 served on CPU** (`embed-cand-bge-m3-cpu`) as
+the new baseline: score 94.5 against 77.5 for the incumbent, P(better) 0.998
+(section 6.6). The re-index and rollback drill passed 11/11 with real models,
+and the rollback was bit-identical (section 8). Switching the live index to
+the new baseline is a separate, governed step (section 6.6).
 
 ## 1. What this adds
 
@@ -177,6 +179,7 @@ fragment is `v1/model_gateway/models.embedding-candidates.json`.
 | nomic-embed-text:v1.5 | incumbent | 137M | 768 | 8,192 | English | Apache-2.0 | yes |
 | nomic-embed-text-v2-moe | candidate | 475M (305M active) | 768 | 512 | ~100 | Apache-2.0 | yes |
 | bge-m3 | candidate | 568M | 1024 | 8,192 | 100+ | MIT | yes |
+| bge-m3, CPU-served (`bge-m3:567m-cpu`) | candidate | 568M | 1024 | 8,192 | 100+ | MIT | yes |
 | snowflake-arctic-embed2 | candidate | 568M | 1024 | 8,192 | 74 | Apache-2.0 | yes |
 | embeddinggemma | candidate | 308M | 768 | 2,048 | multilingual | Gemma Terms of Use | yes |
 | qwen3-embedding:0.6b | candidate | 0.6B | 1024 | 32K | 100+ | Apache-2.0 | yes |
@@ -184,6 +187,11 @@ fragment is `v1/model_gateway/models.embedding-candidates.json`.
 | mxbai-embed-large | control (English) | 335M | 1024 | 512 | English | Apache-2.0 | yes |
 | all-minilm:33m | control (smallest) | 33M | 384 | 256 | English | Apache-2.0 | yes |
 | qwen3-embedding:4b | reference (upper bound) | 4B | 2560 | 40K | 100+ | Apache-2.0 | no |
+
+The CPU-served entry is the same bge-m3 weights with the gateway option
+`num_gpu: 0`, added after bge-m3 on the DGX GPU returned NaN for some inputs
+(section 6.6). It has its own logical name and version label, so its vectors
+get their own fingerprint and are never mixed with GPU-produced ones.
 
 Sizes, dimensions and limits are from the publishers' model cards. The
 evaluation records the dimension the model actually returns.
@@ -239,19 +247,114 @@ NEXA_KNOWLEDGE_GATEWAY_TOKEN=... python v1/tools/knowledge_embed_eval.py \
     --corpus DIR --pg-dsn "$NEXA_KNOWLEDGE_PG_DSN" --out docs/knowledge/evidence
 ```
 
-This writes `m2-004-embedding-eval.json` and `.md`. Commit both, then fill in 6.6.
+This writes `m2-004-embedding-eval.json` and `.md`. The harness records a
+failed question as a miss (and fails G1 if more than 5% fail) and keeps going,
+so one model's error cannot stop the run; partial results are written to
+`m2-004-embedding-eval.partial.json` after each model.
 
 ### 6.6 Selected baseline
 
-**Provisional: `nomic-embed-text:v1.5` (the incumbent).** Rationale, until the DGX run:
-- It is what the corpus is indexed with today, and it passes all four gates.
-- Under rule 3 it stays unless a challenger wins clearly.
+**Selected: bge-m3, served on CPU through the gateway**
+(`embed-cand-bge-m3-cpu`, version `bge-m3:567m-cpu`, 1024 dimensions,
+XLM-RoBERTa SentencePiece tokenizer, L2-normalised, cosine).
+Fingerprint: `embed-cand-bge-m3-cpu|bge-m3:567m-cpu|ollama|1024|bge-m3`.
 
-The known risk is that it is English-only. The Tok Pisin questions exist to
-measure exactly that, and the multilingual candidates may well win on them.
+#### Results on the DGX (gateway, real models, 1,811 chunks, gold set 1.1.0)
 
-**Final:** *(to be filled from the DGX evaluation report: selected model,
-score, margin, P(better), and governance sign-off)*
+Two runs on 2026-11-10. **Run 1** evaluated all ten candidates. **Run 2**
+re-ran the incumbent and both bge-m3 variants on the final harness. The
+incumbent scored identically in both runs.
+
+| Model | EN R@5 | TPI R@5 | Score S | Query p50 ms | Gates | Outcome |
+|---|---|---|---|---|---|---|
+| **bge-m3, CPU-served** (run 2) | **95.0** | **93.8** | **94.5** | 190 | all pass | **selected** |
+| embeddinggemma (run 1) | 97.5 | 87.5 | 93.5 | | fails G4 (Gemma Terms of Use) | not eligible |
+| bge-m3, GPU-served (runs 1 and 2) | 90.0 | 93.8 | 91.5 | 162 | all pass | 2 of 56 queries fail (NaN), see below |
+| nomic-embed-text-v2-moe (run 1) | 97.5 | 75.0 | 88.5 | | all pass | |
+| snowflake-arctic-embed2 (run 1) | 92.5 | 81.2 | 88.0 | | all pass | |
+| qwen3-embedding:4b (run 1, reference) | 90.0 | 75.0 | 84.0 | | fails G2 (4B params, 2560-d) | not eligible |
+| granite-embedding:278m (run 1) | 85.0 | 75.0 | 81.0 | | all pass | |
+| qwen3-embedding:0.6b (run 1) | 92.5 | 62.5 | 80.5 | | all pass | |
+| nomic-embed-text:v1.5 (incumbent, both runs) | 87.5 | 62.5 | 77.5 | 61 | all pass | replaced |
+| mxbai-embed-large (run 1, control) | | | | | fails G1 (index did not build) | not eligible |
+| all-minilm:33m (run 1, control) | | | | | fails G1, G3 (76% of chunks truncated) | not eligible |
+
+S = 0.6 × English recall@5 + 0.4 × Tok Pisin recall@5. Report for run 2:
+`docs/knowledge/evidence/m2-004-embedding-eval.json` and `.md`. The run 1
+figures above are from its report on the DGX.
+
+**Decision under rule 1.0.0:** the challenger beats the incumbent by 17.0
+points with P(better) = 0.998, well past the 3-point and 0.90 thresholds. No
+other eligible model is within 2 points, so the near-tie rule does not apply.
+
+#### Rationale
+
+1. **It retrieves the right passage far more often.** It finds the answer in
+   the top 5 for 53 of 56 questions, against 45 for the incumbent. Of those
+   questions, it finds 10 that the incumbent misses and misses 2 that the
+   incumbent finds. Recall@1 rises from 52.5 to 60.0 in English and from 25.0
+   to 50.0 in Tok Pisin.
+2. **It works for questions asked in Tok Pisin**, which the English-only
+   incumbent does not (93.8 against 62.5). That matters for how PNG learners
+   will actually ask.
+3. **The choice does not hang on the draft Tok Pisin questions.** On the 40
+   English questions alone it still wins by 7.5 points (95.0 against 87.5).
+   The Tok Pisin review can change the size of the margin, but is unlikely to
+   change the decision.
+4. **It passes every gate:**
+   - MIT licence.
+   - 568M parameters, within the edge limit.
+   - 1024 dimensions, within E5.
+   - An 8,192-token input limit, so no chunk is truncated.
+   - Validation self-recall@5 of 0.94.
+5. **It beats the strongest score among ineligible models.** embeddinggemma
+   scored 93.5 but needs a licence decision. bge-m3 on CPU outscores it
+   without one.
+
+#### Why CPU-served, not GPU
+
+On the DGX GPU, bge-m3 returns NaN for some inputs, and the gateway turns that
+into a 502. This happened on the same questions (q18, q36) in both runs, so it
+is reproducible, not transient. A model that intermittently gives a learner no
+answer is not acceptable in service, even though 2 of 56 is under the G1 limit
+of 5%.
+
+The same weights served on CPU returned no errors. Their ranks match the GPU
+run on every other question but one, where the rank moved from 5 to 4. The
+failure is therefore in the GPU runtime path, not the model. The likely cause
+is the Ollama/llama.cpp CUDA kernels on the GB10; the root cause is not
+established.
+
+The CPU path also matches the school edge, which is CPU-only (E2). The edge
+must reproduce the central vectors exactly (E1, E6), so central and edge
+should run the same runtime.
+
+#### Costs accepted
+
+| Cost | Measured | Assessment |
+|---|---|---|
+| Central indexing throughput | about 3 chunks/s on DGX CPU; 1,811 chunks in 10 min (GPU: 28/s) | Fine for today's corpus. A 100,000-chunk national corpus would take about 9 h to re-embed, acceptable for a planned re-index. Unchanged chunks come from the embedding cache. |
+| Query embedding latency | p50 190 ms, p95 237 ms (incumbent: 61 and 83 ms) | Adds about 130 ms per question; small next to answer generation. Within the 300 ms edge target (E4), measured on DGX cores. School hardware must be measured in M2-009. |
+| Storage | 4 KB per chunk at 1024-d (incumbent 3 KB) | 7.4 MB today; about 410 MB for 100,000 chunks |
+| Re-embedding | one full central re-index, then shipping the new index to every edge | One-off; done with the blue/green build (section 3), with rollback kept |
+
+If the GPU fault is fixed, for example by a newer Ollama, a GPU-served bge-m3
+gets a new fingerprint. Moving to it is an ordinary re-index with the canary
+check (E6), not a silent swap. The edges would stay on CPU, so the canary
+check must confirm that GPU and CPU vectors agree before such a move.
+
+#### Conditions and next steps
+
+1. **Governance sign-off** on this baseline, recorded in this section.
+2. **Tok Pisin review.** A Tok Pisin speaker reviews the 16 draft questions,
+   then the evaluation is re-run (about 15 minutes). Point 3 above is why the
+   decision is not expected to change.
+3. **Switch the live index** with the blue/green procedure (section 11, step 5):
+   - Register `embed-cand-bge-m3-cpu` in the production gateway registry.
+   - `POST /v1/knowledge/indexes` with `embed_model: "embed-cand-bge-m3-cpu"`
+     and `activate_when_ready: true`.
+   - The current nomic index stays as `previous_index_id`, for rollback.
+4. **Track the GPU NaN** as a runtime issue. It does not block the switch.
 
 ## 7. Central DGX and school-edge compatibility requirements
 
@@ -293,12 +396,35 @@ step. Here it ran with stand-in models: A at 768 dimensions, B at 1024.
 | 8. Retire B; the active index cannot be retired | pass |
 
 Transcript: `docs/knowledge/evidence/m2-004-reindex-rollback-drill-offline.json`.
-On the DGX, re-run it with two real models to produce the production evidence:
 
-```
-python v1/tools/knowledge_index_drill.py --corpus DIR --pg-dsn "$DSN" \
-    --model-a nexa-embed-default --model-b embed-cand-bge-m3 --out docs/knowledge/evidence
-```
+### 8.1 With real models on the DGX
+
+On 2026-11-10 the drill ran through the gateway:
+- A: `nomic-embed-text:v1.5`, 768-d.
+- B: `nomic-embed-text-v2-moe`, 768-d.
+- Same corpus, 1,817 chunks after the step-3 reprocess.
+
+**It passed all 11 steps.**
+
+| Step | Result |
+|---|---|
+| Build and activate A | validated: 0 missing, 0 stale, self-recall@5 0.90 |
+| Re-index one reprocessed source | 17 chunks became 23; 0 missing, 0 stale |
+| Full re-index | 1,817 chunks before and after, **0 gateway calls** |
+| Build B while A serves | 731 queries answered by A during the 51 s build, 0 errors |
+| Mixing prevention | the models share a dimension, so this rests on the fingerprint check. A query embedded with B against A is refused with "embedding model changed". |
+| Roll back to A | **bit-identical**: the same SHA-256 over every chunk ID and vector before and after (`dcd92a94…`) |
+| Answers after rollback | **56/56** gold questions get the same top 5 |
+| Retire B; the active index is protected | pass |
+
+Transcript: `docs/knowledge/evidence/m2-004-reindex-rollback-drill.json`.
+
+Bit-identical rollback with a real model depends on two things (PR #88):
+- Vectors are quantised to float32 when embedded, and written and read back
+  at 9 significant digits, so a cached vector equals the stored one.
+- An upsert with unchanged content rewrites nothing.
+
+Before that change, a real-model rollback gave 51/56 identical answers.
 
 The same steps are also covered by `test_blue_green_build_activate_rollback_retire`,
 which runs on every CI build against both stores.
@@ -324,16 +450,20 @@ on the 72-file corpus from M2-002 (1,811 chunks), PostgreSQL 16 with pgvector
 These numbers measure the store and the index lifecycle. They say nothing
 about semantic quality, because the offline embedder has no semantics.
 
-### 9.2 On the DGX, with the real model (to run)
+### 9.2 On the DGX, with real models
 
-```
-NEXA_KNOWLEDGE_GATEWAY_TOKEN=... python v1/tools/knowledge_index_bench.py \
-    --corpus DIR --pg-dsn "$NEXA_KNOWLEDGE_PG_DSN" --compare-prefixes
-```
+The first dense-retrieval baselines for M2-005 and M2-008 are the run-2
+results in section 6.6:
+- the incumbent at EN recall@5 87.5;
+- the new baseline at 95.0.
 
-This adds the 40-question gold set with nomic-embed-text through the gateway,
-with prefixes and without. It confirms the prefix fix and gives the first
-dense-retrieval baseline for M2-005 and M2-008. Record the result here.
+The live v1 Knowledge Service, still on the incumbent, was verified after
+deployment with the following results:
+- 1,811 chunks, 0 missing, 0 stale, self-recall 0.94.
+- The same recall as the evaluation.
+- Query p50 70 ms, p95 84 ms.
+- 0 teacher-only results returned to students.
+- Every result cited.
 
 ## 10. Tests
 
@@ -382,11 +512,11 @@ PostgreSQL + pgvector when `NEXA_TEST_PG_DSN` is set. CI starts
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Candidate embedding models evaluated on NEXA curriculum benchmark | **Ready to run on the DGX, not yet run.** The harness, candidate list, gateway fragment and benchmark (English and Tok Pisin) are done and self-tested on the real corpus. Real models are only reachable on the DGX. | Section 6; `knowledge_embed_eval.py`; self-test report |
-| Selected baseline documented with rationale | **Provisional.** The rule was fixed before any results. The incumbent stays as baseline with rationale until the DGX run fills in 6.6. | Sections 6.3 and 6.6; `selection.py` with 8 tests |
+| Candidate embedding models evaluated on NEXA curriculum benchmark | **Met.** Ten candidates, plus a CPU-served variant of bge-m3, evaluated through the gateway on the DGX, on 1,811 chunks with 40 English and 16 Tok Pisin questions | Section 6.6; `m2-004-embedding-eval.json` and `.md` |
+| Selected baseline documented with rationale | **Met, pending governance sign-off.** bge-m3, CPU-served: S 94.5 against 77.5, P(better) 0.998, under rule 1.0.0 fixed before any results | Section 6.6 |
 | Embedding/index version stored with every vector collection/index | **Met** | Section 2; index record plus a comment on each vector table; tests |
 | Re-index procedure tested | **Met** | Section 8 steps 3a and 3b; tests on both stores in CI |
-| Rollback to previous index demonstrated | **Met.** 56/56 identical answers after rollback; re-run on the DGX with real models for production evidence | Section 8 step 7; drill transcript |
+| Rollback to previous index demonstrated | **Met, with real models.** On the DGX the drill passed 11/11 with nomic v1.5 and v2-moe: rollback bit-identical, 56/56 identical answers | Section 8.1; `m2-004-reindex-rollback-drill.json` |
 
 Requirements: model independence (sections 2 and 3), the recorded fields
 (section 2), controlled re-embedding and parallel index versions (sections 3

@@ -1,0 +1,198 @@
+{
+  "mode": "gateway",
+  "generated_at": "2026-11-10T06:42:30+00:00",
+  "model_a": "embed-cand-nomic-embed-text-v1-5",
+  "model_b": "embed-cand-nomic-embed-text-v2-moe",
+  "passed": true,
+  "steps": [
+    {
+      "step": 1,
+      "name": "build and activate index A",
+      "result": "pass",
+      "t_seconds": 31.03,
+      "index": "idx_20261110064021_072d2c08",
+      "fingerprint": "embed-cand-nomic-embed-text-v1-5|nomic-embed-text:v1.5|ollama|768|nomic-embed",
+      "tokenizer": "BERT WordPiece (bert-base-uncased)",
+      "validation": {
+        "missing": 0,
+        "stale": 0,
+        "self_recall_at_5": 0.9
+      }
+    },
+    {
+      "step": 2,
+      "name": "record top-5 answers from A",
+      "result": "pass",
+      "t_seconds": 34.82,
+      "questions": 56
+    },
+    {
+      "step": 3,
+      "name": "re-index one reprocessed source (new chunk config)",
+      "result": "pass",
+      "t_seconds": 38.18,
+      "source": "edunex:cm8870",
+      "old_chunks": 17,
+      "new_chunks": 23,
+      "validation_missing": 0,
+      "validation_stale": 0
+    },
+    {
+      "step": 4,
+      "name": "full re-index is idempotent and cached",
+      "result": "pass",
+      "t_seconds": 39.39,
+      "chunks": 1817,
+      "gateway_calls": 0,
+      "indexed_sources": 72,
+      "failed_sources": 0
+    },
+    {
+      "step": 5,
+      "name": "build index B in parallel while A keeps serving",
+      "result": "pass",
+      "t_seconds": 102.73,
+      "index": "idx_20261110064105_c43bf452",
+      "fingerprint": "embed-cand-nomic-embed-text-v2-moe|nomic-embed-text-v2-moe|ollama|768|nomic-embed",
+      "queries_served_by_A_during_build": 731,
+      "query_errors": 0,
+      "build_stats": {
+        "indexed_sources": 72,
+        "failed_sources": 0,
+        "gateway_calls": 105,
+        "cache_hits": 0,
+        "seconds": 50.9
+      }
+    },
+    {
+      "step": 6,
+      "name": "activate B; queries now answered by B",
+      "result": "pass",
+      "t_seconds": 119.11,
+      "active": "idx_20261110064105_c43bf452",
+      "previous": "idx_20261110064021_072d2c08"
+    },
+    {
+      "step": 7,
+      "name": "collection A refuses vectors of another model's dimension",
+      "result": "pass",
+      "t_seconds": 119.11,
+      "note": "models share a dimension; the fingerprint check in the next step still applies"
+    },
+    {
+      "step": 8,
+      "name": "a query embedded with model B is refused by index A",
+      "result": "pass",
+      "t_seconds": 119.25,
+      "error": "embedding model changed: index built with embed-cand-nomic-embed-text-v1-5|nomic-embed-text:v1.5|ollama|768|nomic-embed, gateway now serves embed-cand-nomic-emb"
+    },
+    {
+      "step": 9,
+      "name": "roll back to A; index contents bit-identical to before the switch",
+      "result": "pass",
+      "t_seconds": 128.52,
+      "active": "idx_20261110064021_072d2c08",
+      "before": {
+        "chunks": 1817,
+        "sha256": "dcd92a9455e9b5b1885062f923827672f61bef514be9bb40960d471c84d7f001"
+      },
+      "after": {
+        "chunks": 1817,
+        "sha256": "dcd92a9455e9b5b1885062f923827672f61bef514be9bb40960d471c84d7f001"
+      }
+    },
+    {
+      "step": 10,
+      "name": "after rollback, every gold question gets the same top-5 as before the switch",
+      "result": "pass",
+      "t_seconds": 128.52,
+      "identical_answers": "56/56",
+      "changed_chunks_in_step_3": 23
+    },
+    {
+      "step": 11,
+      "name": "retire B; the active index cannot be retired",
+      "result": "pass",
+      "t_seconds": 128.54,
+      "retired": "idx_20261110064105_c43bf452"
+    }
+  ],
+  "indexes": [
+    {
+      "index_id": "idx_20261110064021_072d2c08",
+      "logical": "embed-cand-nomic-embed-text-v1-5",
+      "version": "nomic-embed-text:v1.5",
+      "runtime": "ollama",
+      "dim": 768,
+      "prefix_scheme": "nomic-embed",
+      "tokenizer": "BERT WordPiece (bert-base-uncased)",
+      "max_input_tokens": 8192,
+      "normalization": "l2",
+      "distance": "cosine",
+      "status": "active",
+      "created_at": "2026-11-10T06:40:21+00:00",
+      "activated_at": "2026-11-10T06:42:25+00:00",
+      "previous_index_id": "idx_20261110064105_c43bf452",
+      "stats": {
+        "seconds": 25.1,
+        "cache_hits": 0,
+        "gateway_calls": 105,
+        "failed_sources": 0,
+        "indexed_sources": 72
+      },
+      "validation": {
+        "stale": 0,
+        "passed": true,
+        "missing": 0,
+        "sampled": 50,
+        "threshold": 0.8,
+        "checked_at": "2026-11-10T06:42:25+00:00",
+        "stale_sample": [],
+        "stored_chunks": 1817,
+        "missing_sample": [],
+        "expected_chunks": 1817,
+        "self_recall_at_5": 0.9
+      },
+      "note": "drill: index A",
+      "fingerprint": "embed-cand-nomic-embed-text-v1-5|nomic-embed-text:v1.5|ollama|768|nomic-embed"
+    },
+    {
+      "index_id": "idx_20261110064105_c43bf452",
+      "logical": "embed-cand-nomic-embed-text-v2-moe",
+      "version": "nomic-embed-text-v2-moe",
+      "runtime": "ollama",
+      "dim": 768,
+      "prefix_scheme": "nomic-embed",
+      "tokenizer": "XLM-RoBERTa SentencePiece",
+      "max_input_tokens": 512,
+      "normalization": "l2",
+      "distance": "cosine",
+      "status": "retired",
+      "created_at": "2026-11-10T06:41:05+00:00",
+      "activated_at": "2026-11-10T06:42:12+00:00",
+      "previous_index_id": "idx_20261110064021_072d2c08",
+      "stats": {
+        "seconds": 50.9,
+        "cache_hits": 0,
+        "gateway_calls": 105,
+        "failed_sources": 0,
+        "indexed_sources": 72
+      },
+      "validation": {
+        "stale": 0,
+        "passed": true,
+        "missing": 0,
+        "sampled": 50,
+        "threshold": 0.8,
+        "checked_at": "2026-11-10T06:42:12+00:00",
+        "stale_sample": [],
+        "stored_chunks": 1817,
+        "missing_sample": [],
+        "expected_chunks": 1817,
+        "self_recall_at_5": 0.96
+      },
+      "note": "drill: index B",
+      "fingerprint": "embed-cand-nomic-embed-text-v2-moe|nomic-embed-text-v2-moe|ollama|768|nomic-embed"
+    }
+  ]
+}
