@@ -30,6 +30,10 @@ class ModelEntry:
     capability: str       # chat or embedding
     default_temperature: float = 0.4
     aliases: tuple = ()   # other names that resolve to this entry
+    # Runtime options sent with every request for this model, e.g.
+    # {"num_gpu": 0} to run an Ollama model on the CPU. Results can differ
+    # between devices, so give such an entry its own version string.
+    options: tuple = ()   # (key, value) pairs; a tuple keeps the entry hashable
 
 
 # Defaults mirror the verified v0 models (v0 Stack Baseline section 3), now
@@ -71,6 +75,7 @@ def parse_models(raw: dict) -> list[ModelEntry]:
                 capability=item["capability"],
                 default_temperature=float(item.get("default_temperature", 0.4)),
                 aliases=tuple(item.get("aliases", ())),
+                options=tuple(sorted((item.get("options") or {}).items())),
             )
         except KeyError as exc:
             raise RegistryError(f"models[{i}] is missing field {exc}") from exc

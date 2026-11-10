@@ -89,7 +89,8 @@ class OpenAICompatBackend(Backend):
                         yield {"delta": delta, "usage": {}, "done": False}
         yield {"delta": "", "usage": usage, "done": True}
 
-    async def embeddings(self, model, inputs):
+    async def embeddings(self, model, inputs, options=None):
+        # Runtime options are an Ollama concept; OpenAI-compatible servers ignore them.
         self._check()
 
         async def _call():

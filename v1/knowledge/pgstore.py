@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import struct
 from typing import Any, Optional
 
 from . import config
@@ -36,13 +37,22 @@ def _literal(text: str) -> str:
 
 
 def _vec(v: list[float]) -> str:
-    return "[" + ",".join(f"{x:.8g}" for x in v) + "]"
+    # 9 significant digits round-trip any float32 exactly (8 do not).
+    return "[" + ",".join(f"{x:.9g}" for x in v) + "]"
+
+
+def _f32(v) -> list[float]:
+    """Exact float32 values as Python floats. PostgreSQL prints a real in its
+    shortest form, which Python reads back as a nearby but different double;
+    re-quantising makes every read equal, bit for bit, to what was written."""
+    v = [float(x) for x in v]
+    return list(struct.unpack(f"{len(v)}f", struct.pack(f"{len(v)}f", *v)))
 
 
 def _parse_vec(s: Any) -> list[float]:
     if isinstance(s, list):
-        return [float(x) for x in s]
-    return [float(x) for x in str(s).strip("[]").split(",") if x]
+        return _f32(s)
+    return _f32(x for x in str(s).strip("[]").split(",") if x)
 
 
 class PgVectorStore(VectorStore):
@@ -325,7 +335,7 @@ class PgVectorStore(VectorStore):
             rows = await (await conn.execute(
                 f"SELECT text_key, embedding FROM {self.schema}.embedding_cache "
                 f"WHERE fingerprint = %s AND text_key = ANY(%s)", (fingerprint, keys))).fetchall()
-        return {r[0]: [float(x) for x in r[1]] for r in rows}
+        return {r[0]: _f32(r[1]) for r in rows}
 
     async def put_many(self, fingerprint: str, items: dict[str, list[float]]) -> None:
         if not items:

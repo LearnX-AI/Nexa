@@ -257,7 +257,7 @@ async def embeddings(
     with Timer() as timer:
         try:
             vectors = await guarded(
-                entry.runtime, lambda: backend.embeddings(entry.backend_model, inputs)
+                entry.runtime, lambda: backend.embeddings(entry.backend_model, inputs, dict(entry.options))
             )
         except Exception as exc:
             _record(entry, "error", timer.ms)

@@ -64,6 +64,18 @@ class Transcript:
         return ok
 
 
+async def snapshot(store, index_id):
+    """Fingerprint of an index's exact contents: every chunk id and its vector."""
+    import hashlib
+    ids = sorted(await store.chunk_ids(index_id))
+    vecs = await store.get_vectors(index_id, ids)
+    h = hashlib.sha256()
+    for cid in ids:
+        h.update(cid.encode())
+        h.update(",".join(f"{x:.9g}" for x in vecs[cid]).encode())
+    return {"chunks": len(ids), "sha256": h.hexdigest()}
+
+
 async def answers(mgr, gold, who):
     out = {}
     for q in gold:
@@ -129,6 +141,7 @@ async def main_async(args):
                 and full["failed_sources"] == 0, chunks=n_after, gateway_calls=emb_a.calls - calls0, **full)
         changed = {c["chunk_id"] for c in reg.chunks_of(src["version_id"])}
         before, _ = await answers(mgr, gold, who)  # baseline after the legitimate chunk change
+        snap_before = await snapshot(store, a.index_id)
         # 4 parallel build of B while A serves
         b = await mgr.start_build(args.model_b, note="drill: index B")
         served, errors = 0, 0
@@ -176,9 +189,13 @@ async def main_async(args):
         # 6 rollback
         await mgr.rollback()
         after_rb, rec = await answers(mgr, gold, who)
+        snap_after = await snapshot(store, a.index_id)
+        tr.step("roll back to A; index contents bit-identical to before the switch",
+                rec.index_id == a.index_id and snap_after == snap_before,
+                active=rec.index_id, before=snap_before, after=snap_after)
         same = sum(after_rb[q] == before[q] for q in before)
-        tr.step("roll back to A; answers identical to before the switch", rec.index_id == a.index_id
-                and same == len(before), active=rec.index_id, identical_answers=f"{same}/{len(before)}",
+        tr.step("after rollback, every gold question gets the same top-5 as before the switch",
+                same == len(before), identical_answers=f"{same}/{len(before)}",
                 changed_chunks_in_step_3=len(changed))
         # 7 retire
         r = await mgr.retire(b.index_id)

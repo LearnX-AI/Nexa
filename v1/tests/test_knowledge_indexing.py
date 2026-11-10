@@ -90,7 +90,7 @@ def test_embedder_applies_prefixes_normalises_and_caches(gw):
     vecs, info = run(emb.embed_documents(["Helicase unwinds DNA.", "Primase makes primers."]))
     assert info.fingerprint == "nexa-embed-default|nomic-embed-text|ollama|128|nomic-embed"
     assert gw.texts[-2:] == ["search_document: Helicase unwinds DNA.", "search_document: Primase makes primers."]
-    assert all(abs(math.sqrt(sum(x * x for x in v)) - 1) < 1e-9 for v in vecs)
+    assert all(abs(math.sqrt(sum(x * x for x in v)) - 1) < 1e-6 for v in vecs)  # float32
     calls = gw.calls
     again, _ = run(emb.embed_documents(["Helicase unwinds DNA."]))
     assert gw.calls == calls and again[0] == vecs[0] and emb.cache_hits == 1  # served from cache
@@ -485,3 +485,31 @@ def test_m1_raw_ingest_still_works(svc, make_token, auth):
 
 def test_bow_vector_is_deterministic():
     assert bow_vector("Helicase unwinds DNA") == bow_vector("helicase UNWINDS dna")
+
+
+@pytest.mark.skipif(not PG_DSN, reason="NEXA_TEST_PG_DSN not set")
+def test_cached_vector_rewrites_nothing():
+    """A vector served from the embedding cache must be bit-identical to the
+    stored one, or every cache-served re-index rewrites the index (M2-004 DGX drill)."""
+    import random
+    from v1.knowledge.embeddings import _normalise
+
+    async def body(s):
+        await s.create_index(_rec(dim=64))
+        rnd = random.Random(5)
+        vecs = [_normalise([rnd.gauss(0, 1) for _ in range(64)], 64) for _ in range(50)]
+        await s.upsert("idx_test_a", [_item(f"c{i}", v) for i, v in enumerate(vecs)])
+        await s.put_many("fp", {f"k{i}": v for i, v in enumerate(vecs)})
+        cached = await s.get_many("fp", [f"k{i}" for i in range(50)])
+        assert all(cached[f"k{i}"] == vecs[i] for i in range(50))  # exact, not approximate
+
+        async def xmins():
+            async with s._conn() as conn:
+                return dict(await (await conn.execute(
+                    f"SELECT chunk_id, xmin::text FROM {s.schema}.vec_idx_test_a")).fetchall())
+        before = await xmins()
+        await s.upsert("idx_test_a", [_item(f"c{i}", cached[f"k{i}"]) for i in range(50)])
+        assert await xmins() == before
+        stored = await s.get_vectors("idx_test_a", ["c0"])
+        assert stored["c0"] == vecs[0]
+    with_store("pgvector", body)

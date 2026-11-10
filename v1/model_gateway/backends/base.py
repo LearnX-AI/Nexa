@@ -159,6 +159,7 @@ class Backend:
         result = await self.chat(model, messages, temperature, max_tokens)
         yield {"delta": result["content"], "usage": result.get("usage", {}), "done": True}
 
-    async def embeddings(self, model: str, inputs: list[str]) -> list[list[float]]:
+    async def embeddings(self, model: str, inputs: list[str],
+                         options: Optional[dict] = None) -> list[list[float]]:
         """Return one vector per input, in order."""
         raise NotImplementedError
