@@ -40,6 +40,10 @@ class IndexRecord:
     runtime: str
     dim: int
     prefix_scheme: str
+    tokenizer: str = "unknown"
+    max_input_tokens: Optional[int] = None
+    normalization: str = "l2"
+    distance: str = "cosine"
     status: str = "building"
     created_at: str = field(default_factory=_now)
     activated_at: Optional[str] = None
