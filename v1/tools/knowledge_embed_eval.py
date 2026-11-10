@@ -109,9 +109,22 @@ async def evaluate(mgr: IndexManager, store: PgVectorStore, cand: dict, gold: li
     logical = cand["logical"]
     res = {"logical": logical, "ollama_tag": cand["ollama_tag"], "role": cand["role"]}
     t0 = time.time()
-    try:
-        rec = await mgr.start_build(logical, note=f"M2-004 evaluation: {cand['ollama_tag']}")
-    except Exception as exc:  # model not pulled, not registered, gateway down
+    rec, last_exc = None, None
+    for attempt in range(3):
+        try:
+            rec = await mgr.start_build(logical, note=f"M2-004 evaluation: {cand['ollama_tag']}")
+            break
+        except Exception as exc:  # model not pulled, not registered, gateway down
+            last_exc = exc
+            # 503: the gateway's breaker for the runtime is open after an earlier
+            # model's failures. Wait out its reset window instead of failing every
+            # model that follows.
+            if "503" not in str(exc) or attempt == 2:
+                break
+            print("  gateway breaker open; waiting 35 s", flush=True)
+            await asyncio.sleep(35)
+    if rec is None:
+        exc = last_exc
         res.update(index_status="unavailable", error=str(exc)[:300], en_ranks=[], tpi_ranks=[], dim=0,
                    card=None, validation_passed=False, truncated_pct=100.0)
         return res
