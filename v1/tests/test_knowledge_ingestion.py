@@ -289,3 +289,15 @@ def test_docx_text_box_fallback_not_doubled():
     doc = extractors.extract(DOCX, buf.getvalue())
     texts = [b.text for pg in doc.pages for b in pg.blocks]
     assert texts == ["Figure 3: Locating a gene"]
+
+
+def test_resubmitted_job_has_the_same_shape_as_a_new_one():
+    """A re-submit returns the existing job; it must be the decoded job, not the
+    raw row (the corpus tool failed with KeyError 'warnings' on the DGX)."""
+    pipe = Pipeline()
+    data = make_docx()
+    first = pipe.process(pipe.submit("l.docx", data, lesson_manifest())[0]["job_id"])
+    again, created = pipe.submit("l.docx", data, lesson_manifest())
+    assert not created and again == pipe.registry.get_job(first["job_id"])
+    assert isinstance(again["warnings"], list) and isinstance(again["retryable"], bool)
+    assert "warnings_json" not in again and "manifest_json" not in again

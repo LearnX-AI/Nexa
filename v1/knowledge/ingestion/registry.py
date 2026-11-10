@@ -131,7 +131,10 @@ class Registry:
     # ---- jobs ----
 
     def find_job_by_key(self, key: str) -> Optional[dict[str, Any]]:
-        return self._one("SELECT * FROM jobs WHERE idempotency_key=?", (key,))
+        # Same shape as get_job (decoded warnings and manifest, boolean
+        # retryable): callers cannot tell a new job from an existing one.
+        row = self._one("SELECT job_id FROM jobs WHERE idempotency_key=?", (key,))
+        return self.get_job(row["job_id"]) if row else None
 
     def create_job(self, key: str, checksum: str, file_name: str, mime: Optional[str],
                    manifest: dict[str, Any], principal: Optional[str]) -> dict[str, Any]:
