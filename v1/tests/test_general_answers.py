@@ -87,7 +87,8 @@ def test_off_curriculum_question_gets_a_labelled_general_answer(svc):
     # never passed off as curriculum: no curriculum citations, invented markers removed and reported
     assert a["citations"] == [] and "[S1]" not in a["answer"] and "[3]" not in a["answer"]
     assert set(a["general"]["fabricated_markers"]) == {"S1", "3"}
-    assert "PNG curriculum" in state["general_calls"][0][0]["content"]  # told not to claim curriculum
+    sysmsg = state["general_calls"][0][0]["content"]
+    assert "PNG curriculum" in sysmsg and "kina" in sysmsg  # PNG-specific, and told not to claim curriculum
     assert a["schema_version"] == "1.1.0"
 
 

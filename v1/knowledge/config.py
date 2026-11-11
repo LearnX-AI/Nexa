@@ -118,6 +118,10 @@ ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
 ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
+# Answer "what are the topics in Grade 11 Biology?" from the stored syllabus
+# structure (outline.py) instead of a few searched passages.
+CURRICULUM_OUTLINE = os.environ.get("NEXA_CURRICULUM_OUTLINE", "true").lower() == "true"
+
 # General-knowledge answers when the curriculum has no evidence (general.py):
 # off (strict refusal), llm (the general model) or web (web search, then the
 # model over the results, falling back to llm). Always labelled as not from the

@@ -103,6 +103,12 @@ The general model is told never to claim the answer comes from the PNG curriculu
 
 A request can always opt out with `"general": false`, but `"general": true` cannot turn general answers on where the deployment has them off. Every answer's audit event records `source_kind`. If the general model fails, the answer is the strict refusal, never an unlabelled answer. The M2-008 fixture suite checks all of this (items x18 to x20).
 
+### 3.2 PNG-specific answers
+
+**Course outline questions** ("What are the topics in Grade 11 Biology?", "What units are covered in Grade 12 Physics Term 2?", "What will we learn in Grade 12 Chemistry?") are answered from the structure of the official PNG syllabi NEXA holds (`v1/knowledge/outline.py`), not from a few searched passages, which for such questions are cover pages and forewords. For each syllabus of that subject, grade and term the asker may see, NEXA lists every Thema and module in syllabus order with page references and the syllabus's own content overview, and the answer cites each term's syllabus. Terms NEXA does not hold are stated in the answer ("NEXA holds the Grade 11 Biology syllabus for Terms 2, 3; Term 1 not yet available in NEXA."), so a partial outline never reads as the whole course. Switch: `NEXA_CURRICULUM_OUTLINE` (default `true`).
+
+**General answers** (section 3.1) are told to be specific to Papua New Guinea wherever the topic allows: PNG examples, places, crops, animals, industries and health issues, kina and metric units, and links to students' daily life, with Tok Pisin words in brackets where they help. They must not invent PNG statistics, names or events, and must say when a question about the PNG syllabus is one NEXA does not hold yet.
+
 ## 4. Evidence thresholds
 
 Cosine similarity scales differ between embedding models, so thresholds are kept per prefix scheme in `config.EVIDENCE_THRESHOLDS`. They can be overridden with `NEXA_EVIDENCE_MIN` and `NEXA_EVIDENCE_STRONG`.
