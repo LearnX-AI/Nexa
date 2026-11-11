@@ -8,7 +8,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_nexa_integration';
-$plugin->version   = 2026111000;
+$plugin->version   = 2026111200;
 $plugin->requires  = 2022041900; // Moodle 4.0+.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '2.0';
+$plugin->release   = '2.0.2';

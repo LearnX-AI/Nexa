@@ -181,6 +181,35 @@ set -a; source <(sudo cat /etc/nexa/identity.env); set +a
 /home/admin/Nexa/venv-v1/bin/python v1/tools/lms_sync_demo.py --base http://127.0.0.1:8103 --out docs/knowledge/evidence
 ```
 
+### 8.1 With the real EduNex Moodle (2026-11-11)
+
+The plugin ran on `core.edunex.edu.pg`: Moodle 5.2, plugin 2.0.1 and then 2.0.2.
+
+**Network path.** Moodle → jump box `172.31.11.169:8443` (TCP relay, same AWS VPC) → Tailscale → `https://spark-e531.tail564c6a.ts.net` (Tailscale serve) → Knowledge Service. The opened ports:
+- an outbound rule on the Moodle security group, port 8443 to the jump box only;
+- an inbound rule on the jump box, from the Moodle server only;
+- Moodle's `curlsecurityblockedhosts`, narrowed to allow that single address.
+
+**First lesson.** One tagged lesson (`cm564`, a `presentationview` lesson with a 5.6 MB DOCX) was uploaded by hash, applied and searchable. The bytes matched a file already in the corpus, so the item points at that version (section 3).
+
+**Full sync of Biology Grade 12 and every course with a grade:**
+1. The nightly scan queued 473 items: `presentationview` lessons, files and pages.
+2. Moodle's cron sent them: 945 events with 0 errors.
+3. NEXA applied 956 events with 0 failures.
+4. After the course categories were auto-approved: **473 items active, 0 pending**.
+
+**Live check** (`v1/tools/nexa_live_check.py`, `evidence/nexa-live-check-20261111.md`): **20/20 PASS.**
+- **Retrieval:** 10/10 Biology Grade 12 questions found the right lesson at rank 1.
+- **Access:** 0 cross-school and 0 teacher-only leaks.
+- **Answers:** grounded answers cite the EduNex lecture slides, lesson notes and teacher notes, and the off-curriculum question gets the no-evidence fallback.
+- **Latency:** p95 103 ms.
+
+**Found and fixed on the way:**
+- **Plugin 2.0.1:** EduNex keeps most lessons in its own `presentationview` activity, which 2.0 skipped.
+- **Plugin 2.0.2:** titles reached NEXA HTML-escaped (`&amp;`).
+
+**Then:** scope switched from the test school to national, with a one-year sync token holding the `lms_national` claim.
+
 ## 9. Acceptance criteria (NEXA-M2-007)
 
 | Criterion | Status | Evidence |
@@ -189,7 +218,7 @@ set -a; source <(sudo cat /etc/nexa/identity.env); set +a
 | Incremental update and deletion/supersession scenarios tested | **Met** | `test_changed_superseded_pending_hidden_and_deleted`, `test_item_superseding_another_item`, `test_stale_and_duplicate_events`, `test_reconcile_*`; demonstration steps 5 to 10 |
 | Access/approval rules enforced | **Met** | `test_token_is_bound_to_its_site_and_school`, `test_approved_lms_page_becomes_retrievable_for_its_school_only`, `test_approval_revoked_with_same_content_removes_it`; the M2-005 filter tests |
 | Failed sync is observable and retryable | **Met** | `test_gateway_outage_fails_retryably_then_recovers`, `test_file_content_by_hash_and_missing_content_retry`; status and events endpoints; plugin outbox with backoff |
-| End-to-end demonstration from approved LMS content to retrievable NEXA knowledge | **Met.** 10/10 against the live Knowledge Service on the DGX, and 10/10 locally. | Section 8; `evidence/m2-007-lms-sync-demo-live.md`; `test_moodle_contract.py` (the plugin's own PHP output applied through the endpoint) |
+| End-to-end demonstration from approved LMS content to retrievable NEXA knowledge | **Met.** With the real EduNex Moodle: 473 lessons synced and active, live check 20/20 (section 8.1). Also the demonstration, 10/10 live and locally. | Section 8; `evidence/m2-007-lms-sync-demo-live.md`; `test_moodle_contract.py` (the plugin's own PHP output applied through the endpoint) |
 
 ## 10. Limitations
 

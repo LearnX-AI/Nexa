@@ -2,8 +2,10 @@
 // This file is part of the local_nexa_integration plugin.
 //
 // Reads what NEXA needs about one course activity from Moodle and turns it
-// into a sync event with mapper. Supported activities: page, label, book and
-// resource (PDF, DOCX, PPTX). Private and user files are never read.
+// into a sync event with mapper. Supported activities: page, label, book,
+// resource (PDF, DOCX, PPTX) and, since 2.0.1, presentationview (EduNex's
+// lesson presentation activity, which stores its file the same way as
+// resource). Private and user files are never read.
 
 namespace local_nexa_integration\sync;
 
@@ -12,7 +14,7 @@ defined('MOODLE_INTERNAL') || die();
 class collector {
 
     /** Activity types NEXA can learn from. */
-    const KINDS = ['page', 'label', 'book', 'resource'];
+    const KINDS = ['page', 'label', 'book', 'resource', 'presentationview'];
 
     /** File types NEXA extracts text from. */
     const FILE_TYPES = ['pdf', 'docx', 'pptx'];
@@ -61,15 +63,28 @@ class collector {
         return [
             'course' => $course,
             'cm' => $cm,
-            'curriculum' => mapper::curriculum(format_string($course->fullname), (string) $course->shortname,
+            'curriculum' => mapper::curriculum(self::plain($course->fullname), (string) $course->shortname,
                 $fsubject, $fgrade) + ['language' => (string) ($c->language ?: 'en')],
             'visibility' => mapper::visibility(['coursevisible' => $course->visible, 'visible' => $cm->visible,
                 'visibleoncoursepage' => $cm->visibleoncoursepage, 'availability' => $cm->availability]),
             'approval' => mapper::approval(array_values($tags), (string) ($c->approval_tag ?: 'nexa-approved'),
                 (int) $course->category, $approvedcats),
-            'title' => format_string($cm->name, true, ['context' => \context_module::instance($cm->id)]),
+            'title' => self::plain($cm->name, \context_module::instance($cm->id)),
             'url' => (new \moodle_url('/mod/' . $cm->modname . '/view.php', ['id' => $cm->id]))->out(false),
         ];
+    }
+
+    /**
+     * A name as plain text: filters applied (multi-language and the like), but
+     * not escaped for HTML, so "Transcription & Translation" stays as written
+     * instead of becoming "Transcription &amp; Translation".
+     */
+    public static function plain(string $text, ?\context $context = null): string {
+        $opts = ['escape' => false];
+        if ($context) {
+            $opts['context'] = $context;
+        }
+        return html_entity_decode(strip_tags(format_string($text, true, $opts)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /** Values of the optional course custom fields nexa_subject and nexa_grade. */
@@ -119,8 +134,9 @@ class collector {
                 }
                 return $body === '' ? null : ['revision' => (string) $rev, 'body' => $body, 'format' => 'html'];
             case 'resource':
+            case 'presentationview':
                 $fs = get_file_storage();
-                $files = $fs->get_area_files(\context_module::instance($cm->id)->id, 'mod_resource', 'content', 0,
+                $files = $fs->get_area_files(\context_module::instance($cm->id)->id, 'mod_' . $cm->modname, 'content', 0,
                     'sortorder DESC, id ASC', false);
                 foreach ($files as $f) {
                     $ext = strtolower(pathinfo($f->get_filename(), PATHINFO_EXTENSION));
@@ -173,7 +189,7 @@ class collector {
         $scope = get_config('local_nexa_integration', 'scope') === 'national' ? 'national' : 'school';
         $event = mapper::upsert([
             'event_id' => mapper::event_id(), 'occurred_at' => $occurred,
-            'course_id' => (string) $courseid, 'course_name' => format_string($facts['course']->fullname),
+            'course_id' => (string) $courseid, 'course_name' => self::plain($facts['course']->fullname),
             'item_id' => self::item_id($cmid), 'kind' => $facts['cm']->modname, 'revision' => $content['revision'],
             'title' => $facts['title'], 'url' => $facts['url'], 'visibility' => $facts['visibility'],
             'approval' => $facts['approval'], 'scope' => $scope, 'curriculum' => $facts['curriculum'],
