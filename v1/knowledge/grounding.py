@@ -13,8 +13,10 @@ docs/knowledge/NEXA-M2-006-provenance-citations-grounding.md:
 2. Evidence. Before any generation the retrieved passages are graded strong,
    weak or none, and checked for an authority conflict (NEXA-M2-005).
 3. Behaviour by evidence:
-   - none: no model call. A fixed fallback says the approved material does not
-     cover the question. NEXA does not answer from general knowledge here.
+   - none: no curriculum answer. A fixed fallback says the approved material
+     does not cover the question, or, where the deployment allows it
+     (general.py), a general-knowledge answer with status 'general', a label
+     saying it is not from the curriculum, and no curriculum citations.
    - weak: the model may answer only from the passages and the answer is
      marked low confidence, with a fixed caution line.
    - conflict: authoritative passages lead the context and lower-authority
@@ -36,12 +38,13 @@ from typing import Any, Literal, Optional
 import httpx
 from pydantic import BaseModel, Field
 
-from . import config
+from . import config, general
+from .general import GeneralInfo
 from .retrieval import RetrievalResult, _terms
 
-CITATION_SCHEMA_VERSION = "1.0.0"
+CITATION_SCHEMA_VERSION = "1.1.0"
 
-Status = Literal["grounded", "grounded_weak", "no_evidence", "ungrounded", "generation_unavailable"]
+Status = Literal["grounded", "grounded_weak", "no_evidence", "ungrounded", "generation_unavailable", "general"]
 
 
 class Provenance(BaseModel):
@@ -107,6 +110,10 @@ class GroundedAnswer(BaseModel):
     evidence: Evidence
     integrity: Integrity = Field(default_factory=Integrity)
     model: Optional[str] = None
+    source_kind: Literal["curriculum", "general_knowledge", "web", "none"] = Field(
+        "curriculum", description="Where the answer text comes from. Only 'curriculum' is grounded.")
+    general: Optional[GeneralInfo] = Field(
+        None, description="Present when status is 'general': the label, the model and any web sources")
 
 
 def citation_json_schema() -> dict[str, Any]:
@@ -331,12 +338,29 @@ def _citations(used: list[dict[str, Any]], result: RetrievalResult, integ: Integ
     return out
 
 
+async def _no_evidence(question: str, ev: Evidence, audience: str, trace_id: Optional[str], allow_general: bool,
+                       reason: str, **kw: Any) -> GroundedAnswer:
+    """The curriculum has no answer: a labelled general answer when allowed,
+    else the fixed refusal. A failed general answer falls back to the refusal."""
+    notes = list(kw.pop("notes", []))
+    if allow_general:
+        try:
+            text, info = await general.general_answer(question, audience, trace_id, reason)
+            return GroundedAnswer(status="general", answer=text, confidence="low", evidence=ev, model=info.model,
+                                  source_kind=info.source_kind, general=info,
+                                  notes=notes + ["not from the approved curriculum materials: " + reason])
+        except Exception as exc:  # noqa: BLE001 - the refusal is always available
+            notes.append(f"general answer unavailable ({type(exc).__name__})")
+    return GroundedAnswer(status="no_evidence", answer=FALLBACK_NO_EVIDENCE, confidence="none", evidence=ev,
+                          source_kind="none", notes=notes, **kw)
+
+
 async def answer(question: str, result: RetrievalResult, audience: str = "student",
-                 trace_id: Optional[str] = None) -> GroundedAnswer:
+                 trace_id: Optional[str] = None, allow_general: bool = False) -> GroundedAnswer:
     ev = assess(result)
     if ev.level == "none":
-        return GroundedAnswer(status="no_evidence", answer=FALLBACK_NO_EVIDENCE, confidence="none",
-                              evidence=ev, notes=["no model was called"])
+        return await _no_evidence(question, ev, audience, trace_id, allow_general,
+                                  "no approved passage matched the question", notes=["no curriculum model call"])
     context, used = build_context(result)
     msgs = [
         {"role": "system", "content": SYSTEM_PROMPT + " " + AUDIENCE.get(audience, AUDIENCE["student"])},
@@ -350,8 +374,9 @@ async def answer(question: str, result: RetrievalResult, audience: str = "studen
                               evidence=ev, citations=cites)
     if "INSUFFICIENT_EVIDENCE" in raw.upper().replace(" ", "_"):
         ev.reasons.append("the model found that the passages do not answer the question")
-        return GroundedAnswer(status="no_evidence", answer=FALLBACK_NO_EVIDENCE, confidence="none", evidence=ev,
-                              model=model, citations=_citations(used, result, Integrity(), {}))
+        return await _no_evidence(question, ev, audience, trace_id, allow_general,
+                                  "the curriculum passages found do not answer the question", model=model,
+                                  citations=_citations(used, result, Integrity(), {}))
     text, integ, support = validate(raw, used)
     cites = _citations(used, result, integ, support)
     if not integ.valid_markers:

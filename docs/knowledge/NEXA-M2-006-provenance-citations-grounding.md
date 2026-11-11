@@ -69,13 +69,39 @@ Evidence is graded before any model call, from the top passage's similarity and 
 
 | Situation | Behaviour |
 |---|---|
-| **No evidence**: no passage after filters, or similarity below `min` and word coverage below 60% | **No model call.** Status `no_evidence`, `confidence: none`, and a fixed message: *"I could not find this in the approved curriculum materials available to you, so I will not guess..."* NEXA does not answer from general knowledge here. |
+| **No evidence**: no passage after filters, or similarity below `min` and word coverage below 60% | **No model call.** Status `no_evidence`, `confidence: none`, and a fixed message: *"I could not find this in the approved curriculum materials available to you, so I will not guess..."*, or, where general answers are on, a **labelled general answer** (section 3.1). |
 | **Weak evidence**: between `min` and `strong` | The model answers only from the passages. Status `grounded_weak`, `confidence: low`, and the fixed note *"The approved material only partly covers this question..."* |
 | **Conflicting sources**: M2-005 arbitration moved an official passage above a lower-authority one on the same point | The context labels each source authoritative or supplementary, and the model is told supplementary sources must not contradict authoritative ones. The answer carries a note that it follows the official curriculum, and `evidence.conflict` is true. |
-| **The model finds the passages do not answer** | The model replies `INSUFFICIENT_EVIDENCE`. Status `no_evidence`, and the passages are still listed. |
+| **The model finds the passages do not answer** | The model replies `INSUFFICIENT_EVIDENCE`. Status `no_evidence`, and the passages are still listed; or, where general answers are on, a labelled general answer (section 3.1). |
 | **The model cites nothing valid** | The answer is **withheld**. Status `ungrounded`, a fixed message, and the passages are listed so the learner can read them. |
 | **Gateway down** | Status `generation_unavailable`, and the passages are listed. |
 | **Strong evidence** | Status `grounded`, `confidence: high`, or `low` if any cited sentence is weakly supported. |
+
+### 3.1 General answers when the curriculum has nothing (schema 1.1.0)
+
+Strict refusal helps nobody when a student asks something reasonable that the corpus does not cover. So NEXA can answer from general knowledge or the web. Such an answer is never passed off as curriculum:
+
+| | Curriculum answer | General answer |
+|---|---|---|
+| `status` | `grounded` / `grounded_weak` | `general` |
+| `source_kind` | `curriculum` | `general_knowledge` or `web` |
+| Answer text | As generated, with [S] markers | Starts with a fixed label: *"Not from your approved curriculum materials: …"* |
+| Citations | Curriculum passages | None. A web answer lists its pages in `general.web_sources` and cites them as [W1]..[Wn] |
+| Invented markers | Removed, reported in `integrity` | [S..], numbered and unknown [W..] markers removed, reported in `general.fabricated_markers` |
+| `confidence` | `high` / `low` | Always `low` |
+
+The general model is told never to claim the answer comes from the PNG curriculum, and never to invent syllabus codes, outcomes or page numbers.
+
+**Settings (Knowledge Service environment):**
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `NEXA_GENERAL_ANSWERS` | `llm` | `off` = strict refusal; `llm` = the general model; `web` = web search, then the model over the results, falling back to `llm` |
+| `NEXA_GENERAL_ROLES` | `*` | Comma-separated roles that may get general answers (for example `teacher,school_admin`) |
+| `NEXA_GENERAL_MODEL` | `nexa-general` | Gateway model; OpenAI gpt-4o in the default registry (needs `OPENAI_API_KEY` in the Model Gateway). Falls back to `NEXA_ANSWER_MODEL` (local Llama) when it fails |
+| `NEXA_WEB_SEARCH_PROVIDER` | `wikipedia` | `wikipedia` (no key), `tavily` (`NEXA_WEB_SEARCH_API_KEY`) or `searxng` (`NEXA_WEB_SEARCH_URL`) |
+
+A request can always opt out with `"general": false`, but `"general": true` cannot turn general answers on where the deployment has them off. Every answer's audit event records `source_kind`. If the general model fails, the answer is the strict refusal, never an unlabelled answer. The M2-008 fixture suite checks all of this (items x18 to x20).
 
 ## 4. Evidence thresholds
 

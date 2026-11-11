@@ -10,6 +10,8 @@ os.environ.setdefault("NEXA_IDENTITY_SECRET", "test-secret-not-real-0123456789-a
 os.environ.setdefault("NEXA_AGENT_GATEWAY_TOKEN", "test-token")
 os.environ.setdefault("NEXA_KNOWLEDGE_GATEWAY_TOKEN", "test-token")
 os.environ.pop("NEXA_MODEL_CONFIG", None)
+# Strict curriculum-only answers unless a test turns general answers on.
+os.environ["NEXA_GENERAL_ANSWERS"] = "off"
 
 import pytest  # noqa: E402
 

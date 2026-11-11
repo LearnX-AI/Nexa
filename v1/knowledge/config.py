@@ -118,6 +118,25 @@ ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
 ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
+# General-knowledge answers when the curriculum has no evidence (general.py):
+# off (strict refusal), llm (the general model) or web (web search, then the
+# model over the results, falling back to llm). Always labelled as not from the
+# approved curriculum, never as grounded.
+GENERAL_ANSWERS = os.environ.get("NEXA_GENERAL_ANSWERS", "llm").lower()
+if GENERAL_ANSWERS not in ("off", "llm", "web"):
+    raise ValueError("NEXA_GENERAL_ANSWERS must be off, llm or web")
+# Roles that may get general answers; "*" = everyone.
+GENERAL_ROLES = frozenset(r.strip() for r in os.environ.get("NEXA_GENERAL_ROLES", "*").split(",") if r.strip())
+# Model Gateway logical model for general answers; the answer model is the fallback.
+GENERAL_MODEL = os.environ.get("NEXA_GENERAL_MODEL", "nexa-general")
+GENERAL_TEMPERATURE = float(os.environ.get("NEXA_GENERAL_TEMPERATURE", "0.3"))
+# Web search for mode "web": wikipedia (no key), tavily (key) or searxng (self-hosted URL).
+WEB_SEARCH_PROVIDER = os.environ.get("NEXA_WEB_SEARCH_PROVIDER", "wikipedia").lower()
+WEB_SEARCH_URL = os.environ.get("NEXA_WEB_SEARCH_URL", "")
+WEB_SEARCH_API_KEY = os.environ.get("NEXA_WEB_SEARCH_API_KEY", "")
+WEB_SEARCH_RESULTS = int(os.environ.get("NEXA_WEB_SEARCH_RESULTS", "4"))
+WEB_SEARCH_TIMEOUT = float(os.environ.get("NEXA_WEB_SEARCH_TIMEOUT", "10"))
+
 # ---- M2-007 LMS synchronisation ----
 
 # Events per sync request, and how often failed retryable events are retried

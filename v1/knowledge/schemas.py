@@ -72,6 +72,9 @@ class AnswerRequest(BaseModel):
     filters: Optional[QueryFilters] = None
     audience: Optional[Literal["student", "teacher"]] = None
     explain: bool = False
+    general: Optional[bool] = Field(None, description="false: never answer from general knowledge. "
+                                    "Default follows the deployment (NEXA_GENERAL_ANSWERS); true cannot "
+                                    "turn it on where the deployment has it off.")
 
 
 # ---- M2 ingestion API ----

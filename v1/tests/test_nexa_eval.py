@@ -267,3 +267,15 @@ def _commit_on_main(repo, path, text):
     else:
         _git(wt, "pull", "-q", "origin", "main")
     return _commit(wt, path, text)
+
+
+def test_fixture_suite_catches_an_unlabelled_general_answer(ds, thresholds, monkeypatch):
+    from v1.knowledge import general
+
+    async def unlabelled(question, audience, trace_id, reason):
+        info = general.GeneralInfo(source_kind="general_knowledge", mode="llm", label="")
+        return "Queensland won.", info
+    monkeypatch.setattr(general, "general_answer", unlabelled)
+    rep = ev.run_fixture_suite(ds)
+    assert not ev.evaluate_gate(rep, thresholds)["passed"]
+    assert any(i["id"] == "x18" and not i["passed"] for i in rep["items"])

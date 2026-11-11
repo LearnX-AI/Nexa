@@ -34,7 +34,7 @@ from v1.identity.rbac import can
 from v1.observability import TraceMiddleware, audit_event, metrics, metrics_endpoint, new_trace_id
 from v1.shared.config import preflight
 
-from . import __version__, config, embeddings, grounding
+from . import __version__, config, embeddings, general, grounding
 from .access import retrieval_filter
 from .auth import require_principal
 from .ingestion import PIPELINE_VERSION
@@ -272,10 +272,12 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
     audience = req.audience or ("teacher" if set(principal.roles) & _STAFF_ROLES else "student")
     if audience == "teacher" and not set(principal.roles) & _STAFF_ROLES:
         audience = "student"
-    out = await grounding.answer(req.question, rr, audience, trace_id)
+    out = await grounding.answer(req.question, rr, audience, trace_id,
+                                 allow_general=general.enabled_for(principal.roles, req.general))
     metrics.inc("nexa_knowledge_answers_total", status=out.status)
     audit_event(action="knowledge.answer", decision=out.status, principal=principal.subject, trace_id=trace_id,
-                citations=len(out.integrity.valid_markers), fabricated=len(out.integrity.fabricated_markers))
+                citations=len(out.integrity.valid_markers), fabricated=len(out.integrity.fabricated_markers),
+                source_kind=out.source_kind)
     body = out.model_dump(mode="json")
     if req.explain:
         body["retrieval"] = rr.explain
