@@ -16,7 +16,7 @@ config value. 2.0 replaces it:
 | | 1.x | 2.0 |
 |---|---|---|
 | Target | v0 chat `/ingest-material` | NEXA v1 Knowledge Service, `nexa.lms-sync/1.0` |
-| What | resource files | pages, labels, books, and PDF, DOCX, PPTX files |
+| What | resource files | pages, labels, books, and PDF, DOCX, PPTX files, in File (`resource`) and, since 2.0.1, EduNex lesson presentation (`presentationview`) activities |
 | When | nightly | as it happens (event observers), plus a nightly scan and reconcile |
 | Approval | none: everything served | only activities tagged `nexa-approved`, or in an auto-approved category, are served; others are sent as pending review |
 | Hidden or restricted | sent, served to students | sent as teacher-only |
