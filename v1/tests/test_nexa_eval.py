@@ -115,16 +115,16 @@ def test_score_corpus_refusal_and_authority():
 
 
 def test_gate_absolute_and_regression(thresholds):
-    rep = {"suite": "corpus", "metrics": {"retrieval": {"gating": {"recall@5": 90.0, "recall@1": 70.0,
+    rep = {"suite": "corpus", "metrics": {"retrieval": {"gating": {"recall@5": 95.0, "recall@1": 70.0,
                                                                    "mrr@10": 0.7, "ndcg@10": 0.75},
-                                                        "by_type": {t: {"recall@5": 90.0} for t in
+                                                        "by_type": {t: {"recall@5": 95.0} for t in
                                                                     ("exact_fact", "conceptual", "ambiguous")}},
                                           "authority": {"syllabus_first_rate": 1.0},
                                           "no_answer": {"correct_refusal_rate": 0.9, "false_refusal_rate": 0.02},
                                           "latency": {"p95_ms": 100.0}}}
     assert ev.evaluate_gate(rep, thresholds)["passed"]
     base = json.loads(json.dumps(rep))
-    base["metrics"]["retrieval"]["gating"]["recall@5"] = 95.0  # candidate dropped 5 points
+    base["metrics"]["retrieval"]["gating"]["recall@5"] = 99.0  # candidate dropped 4 points
     g = ev.evaluate_gate(rep, thresholds, base)
     assert not g["passed"]
     assert any("vs baseline" in c["metric"] and not c["passed"] for c in g["checks"])
@@ -279,3 +279,12 @@ def test_fixture_suite_catches_an_unlabelled_general_answer(ds, thresholds, monk
     rep = ev.run_fixture_suite(ds)
     assert not ev.evaluate_gate(rep, thresholds)["passed"]
     assert any(i["id"] == "x18" and not i["passed"] for i in rep["items"])
+
+
+def test_end_to_end_refusal_counts_only_curriculum_answers_as_failures():
+    una = {"id": "u1", "type": "no_answer", "approved": True, "language": "en", "files": [], "evidence": []}
+    obs = [{"item": dict(una, id=f"u{i}"), "results": [], "source_types": [], "evidence": "weak", "ms": 1,
+            "answer": {"status": s}} for i, s in enumerate(["no_evidence", "general", "grounded", "no_evidence"])]
+    na = ev.score_corpus(obs)["metrics"]["no_answer"]
+    assert na["correct_refusal_rate"] == 0.0  # the evidence grade alone let all four through
+    assert na["curriculum_answer_rate"] == 0.25 and na["end_to_end_refusal_rate"] == 0.75
