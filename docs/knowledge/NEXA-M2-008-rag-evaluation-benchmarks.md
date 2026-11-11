@@ -1,12 +1,12 @@
 # NEXA-M2-008: RAG Evaluation Dataset & Retrieval Benchmarks
 
-Status: Implemented. Fixture suite passing in CI. DGX baselines (v0 and the v1 candidate) pending the first corpus run (section 6).
+Status: Complete. Fixture suite passing in CI; v0 and v1 baselines recorded on the DGX on 2026-11-11 (section 6); thresholds 1.2.0 set from them.
 Milestone: M2
 Aligns with: NEXA-M2-001 (authority tiers), NEXA-M2-002 (corpus), NEXA-M2-004 (index versioning), NEXA-M2-005 (retrieval), NEXA-M2-006 (grounding), NEXA-M2-007 (school and national scope)
 
 Implementation:
 - Dataset: `v1/knowledge/benchmark/eval/dataset.v1.1.0.json` (1.0.0 kept for history; 1.1.0 adds the general-answer items x18 to x20).
-- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.1.0.json`.
+- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.2.0.json` (set from the DGX baseline).
 - Baselines: `v1/knowledge/benchmark/eval/baselines/`.
 - Metrics, gate and fixture runner: `v1/knowledge/benchmark/evalsuite.py`.
 - Runner: `v1/tools/nexa_eval.py`, with three suites: `fixture`, `corpus` and `live`.
@@ -130,7 +130,7 @@ Notes on the corpus suite:
 
 ## 5. Thresholds and the release gate
 
-`thresholds.v1.0.0.json` (provisional until section 6 is run):
+`thresholds.v1.0.0.json`, the first provisional values (the current values are in `thresholds.v1.2.0.json`, section 6):
 
 | Metric | Fixture | Corpus | Live |
 |---|---|---|---|
@@ -175,25 +175,32 @@ Changing a threshold or the dataset is a reviewed change with a new version. Bec
 
 Its numbers say nothing about the real models.
 
-**DGX corpus run.** Pending; this section is filled in from that run. Record the baseline with:
+**DGX corpus run, 2026-11-11** (commit `0f43e0e`, nomic-embed-text, pgvector, 72 sources / 1811 chunks; `evidence/m2-008-eval-corpus-dgx-20261111.md`, baseline `baselines/corpus-nomic-embed.json`):
 
-```bash
-python v1/tools/nexa_eval.py corpus --corpus ~/nexa-eval-corpus --out ~/nexa-evidence --write-baseline
-```
+| Gating set (48 approved English questions) | v0 baseline | v1 candidate | Change |
+|---|---|---|---|
+| recall@1 | 27.1 | 54.2 | +27.1 |
+| recall@5 | 56.2 | 95.8 | +39.6 |
+| recall@10 | 58.3 | 97.9 | +39.6 |
+| MRR@10 | 0.373 | 0.706 | +0.333 |
+| nDCG@10 | 0.424 | 0.774 | +0.350 |
+| precision@5 | 0.583 | 0.633 | +0.050 |
 
-Expectation, from the M2-005 benchmark on the same corpus:
-- the v1 candidate (nomic-embed with hybrid retrieval, S = 91.0) well above v0 (S = 51.0);
-- bge-m3 (S = 96.0) available as a candidate pending governance sign-off.
+v1 by type, recall@5: exact fact 95.0, conceptual 100.0, ambiguous 87.5, Tok Pisin (not gating) 81.2. Syllabus-defined questions answered from the official syllabus first: 6/6. Retrieval latency p50 78 ms, p95 105 ms. Answerable questions wrongly refused: 0/48.
+
+**Refusal is two layers, and is gated on both.** The evidence grade (similarity and word coverage) refused 8 of 16 unanswerable questions (0.50): it is tuned to never refuse an answerable one (0/48). The other 8 reach the answer model, which must reply INSUFFICIENT_EVIDENCE when the passages do not answer (as it did live for the bird-count question asked as a student). So the corpus gate keeps the evidence-grade rate as a regression floor (≥ 0.40, at most 0.10 below baseline), and the end-to-end check (`--answers`, and the live suite) requires that an unanswerable question gets a curriculum answer at most 10% of the time (`no_answer.curriculum_answer_rate`); a labelled general answer or the refusal both count as correct.
+
+**Thresholds 1.2.0**, set from this run: gating recall@5 ≥ 92.5, MRR@10 ≥ 0.65, exact ≥ 90, conceptual ≥ 92.5, ambiguous ≥ 75, syllabus-first ≥ 0.90, plus the regression limits against the baseline in section 5.
 
 ## 7. Acceptance criteria (NEXA-M2-008)
 
 | Criterion | Status | Evidence |
 |---|---|---|
 | Versioned benchmark dataset exists | **Met** | `dataset.v1.0.0.json` (97 items: 80 corpus, 17 fixture), validated by `load_dataset`; `test_dataset_is_versioned_and_covers_the_required_cases` |
-| Baseline results recorded for v0 and the v1 candidate pipeline | **Pending the DGX run** (section 6) | The corpus suite measures both in one run; `--write-baseline` records them in `baselines/` |
-| Regression thresholds defined | **Met** (provisional values) | `thresholds.v1.0.0.json`; section 5 |
+| Baseline results recorded for v0 and the v1 candidate pipeline | **Met** | Section 6: DGX run 2026-11-11, v1 recall@5 95.8 vs v0 56.2; `baselines/corpus-nomic-embed.json` |
+| Regression thresholds defined | **Met** | `thresholds.v1.2.0.json`, set from the baseline; sections 5 and 6 |
 | Evaluation runnable repeatedly in DEV/QA | **Met** | `nexa_eval.py corpus` uses a scratch schema each run and drops it; `nexa_eval.py live` is read-only |
-| An M2 release cannot pass if retrieval quality regresses below thresholds | **Met** | CI fixture gate; `deploy.sh` step 2a; `test_deploy_refuses_a_retrieval_change_without_a_passing_evaluation`, `test_fixture_suite_catches_an_authority_regression`, `test_fixture_suite_catches_an_access_regression` |
+| An M2 release cannot pass if retrieval quality regresses below thresholds | **Met**, and shown on the DGX: `deploy.sh` refused `0f43e0e` until its evaluation passed | CI fixture gate; `deploy.sh` step 2a; `test_deploy_refuses_a_retrieval_change_without_a_passing_evaluation`, `test_fixture_suite_catches_an_authority_regression`, `test_fixture_suite_catches_an_access_regression` |
 
 ## 8. Limitations
 

@@ -1,0 +1,96 @@
+{
+  "suite": "corpus",
+  "dataset_version": "1.1.0",
+  "generated_at": "2026-11-11T13:00:58+00:00",
+  "commit": "0f43e0e72a462e74321b294e3f48b749533f6d61",
+  "gate_key": "7e5a35deae7c1454",
+  "source": "DGX run, report /home/admin/nexa-evidence/nexa-eval-corpus-nomic-embed-20261111-1302.md (values transcribed from it)",
+  "index": {
+    "fingerprint": "nexa-embed-default|nomic-embed-text|ollama|768|nomic-embed",
+    "prefix_scheme": "nomic-embed"
+  },
+  "corpus": {
+    "sources": 72,
+    "chunks": 1811
+  },
+  "metrics": {
+    "retrieval": {
+      "gating": {
+        "n": 48,
+        "recall@1": 54.2,
+        "recall@5": 95.8,
+        "recall@10": 97.9,
+        "mrr@10": 0.706,
+        "ndcg@10": 0.774,
+        "precision@5": 0.633
+      },
+      "by_type": {
+        "exact_fact": {
+          "n": 20,
+          "recall@1": 55.0,
+          "recall@5": 95.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.695,
+          "ndcg@10": 0.769,
+          "precision@5": 0.6
+        },
+        "conceptual": {
+          "n": 20,
+          "recall@1": 45.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.675,
+          "ndcg@10": 0.757,
+          "precision@5": 0.64
+        },
+        "ambiguous": {
+          "n": 8,
+          "recall@1": 75.0,
+          "recall@5": 87.5,
+          "recall@10": 87.5,
+          "mrr@10": 0.812,
+          "ndcg@10": 0.829,
+          "precision@5": 0.7
+        },
+        "multilingual_unapproved": {
+          "n": 16,
+          "recall@1": 37.5,
+          "recall@5": 81.2,
+          "recall@10": 87.5,
+          "mrr@10": 0.495,
+          "ndcg@10": 0.585,
+          "precision@5": 0.588
+        }
+      }
+    },
+    "authority": {
+      "n": 6,
+      "syllabus_first_rate": 1.0
+    },
+    "no_answer": {
+      "n_unanswerable": 16,
+      "n_answerable": 48,
+      "correct_refusal_rate": 0.5,
+      "false_refusal_rate": 0.0
+    },
+    "latency": {
+      "p50_ms": 78.1,
+      "p95_ms": 104.5
+    }
+  },
+  "v0_baseline": {
+    "metrics": {
+      "retrieval": {
+        "gating": {
+          "n": 48,
+          "recall@1": 27.1,
+          "recall@5": 56.2,
+          "recall@10": 58.3,
+          "mrr@10": 0.373,
+          "ndcg@10": 0.424,
+          "precision@5": 0.583
+        }
+      }
+    }
+  }
+}

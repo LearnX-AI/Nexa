@@ -44,7 +44,7 @@ from urllib.parse import unquote
 
 HERE = os.path.join(os.path.dirname(__file__), "eval")
 DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.1.0.json")
-DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.1.0.json")
+DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.2.0.json")
 TYPES = {"exact_fact", "conceptual", "ambiguous", "multilingual", "no_answer", "conflict", "scope", "access",
          "filters", "citation_integrity", "failure", "general"}
 _W = re.compile(r"[a-z0-9]+")
@@ -255,6 +255,16 @@ def score_corpus(observations: list[dict[str, Any]]) -> dict[str, Any]:
             "n_unanswerable": refusals["unanswerable"], "n_answerable": refusals["answerable"],
             "correct_refusal_rate": round(refusals["refused"] / refusals["unanswerable"], 3),
             "false_refusal_rate": round(refusals["false_refusals"] / max(refusals["answerable"], 1), 3)}
+        # End to end (with answers): after the evidence grade, the answer model
+        # also checks the passages (INSUFFICIENT_EVIDENCE). What matters is that
+        # an unanswerable question never gets a curriculum (grounded) answer; a
+        # labelled general answer or the refusal are both correct.
+        ua = [r for r in per_item if r["type"] == "no_answer" and r.get("answer_status")]
+        if ua:
+            cur = sum(r["answer_status"] in ("grounded", "grounded_weak") for r in ua)
+            m["no_answer"]["n_answered_e2e"] = len(ua)
+            m["no_answer"]["curriculum_answer_rate"] = round(cur / len(ua), 3)
+            m["no_answer"]["end_to_end_refusal_rate"] = round(1 - cur / len(ua), 3)
     if answers:
         n = len(answers)
         m["answers"] = {
