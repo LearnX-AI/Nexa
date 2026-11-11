@@ -63,15 +63,28 @@ class collector {
         return [
             'course' => $course,
             'cm' => $cm,
-            'curriculum' => mapper::curriculum(format_string($course->fullname), (string) $course->shortname,
+            'curriculum' => mapper::curriculum(self::plain($course->fullname), (string) $course->shortname,
                 $fsubject, $fgrade) + ['language' => (string) ($c->language ?: 'en')],
             'visibility' => mapper::visibility(['coursevisible' => $course->visible, 'visible' => $cm->visible,
                 'visibleoncoursepage' => $cm->visibleoncoursepage, 'availability' => $cm->availability]),
             'approval' => mapper::approval(array_values($tags), (string) ($c->approval_tag ?: 'nexa-approved'),
                 (int) $course->category, $approvedcats),
-            'title' => format_string($cm->name, true, ['context' => \context_module::instance($cm->id)]),
+            'title' => self::plain($cm->name, \context_module::instance($cm->id)),
             'url' => (new \moodle_url('/mod/' . $cm->modname . '/view.php', ['id' => $cm->id]))->out(false),
         ];
+    }
+
+    /**
+     * A name as plain text: filters applied (multi-language and the like), but
+     * not escaped for HTML, so "Transcription & Translation" stays as written
+     * instead of becoming "Transcription &amp; Translation".
+     */
+    public static function plain(string $text, ?\context $context = null): string {
+        $opts = ['escape' => false];
+        if ($context) {
+            $opts['context'] = $context;
+        }
+        return html_entity_decode(strip_tags(format_string($text, true, $opts)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /** Values of the optional course custom fields nexa_subject and nexa_grade. */
@@ -176,7 +189,7 @@ class collector {
         $scope = get_config('local_nexa_integration', 'scope') === 'national' ? 'national' : 'school';
         $event = mapper::upsert([
             'event_id' => mapper::event_id(), 'occurred_at' => $occurred,
-            'course_id' => (string) $courseid, 'course_name' => format_string($facts['course']->fullname),
+            'course_id' => (string) $courseid, 'course_name' => self::plain($facts['course']->fullname),
             'item_id' => self::item_id($cmid), 'kind' => $facts['cm']->modname, 'revision' => $content['revision'],
             'title' => $facts['title'], 'url' => $facts['url'], 'visibility' => $facts['visibility'],
             'approval' => $facts['approval'], 'scope' => $scope, 'curriculum' => $facts['curriculum'],
