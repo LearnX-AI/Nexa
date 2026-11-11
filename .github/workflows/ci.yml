@@ -79,6 +79,19 @@ jobs:
           python -m pytest v1/tests/test_knowledge_indexing.py v1/tests/test_knowledge_retrieval.py -q -k pgvector -rs | tee pg.log
           ! grep -q "skipped" pg.log
 
+      - name: RAG evaluation gate (NEXA-M2-008 fixture suite)
+        # Authority conflicts, school vs national scope, access, citation
+        # integrity and failure behaviour, deterministically. Every check must
+        # pass. The corpus suite (real models) gates deploys in deploy.sh.
+        run: python v1/tools/nexa_eval.py fixture --out eval-report
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-eval-fixture
+          path: eval-report/
+
       - name: Config validation gate
         run: |
           python - <<'PY'

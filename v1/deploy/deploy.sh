@@ -8,6 +8,13 @@
 #   2. Fetches and checks out the requested commit (detached, never a reset, so
 #      untracked or locally changed runtime files such as user_memory.json are
 #      left alone).
+#   2a. Release gate (NEXA-M2-008): if the retrieval code (v1/knowledge,
+#      v1/model_gateway, excluding the evaluation data) differs from what is
+#      deployed, a passing corpus evaluation for exactly that code must have
+#      been recorded on this host by v1/tools/nexa_eval.py corpus --record-gate,
+#      or the deploy stops before anything changes. NEXA_SKIP_EVAL_GATE=1 with
+#      NEXA_SKIP_EVAL_REASON overrides it; every override is logged to
+#      .nexa_eval_gate_overrides.
 #   3. Installs the pinned requirements into $NEXA_VENV, only if it is set.
 #   4. Restarts the NEXA systemd services.
 #   5. Waits for every health URL. On success it records the commit in
@@ -29,6 +36,7 @@ NEXA_HEALTH_TRIES="${NEXA_HEALTH_TRIES:-20}"
 NEXA_HEALTH_WAIT="${NEXA_HEALTH_WAIT:-3}"
 NEXA_SYSTEMCTL="${NEXA_SYSTEMCTL:-sudo -n systemctl}"
 HISTORY="$NEXA_HOME/.nexa_deploy_history"
+NEXA_EVAL_GATE_DIR="${NEXA_EVAL_GATE_DIR:-$HOME/.nexa/eval-gates}"
 
 REF="${1:?usage: deploy.sh <git-sha-or-ref>}"
 
@@ -62,6 +70,38 @@ install_requirements() {
   fi
 }
 
+# Identifies the retrieval code at a commit. Must match gate_key() in
+# v1/tools/nexa_eval.py.
+retrieval_key() {
+  git ls-tree -r "$1" -- v1/knowledge v1/model_gateway \
+    | grep -v $'\tv1/knowledge/benchmark/eval/' | sha1sum | cut -c1-16
+}
+
+eval_gate() {
+  local prev_key target_key record
+  prev_key="$(retrieval_key "$PREVIOUS")"
+  target_key="$(retrieval_key "$TARGET")"
+  if [ "$prev_key" = "$target_key" ]; then
+    log "eval gate: retrieval code unchanged ($target_key), no evaluation needed"
+    return 0
+  fi
+  record="$NEXA_EVAL_GATE_DIR/$target_key.json"
+  if [ -f "$record" ] && grep -q '"passed": true' "$record"; then
+    log "eval gate: passing evaluation recorded for $target_key ($record)"
+    return 0
+  fi
+  if [ "${NEXA_SKIP_EVAL_GATE:-}" = "1" ]; then
+    log "WARNING eval gate OVERRIDDEN for $target_key: ${NEXA_SKIP_EVAL_REASON:-no reason given}"
+    echo "$(date -u +%FT%TZ) $TARGET $target_key ${USER:-?} ${NEXA_SKIP_EVAL_REASON:-no reason given}" \
+      >> "$NEXA_HOME/.nexa_eval_gate_overrides"
+    return 0
+  fi
+  log "eval gate: retrieval code changed ($prev_key -> $target_key) and no passing evaluation is recorded"
+  log "run on this host, from a checkout of $TARGET:"
+  log "  python v1/tools/nexa_eval.py corpus --corpus <dir> --out <dir> --record-gate"
+  return 1
+}
+
 restart_services() {
   # shellcheck disable=SC2086
   $NEXA_SYSTEMCTL restart $NEXA_SERVICES
@@ -72,6 +112,10 @@ PREVIOUS="$(git rev-parse HEAD)"
 git fetch --quiet origin "$NEXA_BRANCH"
 TARGET="$(git rev-parse --verify "${REF}^{commit}")"
 log "deploying $TARGET (previous: $PREVIOUS)"
+if ! eval_gate; then
+  log "deploy refused, nothing changed"
+  exit 3
+fi
 
 git checkout --quiet --detach "$TARGET"
 install_requirements
