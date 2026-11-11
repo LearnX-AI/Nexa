@@ -1,0 +1,2421 @@
+{
+ "name": "nexa-eval",
+ "version": "1.1.0",
+ "created": "2026-11-11",
+ "description": "NEXA-M2-008 retrieval and grounding evaluation set. 'corpus' items run against the PNG STEM curriculum corpus (M2-002) with real models; 'fixture' items run against the synthetic corpus below with deterministic stand-ins, in CI, and cover behaviour the corpus cannot: authority conflicts, school vs national scope, access, citation integrity and failure behaviour. A corpus hit is a retrieved chunk from one of the expected files that contains every evidence phrase. Items with approved=false (draft Tok Pisin translations) are reported but do not gate a release until a Tok Pisin speaker approves them. 1.1.0 adds general-answer items: with general answers on, an off-curriculum question gets a labelled general answer with no curriculum citations; with them off, the strict refusal.",
+ "corpus_ref": "NEXA-M2-002 corpus, 72 approved sources, built by v1/tools/knowledge_corpus.py",
+ "fixture_corpus": [
+  {
+   "id": "F1",
+   "text": "Helicase unwinds the DNA double helix by breaking the hydrogen bonds between base pairs during the S phase of the cell cycle.",
+   "metadata": {
+    "title": "Biology Syllabus Grade 12",
+    "source_type": "official_syllabus",
+    "authority_tier": 1,
+    "subject": "Biology",
+    "grade_levels": "12",
+    "term": 2,
+    "scope": "national",
+    "topic_code": "12.2.3",
+    "outcome_codes": "12.2.3a",
+    "source_id": "fx:bio-syllabus"
+   }
+  },
+  {
+   "id": "F2",
+   "text": "Lesson notes on helicase: helicase unwinds the DNA double helix at the replication fork, breaking hydrogen bonds so each strand can be copied.",
+   "metadata": {
+    "title": "Helicase lesson notes",
+    "source_type": "lms_content",
+    "authority_tier": 4,
+    "subject": "Biology",
+    "grade_levels": "12",
+    "scope": "national",
+    "topic_code": "12.2.3",
+    "source_id": "fx:lms-helicase"
+   }
+  },
+  {
+   "id": "F3",
+   "text": "Our school garden activity: sweet potato leaves use photosynthesis to turn sunlight, water and carbon dioxide into sugar.",
+   "metadata": {
+    "title": "School A garden notes",
+    "source_type": "teacher_material",
+    "authority_tier": 5,
+    "subject": "Biology",
+    "grade_levels": "11",
+    "scope": "school",
+    "school_id": "school-a",
+    "source_id": "fx:school-a"
+   }
+  },
+  {
+   "id": "F4",
+   "text": "School B taro garden: taro leaves use photosynthesis to make sugar from sunlight, water and carbon dioxide.",
+   "metadata": {
+    "title": "School B taro notes",
+    "source_type": "teacher_material",
+    "authority_tier": 5,
+    "subject": "Biology",
+    "grade_levels": "11",
+    "scope": "school",
+    "school_id": "school-b",
+    "source_id": "fx:school-b"
+   }
+  },
+  {
+   "id": "F5",
+   "text": "Photosynthesis in chloroplasts converts light energy, water and carbon dioxide into glucose and oxygen.",
+   "metadata": {
+    "title": "Biology Student Guide Grade 11",
+    "source_type": "student_guide",
+    "authority_tier": 3,
+    "subject": "Biology",
+    "grade_levels": "11",
+    "term": 1,
+    "scope": "national",
+    "source_id": "fx:bio-guide-11"
+   }
+  },
+  {
+   "id": "F6",
+   "text": "Answer key for the photosynthesis quiz: question 1 is chloroplast, question 2 is glucose.",
+   "metadata": {
+    "title": "Photosynthesis quiz answer key",
+    "source_type": "assessment",
+    "authority_tier": 2,
+    "subject": "Biology",
+    "grade_levels": "11",
+    "scope": "national",
+    "access_classification": "teacher_only",
+    "source_id": "fx:answer-key"
+   }
+  },
+  {
+   "id": "F7",
+   "text": "Encyclopedia article: photosynthesis is how plants convert sunlight into chemical energy stored in sugar.",
+   "metadata": {
+    "title": "Encyclopedia: Photosynthesis",
+    "source_type": "external_reference",
+    "authority_tier": 6,
+    "subject": "Biology",
+    "grade_levels": "11",
+    "scope": "national",
+    "source_id": "fx:external"
+   }
+  },
+  {
+   "id": "F8",
+   "text": "A covalent bond forms when two atoms share a pair of electrons between them.",
+   "metadata": {
+    "title": "Chemistry Student Guide Grade 11",
+    "source_type": "student_guide",
+    "authority_tier": 3,
+    "subject": "Chemistry",
+    "grade_levels": "11",
+    "term": 1,
+    "scope": "national",
+    "source_id": "fx:chem-guide-11"
+   }
+  },
+  {
+   "id": "F9",
+   "text": "Inductive charging transfers energy through a changing magnetic field, so a phone charges without plugging it into a power socket.",
+   "metadata": {
+    "title": "Physics Syllabus Grade 12 Term 2",
+    "source_type": "official_syllabus",
+    "authority_tier": 1,
+    "subject": "Physics",
+    "grade_levels": "12",
+    "term": 2,
+    "scope": "national",
+    "topic_code": "12.1.1",
+    "source_id": "fx:phys-syllabus"
+   }
+  }
+ ],
+ "items": [
+  {
+   "id": "q01",
+   "suite": "corpus",
+   "question": "What is a double-sided printed circuit board?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "double trace layers"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q01",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q02",
+   "suite": "corpus",
+   "question": "Why should technicians use an isolated power supply when testing a circuit?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "lethal shock"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q02",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q03",
+   "suite": "corpus",
+   "question": "How are ligands used to purify a protein in affinity chromatography?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "affinity beads are made by attaching ligands"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q03",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q04",
+   "suite": "corpus",
+   "question": "Which radioisotopes are used for SPECT imaging compared with PET?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "99mTc"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q04",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q05",
+   "suite": "corpus",
+   "question": "How does the proteome differ from the genome over time?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "proteome is ever-changing"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q05",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q06",
+   "suite": "corpus",
+   "question": "What is inductive or wireless charging of devices?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "without having to plug the device directly into a power socket"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 2,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q06",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q07",
+   "suite": "corpus",
+   "question": "Why is a compressed hydrogen cylinder a disadvantage for vehicles compared with petrol?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term2-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "much heavier than a petrol tank"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 2,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q07",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q08",
+   "suite": "corpus",
+   "question": "What are the six main branches of artificial intelligence?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "six main branches",
+    "Fuzzy Logic"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q08",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q09",
+   "suite": "corpus",
+   "question": "How do molecular hinges move in artificial molecular machines?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "Molecular hinges revolve around a stiff axis"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q09",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q10",
+   "suite": "corpus",
+   "question": "How many bird families and species are found in Papua New Guinea?",
+   "language": "en",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "79 families and 730 species"
+   ],
+   "category": "pdf_text",
+   "subject": "Biology",
+   "grade": 11,
+   "term": 2,
+   "source_type": "teacher_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q10",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q11",
+   "suite": "corpus",
+   "question": "What is a pharmacokinetic drug interaction in the liver?",
+   "language": "en",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "compete with the metabolisation enzymes"
+   ],
+   "category": "pdf_text",
+   "subject": "Biology",
+   "grade": 11,
+   "term": 2,
+   "source_type": "teacher_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q11",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q12",
+   "suite": "corpus",
+   "question": "When does an individual function normally according to health and medical biology?",
+   "language": "en",
+   "files": [
+    "STEMBio-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "homeostatic mechanisms are fully functional"
+   ],
+   "category": "pdf_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q12",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q13",
+   "suite": "corpus",
+   "question": "What does an AI system use to communicate and interact with a human?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "Natural Language Processing (NLP)"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q13",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q14",
+   "suite": "corpus",
+   "question": "Why do industrial robots outperform human workers on long shifts?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "day and night without ever complaining"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q14",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q15",
+   "suite": "corpus",
+   "question": "What fields does robotics combine as a multidisciplinary subject?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term3-TeacherGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "multidisciplinary field combining computer science and engineering"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "teacher_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q15",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q16",
+   "suite": "corpus",
+   "question": "Which performance indicator asks students to explain how electromagnets and transformers use electromagnetic induction?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1c",
+    "electromagnets and transformers"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 2,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q16",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q17",
+   "suite": "corpus",
+   "question": "What must Grade 12 chemistry students explain about the organisational levels of protein structure?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.2a",
+    "four organizational levels"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 1,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q17",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q18",
+   "suite": "corpus",
+   "question": "Which outcome covers naming the 20 amino acids with one-letter and three-letter codes?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "one-letter code and three-letter code"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 1,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q18",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q19",
+   "suite": "corpus",
+   "question": "What is the content standard for the protein sequencing module?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "determine the amino acid sequence of a protein"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 1,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q19",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q20",
+   "suite": "corpus",
+   "question": "Which indicator requires students to describe how a magnetic field generates current?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1b",
+    "magnetic field generates current"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 2,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q20",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q21",
+   "suite": "corpus",
+   "question": "During which phase of the cell cycle is DNA copied?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "S (Synthesis) phase"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q21",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q22",
+   "suite": "corpus",
+   "question": "Which enzyme unwinds the DNA double helix and how?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "unwinds the DNA double helix by breaking the hydrogen bonds"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q22",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q23",
+   "suite": "corpus",
+   "question": "What gives DNA polymerase a starting point to add nucleotides?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "provides a starting point for DNA polymerase"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q23",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q24",
+   "suite": "corpus",
+   "question": "What is molecular biology the study of?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "studies the molecules responsible for storing"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q24",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q25",
+   "suite": "corpus",
+   "question": "In the fertiliser and plant growth experiment, what is the dependent variable?",
+   "language": "en",
+   "files": [
+    "s01_cm8870_12.1_Sciencetific Methods and Skills_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Plant height or growth rate"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q25",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q26",
+   "suite": "corpus",
+   "question": "What is the job of the ribosome binding site on a gene?",
+   "language": "en",
+   "files": [
+    "s03_cm8876_12.3_Genetics and Molecular Biology_2_ Genes  Chromosomes_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Helps ribosomes recognise the transcript"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q26",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q27",
+   "suite": "corpus",
+   "question": "How does next-generation sequencing read DNA compared with Sanger sequencing?",
+   "language": "en",
+   "files": [
+    "s10_cm8897_12.3_Biotechnology_2_DNA Sequencing (Sanger, NGS).docx"
+   ],
+   "evidence": [
+    "Millions of fragments at once"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q27",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q28",
+   "suite": "corpus",
+   "question": "What are the products of the light-dependent reactions of photosynthesis?",
+   "language": "en",
+   "files": [
+    "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "ATP, NADPH, Oxygen"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q28",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q29",
+   "suite": "corpus",
+   "question": "What is a disadvantage of growing crops for biofuel?",
+   "language": "en",
+   "files": [
+    "s15_cm8912_12.4_Bioenergetics_2_Biomass  Biofuels.docx"
+   ],
+   "evidence": [
+    "competes with food crops for land"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q29",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q30",
+   "suite": "corpus",
+   "question": "Why does a biogas digester produce less gas in cold weather?",
+   "language": "en",
+   "files": [
+    "s16_cm8915_12.4_Bioenergetics_3_Biogas Production.docx"
+   ],
+   "evidence": [
+    "Works slowly in cold conditions"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q30",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q31",
+   "suite": "corpus",
+   "question": "What is the oxygen problem in biological hydrogen production?",
+   "language": "en",
+   "files": [
+    "s17_cm8918_12.4_Bioenergetics_4_Hydrogen Production via Photosynthesis.docx"
+   ],
+   "evidence": [
+    "Enzymes are damaged by oxygen"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q31",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q32",
+   "suite": "corpus",
+   "question": "What safety rule applies to the burning bush (Moses) experiment?",
+   "language": "en",
+   "files": [
+    "s18_cm8921_12.4_Bioenergetics_5_The Moses Experiment (Burning Bush).docx"
+   ],
+   "evidence": [
+    "controlled teacher demonstration only"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q32",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q33",
+   "suite": "corpus",
+   "question": "Why do bio-batteries have a limited working life?",
+   "language": "en",
+   "files": [
+    "s19_cm8924_12.5_Battery Technology_1_Bio-Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes/microbes can be short-lived"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q33",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q34",
+   "suite": "corpus",
+   "question": "What can damage a paper battery?",
+   "language": "en",
+   "files": [
+    "s20_cm8927_12.5_Battery Technology_2_Paper Batteries.docx"
+   ],
+   "evidence": [
+    "damaged by water or tearing"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q34",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q35",
+   "suite": "corpus",
+   "question": "Why do sugar batteries need their enzymes replaced?",
+   "language": "en",
+   "files": [
+    "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes wear out and must be replaced"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q35",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q36",
+   "suite": "corpus",
+   "question": "What two jobs does a bioelectrochemical reactor do at the same time?",
+   "language": "en",
+   "files": [
+    "s22_cm8933_12.5_Battery Technology_4_Bioelectrochemical Reactor - Grade 12 Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Treats wastewater and makes energy at once"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q36",
+   "type": "conceptual",
+   "approved": true
+  },
+  {
+   "id": "q37",
+   "suite": "corpus",
+   "question": "Which hormones and organ control blood glucose in homeostasis?",
+   "language": "en",
+   "files": [
+    "s23_cm8936_12.6_Health and Medical_1_Homeostasis (Concept  Mechanisms).docx"
+   ],
+   "evidence": [
+    "Insulin and glucagon (pancreas)"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q37",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q38",
+   "suite": "corpus",
+   "question": "What happens to beta cells in type 1 diabetes?",
+   "language": "en",
+   "files": [
+    "s24_cm8940_12.6_Health and Medical_2_Disease - Disruption of Homeostasis.docx"
+   ],
+   "evidence": [
+    "Beta cells are destroyed"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q38",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q39",
+   "suite": "corpus",
+   "question": "In transcription, which base does RNA use instead of thymine?",
+   "language": "en",
+   "files": [
+    "teacher-deck-transcription.pptx",
+    "s05_cm8882_12.2_Genetics and Molecular Biology_4_Transcription_and_Translation.docx"
+   ],
+   "evidence": [
+    "uracil (U) in place of thymine"
+   ],
+   "category": "pptx",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "teacher_material",
+   "format": "pptx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q39",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q40",
+   "suite": "corpus",
+   "question": "Which performance indicator asks students to differentiate genomics and proteomics in the biophysics module?",
+   "language": "en",
+   "files": [
+    "scanned-STEMPhysics-Term1-Syllabus-Gr12-p16-18.pdf",
+    "STEMPhysics-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1c",
+    "Differentiate between Genomics and Proteomics"
+   ],
+   "category": "ocr",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 1,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer",
+    "top_source_type": "official_syllabus"
+   },
+   "origin": "gold_questions.json#q40",
+   "type": "exact_fact",
+   "approved": true
+  },
+  {
+   "id": "q01-tpi",
+   "suite": "corpus",
+   "question": "Wanem samting em i double-sided printed circuit board?",
+   "language": "tpi",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "double trace layers"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q01-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q01"
+  },
+  {
+   "id": "q02-tpi",
+   "suite": "corpus",
+   "question": "Bilong wanem ol teknisen i mas yusim isolated power supply taim ol i testim wanpela circuit?",
+   "language": "tpi",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "lethal shock"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q02-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q02"
+  },
+  {
+   "id": "q04-tpi",
+   "suite": "corpus",
+   "question": "Wanem ol radioisotope ol i save yusim long SPECT imaging, na i narakain olsem wanem long PET?",
+   "language": "tpi",
+   "files": [
+    "STEMPhysics-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "99mTc"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q04-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q04"
+  },
+  {
+   "id": "q06-tpi",
+   "suite": "corpus",
+   "question": "Inductive o wireless charging bilong ol divais em i wanem samting?",
+   "language": "tpi",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "without having to plug the device directly into a power socket"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 2,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q06-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q06"
+  },
+  {
+   "id": "q07-tpi",
+   "suite": "corpus",
+   "question": "Bilong wanem hydrogen cylinder i no gutpela long ol ka taim yumi skelim wantaim petrol tank?",
+   "language": "tpi",
+   "files": [
+    "STEMChem-Term2-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "much heavier than a petrol tank"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 2,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q07-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q07"
+  },
+  {
+   "id": "q08-tpi",
+   "suite": "corpus",
+   "question": "Wanem ol sikispela bikpela hap (branch) bilong artificial intelligence?",
+   "language": "tpi",
+   "files": [
+    "STEMPhysics-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "six main branches",
+    "Fuzzy Logic"
+   ],
+   "category": "pdf_text",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q08-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q08"
+  },
+  {
+   "id": "q10-tpi",
+   "suite": "corpus",
+   "question": "Hamas famili na hamas kain pisin i stap long Papua Niugini?",
+   "language": "tpi",
+   "files": [
+    "STEMBio-Term2-TeacherGuide-Gr11.pdf"
+   ],
+   "evidence": [
+    "79 families and 730 species"
+   ],
+   "category": "pdf_text",
+   "subject": "Biology",
+   "grade": 11,
+   "term": 2,
+   "source_type": "teacher_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q10-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q10"
+  },
+  {
+   "id": "q14-tpi",
+   "suite": "corpus",
+   "question": "Bilong wanem ol robot long faktori i wok winim ol wokman long longpela taim, de na nait?",
+   "language": "tpi",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "day and night without ever complaining"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q14-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q14"
+  },
+  {
+   "id": "q21-tpi",
+   "suite": "corpus",
+   "question": "Long wanem hap (phase) bilong cell cycle DNA i save kopi?",
+   "language": "tpi",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "S (Synthesis) phase"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q21-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q21"
+  },
+  {
+   "id": "q22-tpi",
+   "suite": "corpus",
+   "question": "Wanem enzyme i save opim DNA double helix, na em i mekim olsem wanem?",
+   "language": "tpi",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "unwinds the DNA double helix by breaking the hydrogen bonds"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q22-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q22"
+  },
+  {
+   "id": "q28-tpi",
+   "suite": "corpus",
+   "question": "Wanem ol samting i kamap long ol light-dependent reaction bilong photosynthesis?",
+   "language": "tpi",
+   "files": [
+    "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "ATP, NADPH, Oxygen"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q28-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q28"
+  },
+  {
+   "id": "q30-tpi",
+   "suite": "corpus",
+   "question": "Bilong wanem biogas digester i mekim liklik gas tasol taim ples i kol?",
+   "language": "tpi",
+   "files": [
+    "s16_cm8915_12.4_Bioenergetics_3_Biogas Production.docx"
+   ],
+   "evidence": [
+    "Works slowly in cold conditions"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q30-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q30"
+  },
+  {
+   "id": "q35-tpi",
+   "suite": "corpus",
+   "question": "Bilong wanem ol sugar battery i mas senisim ol enzyme bilong en?",
+   "language": "tpi",
+   "files": [
+    "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes wear out and must be replaced"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q35-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q35"
+  },
+  {
+   "id": "q37-tpi",
+   "suite": "corpus",
+   "question": "Wanem ol hormone na wanem ogen i save lukautim sugar long blut long homeostasis?",
+   "language": "tpi",
+   "files": [
+    "s23_cm8936_12.6_Health and Medical_1_Homeostasis (Concept  Mechanisms).docx"
+   ],
+   "evidence": [
+    "Insulin and glucagon (pancreas)"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q37-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q37"
+  },
+  {
+   "id": "q38-tpi",
+   "suite": "corpus",
+   "question": "Wanem samting i kamap long ol beta cell long type 1 diabetes?",
+   "language": "tpi",
+   "files": [
+    "s24_cm8940_12.6_Health and Medical_2_Disease - Disruption of Homeostasis.docx"
+   ],
+   "evidence": [
+    "Beta cells are destroyed"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q38-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q38"
+  },
+  {
+   "id": "q12-tpi",
+   "suite": "corpus",
+   "question": "Long health na medical biology, wanem taim bodi bilong man i wok gut olgeta?",
+   "language": "tpi",
+   "files": [
+    "STEMBio-Term1-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "homeostatic mechanisms are fully functional"
+   ],
+   "category": "pdf_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": 1,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "gold_questions.json#q12-tpi",
+   "type": "multilingual",
+   "approved": false,
+   "translation_of": "q12"
+  },
+  {
+   "id": "a01",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "What phase is it copied in?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "S (Synthesis) phase"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "context_filters": {
+    "subjects": [
+     "Biology"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q21",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a02",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "What does the enzyme do to the double helix?",
+   "language": "en",
+   "files": [
+    "s04_cm8879_12.2_Genetics and Molecular Biology_3_DNA Replication.docx"
+   ],
+   "evidence": [
+    "unwinds the DNA double helix by breaking the hydrogen bonds"
+   ],
+   "category": "docx_text",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "context_filters": {
+    "subjects": [
+     "Biology"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q22",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a03",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "What do the light reactions make?",
+   "language": "en",
+   "files": [
+    "s14_cm8909_12.4_Bioenergetics_1_Photosynthesis_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "ATP, NADPH, Oxygen"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "context_filters": {
+    "subjects": [
+     "Biology"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q28",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a04",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "Why do the enzymes keep needing replacement?",
+   "language": "en",
+   "files": [
+    "s21_cm8930_12.5_Battery Technology_3_Sugar Batteries.docx"
+   ],
+   "evidence": [
+    "Enzymes wear out and must be replaced"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "context_filters": {
+    "subjects": [
+     "Biology"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q35",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a05",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "What is the dependent variable in the experiment?",
+   "language": "en",
+   "files": [
+    "s01_cm8870_12.1_Sciencetific Methods and Skills_Lesson Notes.docx"
+   ],
+   "evidence": [
+    "Plant height or growth rate"
+   ],
+   "category": "docx_table",
+   "subject": "Biology",
+   "grade": 12,
+   "term": null,
+   "source_type": "lms_content",
+   "format": "docx",
+   "context_filters": {
+    "subjects": [
+     "Biology"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q25",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a06",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "Which indicator covers induction in electromagnets?",
+   "language": "en",
+   "files": [
+    "STEMPhysics-Term2-Syllabus-Gr12.pdf"
+   ],
+   "evidence": [
+    "12.1.1c",
+    "electromagnets and transformers"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Physics",
+   "grade": 12,
+   "term": 2,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "context_filters": {
+    "subjects": [
+     "Physics"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q16",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a07",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "What is the content standard for sequencing?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term1-Syllubus-Gr12.pdf"
+   ],
+   "evidence": [
+    "determine the amino acid sequence of a protein"
+   ],
+   "category": "syllabus_outcome",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 1,
+   "source_type": "official_syllabus",
+   "format": "pdf",
+   "context_filters": {
+    "subjects": [
+     "Chemistry"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q19",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "a08",
+   "suite": "corpus",
+   "type": "ambiguous",
+   "approved": true,
+   "question": "How do the hinges move?",
+   "language": "en",
+   "files": [
+    "STEMChem-Term3-StudentGuide-Gr12.pdf"
+   ],
+   "evidence": [
+    "Molecular hinges revolve around a stiff axis"
+   ],
+   "category": "pdf_text",
+   "subject": "Chemistry",
+   "grade": 12,
+   "term": 3,
+   "source_type": "student_guide",
+   "format": "pdf",
+   "context_filters": {
+    "subjects": [
+     "Chemistry"
+    ],
+    "grades": [
+     12
+    ]
+   },
+   "expect": {
+    "behavior": "answer"
+   },
+   "origin": "ambiguous variant of q09",
+   "note": "Underspecified as a learner would ask it. Evaluated with the subject and grade the tutor knows from the course."
+  },
+  {
+   "id": "u01",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Who won the rugby league State of Origin last year?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u01"
+  },
+  {
+   "id": "u02",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "How do I cook mumu with pork and kaukau?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u02"
+  },
+  {
+   "id": "u03",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "What is the best mobile phone to buy in Port Moresby?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u03"
+  },
+  {
+   "id": "u04",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "When does the next flight leave Jacksons airport for Lae?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u04"
+  },
+  {
+   "id": "u05",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Write me a love song for my girlfriend.",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u05"
+  },
+  {
+   "id": "u06",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "What time does the Boroko market open on Saturday?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u06"
+  },
+  {
+   "id": "u07",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "How many goals did the Kumuls score in the final?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u07"
+  },
+  {
+   "id": "u08",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Which movie should I watch this weekend?",
+   "language": "en",
+   "category": "off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u08"
+  },
+  {
+   "id": "u09",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Explain the Schwarzschild radius of a black hole in general relativity.",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u09"
+  },
+  {
+   "id": "u10",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "How does the CRISPR-Cas9 guide RNA find its target in a plant genome?",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u10"
+  },
+  {
+   "id": "u11",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Derive the Black-Scholes equation for option pricing.",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u11"
+  },
+  {
+   "id": "u12",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "What is the boiling point of liquid nitrogen in Fahrenheit?",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u12"
+  },
+  {
+   "id": "u13",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "How do quantum computers use qubits and entanglement?",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u13"
+  },
+  {
+   "id": "u14",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": true,
+   "question": "Who painted the Mona Lisa and in what year?",
+   "language": "en",
+   "category": "on_subject_not_covered",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u14"
+  },
+  {
+   "id": "u15",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": false,
+   "question": "Husat i winim futbol long Sarere?",
+   "language": "tpi",
+   "category": "tok_pisin_off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u15"
+  },
+  {
+   "id": "u16",
+   "suite": "corpus",
+   "type": "no_answer",
+   "approved": false,
+   "question": "Wanem taim bai balus i lusim Mosbi?",
+   "language": "tpi",
+   "category": "tok_pisin_off_curriculum",
+   "files": [],
+   "evidence": [],
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "origin": "unanswerable_questions.json#u16"
+  },
+  {
+   "id": "x01",
+   "type": "conflict",
+   "question": "How does helicase unwind the DNA double helix at the replication fork by breaking hydrogen bonds?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "behavior": "answer",
+    "relevant": [
+     "F1",
+     "F2"
+    ],
+    "authoritative_first": "F1",
+    "above": "F2",
+    "conflict_recorded": true
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x02",
+   "type": "conflict",
+   "question": "Which syllabus learning outcome says helicase unwinds the DNA double helix by breaking the hydrogen bonds between base pairs?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "behavior": "answer",
+    "relevant": [
+     "F1"
+    ],
+    "top": "F1"
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x03",
+   "type": "conflict",
+   "question": "How does photosynthesis convert light energy, water and carbon dioxide into sugar in plants?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "behavior": "answer",
+    "relevant": [
+     "F5",
+     "F7"
+    ],
+    "after_all_internal": "F7"
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x04",
+   "type": "scope",
+   "question": "What does our school garden show about photosynthesis in leaves?",
+   "principal": {
+    "roles": [
+     "student"
+    ],
+    "school_id": "school-a"
+   },
+   "expect": {
+    "behavior": "answer",
+    "relevant": [
+     "F3"
+    ],
+    "must_include": [
+     "F3"
+    ],
+    "must_exclude": [
+     "F4",
+     "F6"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x05",
+   "type": "scope",
+   "question": "What does our school garden show about photosynthesis in leaves?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "must_exclude": [
+     "F3",
+     "F4",
+     "F6"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x06",
+   "type": "scope",
+   "question": "What does our school garden show about photosynthesis in leaves?",
+   "principal": {
+    "roles": [
+     "platform_admin"
+    ]
+   },
+   "expect": {
+    "must_include": [
+     "F3",
+     "F4"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x07",
+   "type": "access",
+   "question": "What are the answers to the photosynthesis quiz?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "must_exclude": [
+     "F6"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x08",
+   "type": "access",
+   "question": "What are the answers to the photosynthesis quiz?",
+   "principal": {
+    "roles": [
+     "teacher"
+    ]
+   },
+   "expect": {
+    "relevant": [
+     "F6"
+    ],
+    "must_include": [
+     "F6"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x09",
+   "type": "filters",
+   "question": "How do atoms share electrons in a bond?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "filters": {
+    "subjects": [
+     "Chemistry"
+    ],
+    "grades": [
+     11
+    ]
+   },
+   "expect": {
+    "relevant": [
+     "F8"
+    ],
+    "top": "F8",
+    "only": [
+     "F8"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x10",
+   "type": "exact_fact",
+   "question": "How does inductive charging work without plugging a phone into a power socket?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "behavior": "answer",
+    "relevant": [
+     "F9"
+    ],
+    "top": "F9",
+    "answer_keys": [
+     "magnetic field"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x11",
+   "type": "no_answer",
+   "question": "Who won the rugby league State of Origin last year?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x12",
+   "type": "citation_integrity",
+   "question": "How does inductive charging work without plugging a phone into a power socket?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "chat": "fabricated_only",
+   "expect": {
+    "behavior": "ungrounded"
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x13",
+   "type": "citation_integrity",
+   "question": "How does inductive charging work without plugging a phone into a power socket?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "chat": "mixed",
+   "expect": {
+    "behavior": "answer",
+    "fabricated_removed": true
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x14",
+   "type": "failure",
+   "question": "How does inductive charging work without plugging a phone into a power socket?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "fault": "chat_down",
+   "expect": {
+    "behavior": "generation_unavailable",
+    "citations_listed": true
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x15",
+   "type": "failure",
+   "question": "How does inductive charging work?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "fault": "embedding_down",
+   "expect": {
+    "http_status": 502
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x16",
+   "type": "failure",
+   "question": "How does inductive charging work?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "fault": "model_changed",
+   "expect": {
+    "http_status": 503
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "id": "x17",
+   "type": "failure",
+   "question": "How do atoms share electrons in a bond?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "fault": "lexical_unavailable",
+   "expect": {
+    "degraded": true,
+    "relevant": [
+     "F8"
+    ],
+    "top": "F8"
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true
+  },
+  {
+   "question": "Who won the rugby league State of Origin last year?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true,
+   "id": "x18",
+   "type": "general",
+   "general_mode": "llm",
+   "expect": {
+    "behavior": "general",
+    "source_kind": "general_knowledge"
+   },
+   "note": "General answers on (llm): labelled, no curriculum citations, invented markers removed."
+  },
+  {
+   "question": "Who won the rugby league State of Origin last year?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true,
+   "id": "x19",
+   "type": "general",
+   "general_mode": "web",
+   "expect": {
+    "behavior": "general",
+    "source_kind": "web"
+   },
+   "note": "General answers on (web): labelled, cites only the web results."
+  },
+  {
+   "question": "Who won the rugby league State of Origin last year?",
+   "principal": {
+    "roles": [
+     "student"
+    ]
+   },
+   "suite": "fixture",
+   "language": "en",
+   "approved": true,
+   "id": "x20",
+   "type": "general",
+   "general_mode": "llm",
+   "fault": "chat_down",
+   "expect": {
+    "behavior": "no_evidence"
+   },
+   "note": "General model down: falls back to the strict refusal, never an unlabelled answer."
+  }
+ ]
+}

@@ -5,8 +5,8 @@ Milestone: M2
 Aligns with: NEXA-M2-001 (authority tiers), NEXA-M2-002 (corpus), NEXA-M2-004 (index versioning), NEXA-M2-005 (retrieval), NEXA-M2-006 (grounding), NEXA-M2-007 (school and national scope)
 
 Implementation:
-- Dataset: `v1/knowledge/benchmark/eval/dataset.v1.0.0.json`.
-- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.0.0.json`.
+- Dataset: `v1/knowledge/benchmark/eval/dataset.v1.1.0.json` (1.0.0 kept for history; 1.1.0 adds the general-answer items x18 to x20).
+- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.1.0.json`.
 - Baselines: `v1/knowledge/benchmark/eval/baselines/`.
 - Metrics, gate and fixture runner: `v1/knowledge/benchmark/evalsuite.py`.
 - Runner: `v1/tools/nexa_eval.py`, with three suites: `fixture`, `corpus` and `live`.

@@ -43,10 +43,10 @@ from typing import Any, Callable, Iterable, Optional
 from urllib.parse import unquote
 
 HERE = os.path.join(os.path.dirname(__file__), "eval")
-DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.0.0.json")
-DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.0.0.json")
+DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.1.0.json")
+DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.1.0.json")
 TYPES = {"exact_fact", "conceptual", "ambiguous", "multilingual", "no_answer", "conflict", "scope", "access",
-         "filters", "citation_integrity", "failure"}
+         "filters", "citation_integrity", "failure", "general"}
 _W = re.compile(r"[a-z0-9]+")
 _STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "on", "by", "is", "are", "be", "for", "with", "at", "as",
          "it", "its", "from", "that", "this", "can", "must", "only"}
@@ -370,8 +370,21 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
             return first + ". [S1][S9]", "fixture-chat"
         return first + ". [S1]", "fixture-chat"
 
-    saved = (embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, dict(config.EVIDENCE_THRESHOLDS))
+    from v1.knowledge import general
+
+    async def general_chat(messages, trace_id=None):
+        if state["fault"] == "chat_down":
+            raise RuntimeError("gateway 503")
+        return "Results change every year, so check a current news source. [S1] [2]", "fixture-general"
+
+    async def web_search(q):
+        return [{"title": "Fixture page", "url": "https://example.org/fixture", "snippet": "fixture"}]
+
+    saved = (embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, dict(config.EVIDENCE_THRESHOLDS),
+             general.chat, general.web_search, config.GENERAL_ANSWERS, config.GENERAL_ROLES)
     embeddings._gateway, grounding.chat = gateway, chat
+    general.chat, general.web_search = general_chat, web_search
+    config.GENERAL_ROLES = frozenset({"*"})
     config.EVIDENCE_THRESHOLDS = {"default": {"min": 0.30, "strong": 0.45}}
     store = InMemoryStore()
     pipe = Pipeline()
@@ -400,6 +413,7 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                                                                     extra=extra)}
                 exp = it.get("expect", {})
                 state["fault"], state["chat"] = it.get("fault"), it.get("chat", "honest")
+                config.GENERAL_ANSWERS = it.get("general_mode", "off")
                 if state["fault"] == "lexical_unavailable":
                     store.lexical_available = lambda index_id: False
                 fails: list[str] = []
@@ -451,6 +465,16 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                     want = {"answer": ("grounded", "grounded_weak")}.get(beh, (beh,))
                     if a.get("status") not in want:
                         fails.append(f"answer status {a.get('status')}, expected {beh}")
+                    if a.get("status") == "general":
+                        txt = a.get("answer") or ""
+                        if not txt.startswith(("Not from your approved curriculum materials",)):
+                            fails.append("general answer is not labelled as outside the curriculum")
+                        if a.get("citations") or a.get("source_kind") == "curriculum":
+                            fails.append("general answer carries curriculum citations")
+                        if "[S1]" in txt or "[2]" in txt:
+                            fails.append("invented marker left in a general answer")
+                        if exp.get("source_kind") and a.get("source_kind") != exp["source_kind"]:
+                            fails.append(f"source_kind {a.get('source_kind')}, expected {exp['source_kind']}")
                     if a.get("integrity", {}).get("fabricated_markers") and a.get("status") in ("grounded",
                                                                                                 "grounded_weak"):
                         if not exp.get("fabricated_removed"):
@@ -467,7 +491,8 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                 results.append({"id": it["id"], "type": it["type"], "passed": not fails, "failures": fails,
                                 "ms": round((time.time() - t0) * 1000, 1)})
     finally:
-        embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, eth = saved
+        (embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, eth, general.chat, general.web_search,
+         config.GENERAL_ANSWERS, config.GENERAL_ROLES) = saved
         config.EVIDENCE_THRESHOLDS = eth
         state["fault"] = None
     passed = sum(r["passed"] for r in results)
