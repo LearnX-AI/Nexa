@@ -399,6 +399,13 @@ class PgVectorStore(VectorStore):
         out.sort(key=lambda r: (-round(r["score"], 9), r["chunk_id"]))
         return out
 
+    async def list_by_source_type(self, index_id: str, source_type: str) -> list[dict[str, Any]]:
+        async with self._conn() as conn:
+            rows = await (await conn.execute(
+                f"SELECT chunk_id, text, metadata FROM {self._table(index_id)} "
+                f"WHERE metadata->>'source_type' = %s", (source_type,))).fetchall()
+        return [{"chunk_id": r[0], "text": r[1], "metadata": r[2]} for r in rows]
+
     async def get_items(self, index_id: str, chunk_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Text, metadata and vector of specific chunks."""
         if not chunk_ids:

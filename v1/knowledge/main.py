@@ -31,10 +31,10 @@ from starlette.concurrency import run_in_threadpool
 
 from v1.identity.principal import Principal
 from v1.identity.rbac import can
-from v1.observability import TraceMiddleware, audit_event, metrics, metrics_endpoint, new_trace_id
+from v1.observability import TraceMiddleware, audit_event, log_event, metrics, metrics_endpoint, new_trace_id
 from v1.shared.config import preflight
 
-from . import __version__, config, embeddings, general, grounding
+from . import __version__, config, embeddings, general, grounding, outline
 from .access import retrieval_filter
 from .auth import require_principal
 from .ingestion import PIPELINE_VERSION
@@ -268,12 +268,26 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
     gives a controlled response, never an unsupported one."""
     trace_id = _trace(request)
     _require(principal, "knowledge.query", "knowledge.answer", trace_id)
-    rr = await _retrieve(req.question, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal, trace_id)
+    built = None
+    if config.CURRICULUM_OUTLINE:
+        try:
+            built = await outline.build(INDEX, retrieval_filter(principal), req.question)
+        except Exception as exc:  # noqa: BLE001 - fall back to ordinary retrieval
+            log_event(event="outline_failed", service="nexa-knowledge", trace_id=trace_id, error=type(exc).__name__)
+    if built:
+        rr, question, outline_notes = built
+    else:
+        rr = await _retrieve(req.question, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal,
+                             trace_id)
+        question, outline_notes = req.question, []
     audience = req.audience or ("teacher" if set(principal.roles) & _STAFF_ROLES else "student")
     if audience == "teacher" and not set(principal.roles) & _STAFF_ROLES:
         audience = "student"
-    out = await grounding.answer(req.question, rr, audience, trace_id,
+    out = await grounding.answer(question, rr, audience, trace_id,
                                  allow_general=general.enabled_for(principal.roles, req.general))
+    if outline_notes and out.status in ("grounded", "grounded_weak"):
+        out.notes.extend(outline_notes)
+        out.answer = (out.answer or "").rstrip() + "\n\n" + " ".join(outline_notes)
     metrics.inc("nexa_knowledge_answers_total", status=out.status)
     audit_event(action="knowledge.answer", decision=out.status, principal=principal.subject, trace_id=trace_id,
                 citations=len(out.integrity.valid_markers), fabricated=len(out.integrity.fabricated_markers),

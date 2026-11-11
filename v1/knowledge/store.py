@@ -136,6 +136,11 @@ class VectorStore:
     async def get_items(self, index_id: str, chunk_ids: list[str]) -> dict[str, dict[str, Any]]:
         raise NotImplementedError
 
+    async def list_by_source_type(self, index_id: str, source_type: str) -> list[dict[str, Any]]:
+        """chunk_id, text and metadata of every chunk of one source type
+        (curriculum outlines, outline.py)."""
+        raise NotImplementedError
+
     def lexical_available(self, index_id: str) -> bool:
         return True
 
@@ -275,6 +280,11 @@ class InMemoryStore(VectorStore):
             if len(out) >= top_k:
                 break
         return out
+
+    async def list_by_source_type(self, index_id, source_type):
+        return [{"chunk_id": c, "text": it.get("text"), "metadata": copy.deepcopy(it.get("metadata") or {})}
+                for c, it in self._items.get(index_id, {}).items()
+                if (it.get("metadata") or {}).get("source_type") == source_type]
 
     async def get_items(self, index_id, chunk_ids):
         bucket = self._items.get(index_id, {})
