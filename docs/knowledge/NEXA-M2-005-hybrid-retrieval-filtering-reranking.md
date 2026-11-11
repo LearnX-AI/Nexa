@@ -142,6 +142,8 @@ Gateway, real models, pgvector, 1,811 v1 chunks and 2,310 v0 chunks. The v0 base
 
 When the live index switches to bge-m3 (M2-004 section 6.6), retrieval switches to vector only with it, with no configuration change.
 
+**Live, after deploying M2-005 (2026-11-11, nomic v1.5, hybrid):** the verify check on the live service gave English recall@5 97.5 and Tok Pisin 81.2 for all content, up from 87.5 and 62.5 with vector only the day before. As a student: 90.0 and 75.0, with 0 teacher-only leaks. p95 latency was 106 ms, against 84 ms before.
+
 **Follow-up for M2-008:**
 - **Tuning.** Lower lexical fusion weight (`NEXA_RRF_WEIGHT_LEXICAL`) for multilingual models, and language-aware fusion (lexical only for English questions), are the obvious things to tune.
 - **The cost of hybrid.** It places the right passage first less often than vector alone with nomic (R@1 50.0 against 60.0). This is acceptable for grounded answers, which use the top 5, and worth tuning.
