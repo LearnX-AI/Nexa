@@ -409,3 +409,22 @@ def test_pgvector_adds_m2005_columns_to_existing_tables():
                 await conn.execute(f"DROP SCHEMA IF EXISTS {s.schema} CASCADE")
             await s.close()
     run(go())
+
+
+def test_default_mode_follows_the_index_model(monkeypatch):
+    """M2-005 DGX benchmark: hybrid for nomic, vector only for bge-m3."""
+    async def go(version, scheme):
+        async def gateway(texts, model, trace_id=None):
+            return [bow_vector(t, DIM) for t in texts], {"model_version": version, "runtime": "ollama"}
+        monkeypatch.setattr(embeddings, "_gateway", gateway)
+        s = InMemoryStore()
+        await s.create_index(IndexRecord("idx_m1", "nexa-embed-default", version, "ollama", DIM, scheme))
+        await s.set_active("idx_m1")
+        await s.upsert("idx_m1", [{"chunk_id": "c", "version_id": "v", "text": "photosynthesis in leaves",
+                                   "vector": bow_vector("photosynthesis in leaves", DIM), "metadata": {}}])
+        r = Retriever(IndexManager(s, Registry()))
+        auto = await r.retrieve(RetrievalRequest("photosynthesis", 3), _who("student"))
+        forced = await r.retrieve(RetrievalRequest("photosynthesis", 3, mode="lexical"), _who("student"))
+        return auto.explain["mode"], auto.explain["reranker"], forced.explain["mode"]
+    assert run(go("nomic-embed-text:v1.5", "nomic-embed")) == ("hybrid", None, "lexical")
+    assert run(go("bge-m3:567m-cpu", "bge-m3")) == ("vector", None, "lexical")

@@ -61,16 +61,28 @@ DEFAULT_TOP_K = int(os.environ.get("NEXA_KNOWLEDGE_TOP_K", "5"))
 # PostgreSQL text search configuration for lexical retrieval. english stems
 # (photosynthesis / photosynthetic) and drops stop words; the corpus is English.
 FTS_CONFIG = os.environ.get("NEXA_KNOWLEDGE_FTS_CONFIG", "english")
-# hybrid (vector + lexical, fused), vector or lexical.
-RETRIEVAL_MODE = os.environ.get("NEXA_RETRIEVAL_MODE", "hybrid")
+# hybrid (vector + lexical, fused), vector, lexical, or auto: the default for
+# the active index's embedding model, from the M2-005 benchmark on the DGX
+# (RETRIEVAL_DEFAULTS below).
+RETRIEVAL_MODE = os.environ.get("NEXA_RETRIEVAL_MODE", "auto")
 # Reciprocal rank fusion constant and weights.
 RRF_K = int(os.environ.get("NEXA_RRF_K", "60"))
 RRF_WEIGHT_VECTOR = float(os.environ.get("NEXA_RRF_WEIGHT_VECTOR", "1.0"))
 RRF_WEIGHT_LEXICAL = float(os.environ.get("NEXA_RRF_WEIGHT_LEXICAL", "1.0"))
-# Reranking of the fused top candidates: on or off. Off by the M2-005 benchmark
-# on the DGX: with nomic v1.5 it lowered S by 4.0 (better recall@1, worse
-# recall@5), failing the fixed rule (docs/knowledge/NEXA-M2-005-*.md section 5).
-RERANK = os.environ.get("NEXA_RERANK", "off").lower() == "on"
+# Reranking of the fused top candidates: on, off, or auto (per model, below).
+RERANK = {"on": True, "off": False}.get(os.environ.get("NEXA_RERANK", "auto").lower())
+# Per embedding model (prefix scheme), the configuration that scored best on
+# the gold set in the M2-005 DGX benchmark, 2026-11-10; within 2 points of the
+# best, the simpler and faster one. Score S (0.6 EN R@5 + 0.4 TPI R@5):
+#   nomic-embed v1.5:   vector 79.0, hybrid 91.0, hybrid+rerank 87.0  -> hybrid
+#   bge-m3 (CPU):       vector 96.0, hybrid 83.0, hybrid+rerank 95.0  -> vector
+# English keyword matches outrank bge-m3's cross-lingual matches for Tok
+# Pisin questions in hybrid fusion; nomic, which is English-only, gains from them.
+RETRIEVAL_DEFAULTS = {
+    "nomic-embed": {"mode": "hybrid", "rerank": False},
+    "bge-m3": {"mode": "vector", "rerank": False},
+    "default": {"mode": "hybrid", "rerank": False},
+}
 # Retrieval profile: central (DGX) or edge (school server). Sets how many
 # candidates each retriever returns and how many are reranked.
 RETRIEVAL_PROFILE = os.environ.get("NEXA_RETRIEVAL_PROFILE", "central")
@@ -87,7 +99,7 @@ PROFILES = {
 # set by v1/tools/knowledge_retrieval_bench.py (NEXA-M2-006 section 4).
 EVIDENCE_THRESHOLDS = {
     "nomic-embed": {"min": 0.59, "strong": 0.69},   # DGX calibration 2026-11-10, separation 0.882
-    "bge-m3": {"min": 0.45, "strong": 0.58},
+    "bge-m3": {"min": 0.51, "strong": 0.59},        # DGX calibration 2026-11-10, separation 0.984
     "default": {"min": 0.50, "strong": 0.62},
 }
 if os.environ.get("NEXA_EVIDENCE_MIN") and os.environ.get("NEXA_EVIDENCE_STRONG"):

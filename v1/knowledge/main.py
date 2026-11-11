@@ -161,7 +161,8 @@ async def health():
         "pipeline": PIPELINE_VERSION,
         "normalizer": NORMALIZER_VERSION,
         "chunker": CHUNKER_VERSION,
-        "retrieval": {"mode": config.RETRIEVAL_MODE, "rerank": config.RERANK, "profile": config.RETRIEVAL_PROFILE},
+        "retrieval": {"mode": config.RETRIEVAL_MODE, "rerank": "auto" if config.RERANK is None else config.RERANK,
+                      "profile": config.RETRIEVAL_PROFILE, "defaults_by_model": config.RETRIEVAL_DEFAULTS},
         "citation_schema": grounding.CITATION_SCHEMA_VERSION,
         "lms_contract": "nexa.lms-sync/1.0",
     }

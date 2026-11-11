@@ -140,11 +140,18 @@ class Retriever:
             return now
 
         mode = (req.mode or config.RETRIEVAL_MODE).lower()
-        if mode not in MODES:
+        if mode not in MODES + ("auto",):
             raise ValueError(f"mode must be one of {MODES}")
         profile_name = req.profile or config.RETRIEVAL_PROFILE
         profile = config.PROFILES.get(profile_name) or config.PROFILES["central"]
         rerank = config.RERANK if req.rerank is None else bool(req.rerank)
+        rec = await self.index.active()
+        model_default = config.RETRIEVAL_DEFAULTS.get(rec.prefix_scheme if rec else "") \
+            or config.RETRIEVAL_DEFAULTS["default"]
+        if mode == "auto":
+            mode = model_default["mode"]
+        if rerank is None:
+            rerank = model_default["rerank"] and mode != "vector"
         top_k = max(1, min(int(req.top_k), 50))
         flt = where.narrow(**req.filters) if req.filters else where
         n = max(profile["candidates"], top_k * 4)
@@ -152,7 +159,6 @@ class Retriever:
         explain: dict[str, Any] = {"mode": mode, "profile": profile_name, "filters": flt.describe(),
                                    "claim_class": claim.value, "reranker": self.reranker.name if rerank else None}
 
-        rec = await self.index.active()
         if rec is None:
             explain.update(index=None, timings_ms={"total": round((time.perf_counter() - t0) * 1000, 1)})
             return RetrievalResult([], explain)

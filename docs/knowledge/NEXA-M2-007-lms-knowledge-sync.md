@@ -1,6 +1,6 @@
 # NEXA-M2-007: EduNeX / LMS Knowledge Synchronisation
 
-Status: Implemented. Live demonstration on the DGX to run (section 8).
+Status: Complete. Demonstrated against the live service on the DGX, 2026-11-11 (section 8).
 Milestone: M2
 Aligns with: NEXA-ADR-0005 (identity), NEXA-M2-001 (metadata 1.1.0), NEXA-M2-002 (ingestion), NEXA-M2-005 (scope filtering)
 Contract: **`nexa.lms-sync/1.0`** (contract version 1.0.0), JSON Schema at `GET /v1/knowledge/lms/schema`
@@ -16,7 +16,7 @@ Tests:
 
 Tool: `v1/tools/lms_sync_demo.py`, an end-to-end demonstration against a running service.
 
-**Status against the acceptance criteria (section 9):** all five are met by tests in CI and by the demonstration against a running service with PostgreSQL. The DGX run of the demonstration produces the production evidence.
+**Status against the acceptance criteria (section 9):** all five are met, by tests in CI and by the demonstration against the live Knowledge Service on the DGX (10/10).
 
 ## 1. Push and pull
 
@@ -174,7 +174,7 @@ Install and settings are covered in the plugin README.
 | Reconcile withdraws an item deleted while offline | pass |
 | Deleted item gone from retrieval; its events kept | pass |
 
-**On the DGX**, against the live service:
+**On the DGX, against the live service** (deploy `451ac6f`, 2026-11-11): **10 of 10 steps passed** (`evidence/m2-007-lms-sync-demo-live.md`). To repeat it:
 
 ```
 set -a; source <(sudo cat /etc/nexa/identity.env); set +a
@@ -189,7 +189,7 @@ set -a; source <(sudo cat /etc/nexa/identity.env); set +a
 | Incremental update and deletion/supersession scenarios tested | **Met** | `test_changed_superseded_pending_hidden_and_deleted`, `test_item_superseding_another_item`, `test_stale_and_duplicate_events`, `test_reconcile_*`; demonstration steps 5 to 10 |
 | Access/approval rules enforced | **Met** | `test_token_is_bound_to_its_site_and_school`, `test_approved_lms_page_becomes_retrievable_for_its_school_only`, `test_approval_revoked_with_same_content_removes_it`; the M2-005 filter tests |
 | Failed sync is observable and retryable | **Met** | `test_gateway_outage_fails_retryably_then_recovers`, `test_file_content_by_hash_and_missing_content_retry`; status and events endpoints; plugin outbox with backoff |
-| End-to-end demonstration from approved LMS content to retrievable NEXA knowledge | **Met locally** (10/10 against a running service with pgvector). DGX run to add. | Section 8; `test_moodle_contract.py` (the plugin's own PHP output applied through the endpoint) |
+| End-to-end demonstration from approved LMS content to retrievable NEXA knowledge | **Met.** 10/10 against the live Knowledge Service on the DGX, and 10/10 locally. | Section 8; `evidence/m2-007-lms-sync-demo-live.md`; `test_moodle_contract.py` (the plugin's own PHP output applied through the endpoint) |
 
 ## 10. Limitations
 

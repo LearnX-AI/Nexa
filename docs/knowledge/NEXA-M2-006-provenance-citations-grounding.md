@@ -1,13 +1,13 @@
 # NEXA-M2-006: Source Provenance, Citations and Grounding Contract
 
-Status: Implemented. Evidence thresholds to calibrate on the DGX (section 4).
+Status: Complete. Evidence thresholds calibrated on the DGX, 2026-11-10 (section 4).
 Milestone: M2
 Aligns with: NEXA-ADR-0001 (Model Gateway), NEXA-ADR-0004, NEXA-M2-001 (locator, authority), NEXA-M2-005 (retrieval)
 Implementation: `v1/knowledge/grounding.py`. Endpoints `POST /v1/knowledge/answer`, `GET /v1/knowledge/chunks/{id}`, `GET /v1/knowledge/sources/{version_id}/original`, `GET /v1/knowledge/schema/grounded-answer`.
 Tests: `v1/tests/test_knowledge_grounding.py` (10)
 Schema: grounded answer `1.0.0` (`CITATION_SCHEMA_VERSION`)
 
-**Status against the acceptance criteria (section 8):** all four are met by tests in CI. The evidence thresholds ship with provisional values. `knowledge_retrieval_bench.py` calibrates them on the gold set with real models.
+**Status against the acceptance criteria (section 8):** all four are met by tests in CI. The evidence thresholds are calibrated on the gold set and an unanswerable set with real models on the DGX.
 
 ## 1. Provenance: what every passage carries
 
@@ -81,12 +81,15 @@ Evidence is graded before any model call, from the top passage's similarity and 
 
 Cosine similarity scales differ between embedding models, so thresholds are kept per prefix scheme in `config.EVIDENCE_THRESHOLDS`. They can be overridden with `NEXA_EVIDENCE_MIN` and `NEXA_EVIDENCE_STRONG`.
 
-**Provisional values:**
+**Calibrated values (DGX, 2026-11-10):**
 
-| Model | `min` | `strong` |
-|---|---|---|
-| nomic | 0.50 | 0.62 |
-| bge-m3 | 0.45 | 0.58 |
+| Model | `min` | `strong` | Separation accuracy |
+|---|---|---|---|
+| nomic v1.5 | 0.59 | 0.69 | 0.882 |
+| bge-m3 on CPU | 0.51 | 0.59 | 0.984 |
+| other models | 0.50 | 0.62 | not calibrated |
+
+Separation accuracy is the share of answerable questions (found in the top 5) and unanswerable ones that the `min` cut classifies correctly. bge-m3 separates them much better than nomic: another reason to switch the live index to it.
 
 Word coverage: strong at 0.60 and above, minimum 0.34.
 
@@ -98,7 +101,7 @@ It then suggests thresholds:
 - **`min`** is the cut that best separates unanswerable questions from answerable ones.
 - **`strong`** is the 25th percentile of answerable similarities.
 
-**DGX calibration, to do:** fill in the suggested values for the active model and the separation accuracy.
+The values in the table are the suggestions of `knowledge_retrieval_bench.py`, rounded down to two decimals. Recalibrate after any change of embedding model or a large change of corpus.
 
 ## 5. Citation integrity
 
@@ -150,7 +153,7 @@ A citation resolves back to the original document location:
 |---|---|---|
 | Citation payload schema documented | **Met** | Section 2; `GET /v1/knowledge/schema/grounded-answer` (JSON Schema 1.0.0) |
 | End-to-end tests show source traceability from user answer back to original document location | **Met** | Sections 6 and 7; four formats, four subjects, checksum-verified original |
-| Missing/weak evidence triggers controlled fallback rather than unsupported certainty | **Met.** Thresholds are provisional until the DGX calibration (section 4). | Section 3; no-evidence, weak, ungrounded and generation-failure tests |
+| Missing/weak evidence triggers controlled fallback rather than unsupported certainty | **Met.** Thresholds calibrated on the DGX (section 4). | Section 3; no-evidence, weak, ungrounded and generation-failure tests |
 | Citation integrity tests pass across representative subjects and formats | **Met** | Section 5; fabricated-marker, support and context-integrity tests across Chemistry, Biology, Physics and Mathematics in PDF, DOCX, PPTX and HTML |
 
 ## 9. Operations and limitations
