@@ -399,6 +399,11 @@ class PgVectorStore(VectorStore):
         out.sort(key=lambda r: (-round(r["score"], 9), r["chunk_id"]))
         return out
 
+    async def all_texts(self, index_id: str) -> list[str]:
+        async with self._conn() as conn:
+            rows = await (await conn.execute(f"SELECT text FROM {self._table(index_id)}")).fetchall()
+        return [r[0] or "" for r in rows]
+
     async def list_by_source_type(self, index_id: str, source_type: str) -> list[dict[str, Any]]:
         async with self._conn() as conn:
             rows = await (await conn.execute(

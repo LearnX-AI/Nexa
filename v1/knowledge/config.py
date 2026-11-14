@@ -118,6 +118,11 @@ ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
 ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
+# Correct misspelt subject words against the curriculum's vocabulary (spelling.py).
+SPELLING = os.environ.get("NEXA_SPELLING", "true").lower() == "true"
+SPELL_MIN_LEN = int(os.environ.get("NEXA_SPELL_MIN_LEN", "5"))
+SPELL_MIN_FREQ = int(os.environ.get("NEXA_SPELL_MIN_FREQ", "2"))
+
 # Answer "what are the topics in Grade 11 Biology?" from the stored syllabus
 # structure (outline.py) instead of a few searched passages.
 CURRICULUM_OUTLINE = os.environ.get("NEXA_CURRICULUM_OUTLINE", "true").lower() == "true"

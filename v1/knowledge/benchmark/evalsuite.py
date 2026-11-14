@@ -43,10 +43,10 @@ from typing import Any, Callable, Iterable, Optional
 from urllib.parse import unquote
 
 HERE = os.path.join(os.path.dirname(__file__), "eval")
-DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.1.0.json")
-DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.2.0.json")
+DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.2.0.json")
+DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.3.0.json")
 TYPES = {"exact_fact", "conceptual", "ambiguous", "multilingual", "no_answer", "conflict", "scope", "access",
-         "filters", "citation_integrity", "failure", "general"}
+         "filters", "citation_integrity", "failure", "general", "spelling", "confidence"}
 _W = re.compile(r"[a-z0-9]+")
 _STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "on", "by", "is", "are", "be", "for", "with", "at", "as",
          "it", "its", "from", "that", "this", "can", "must", "only"}
@@ -183,7 +183,8 @@ def answer_correct(ans: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- scoring
 
-ANSWERABLE = ("exact_fact", "conceptual", "ambiguous", "multilingual")
+ANSWERABLE = ("exact_fact", "conceptual", "ambiguous", "multilingual", "spelling")
+GATING_TYPES = ("exact_fact", "conceptual", "ambiguous")
 SLICES = ("type", "subject", "grade", "term", "language", "format", "source_type")
 
 
@@ -219,7 +220,7 @@ def score_corpus(observations: list[dict[str, Any]]) -> dict[str, Any]:
                         "top": (fof(res[0]) if res else None)})
             if it.get("approved", True):
                 rows.append({**{k: it.get(k) for k in SLICES}, "rank": rank, "precision@5": p5,
-                             "gating": it["type"] != "multilingual"})
+                             "gating": it["type"] in GATING_TYPES})
                 if o.get("evidence") is not None:
                     refusals["answerable"] += 1
                     if o["evidence"] == "none":
@@ -378,6 +379,13 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
             return "Inductive charging uses magnets [S9]. See also [4].", "fixture-chat"
         if state["chat"] == "mixed":
             return first + ". [S1][S9]", "fixture-chat"
+        if state["chat"] == "hedged":
+            return first + ". [S1] There isn't much information about this in the sources [S1].", "fixture-chat"
+        if state["chat"] == "uncited_tail":
+            return (first + ". [S1]\n\nTo stay healthy, students should sleep under insecticide treated mosquito "
+                    "nets and visit the aid post when feverish."), "fixture-chat"
+        if state["chat"] == "ref_line":
+            return first + ". [S1]\n\n[S1] Fixture Syllabus, Grade 12, Term 2, p. 3", "fixture-chat"
         return first + ". [S1]", "fixture-chat"
 
     from v1.knowledge import general
@@ -390,8 +398,12 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
     async def web_search(q):
         return [{"title": "Fixture page", "url": "https://example.org/fixture", "snippet": "fixture"}]
 
+    from v1.knowledge import outline, spelling
+    outline.clear_cache()
+    spelling.clear_cache()
     saved = (embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, dict(config.EVIDENCE_THRESHOLDS),
-             general.chat, general.web_search, config.GENERAL_ANSWERS, config.GENERAL_ROLES)
+             general.chat, general.web_search, config.GENERAL_ANSWERS, config.GENERAL_ROLES, config.SPELL_MIN_FREQ)
+    config.SPELL_MIN_FREQ = 1  # the fixture corpus is small
     embeddings._gateway, grounding.chat = gateway, chat
     general.chat, general.web_search = general_chat, web_search
     config.GENERAL_ROLES = frozenset({"*"})
@@ -475,6 +487,23 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                     want = {"answer": ("grounded", "grounded_weak")}.get(beh, (beh,))
                     if a.get("status") not in want:
                         fails.append(f"answer status {a.get('status')}, expected {beh}")
+                    txt = a.get("answer") or ""
+                    if exp.get("status") and a.get("status") != exp["status"]:
+                        fails.append(f"status {a.get('status')}, expected {exp['status']}")
+                    if exp.get("confidence") and a.get("confidence") != exp["confidence"]:
+                        fails.append(f"confidence {a.get('confidence')}, expected {exp['confidence']}")
+                    if "spelling_corrected" in exp and (a.get("spelling") or {}).get("corrections") != \
+                            exp["spelling_corrected"]:
+                        fails.append(f"spelling {a.get('spelling')}, expected {exp['spelling_corrected']}")
+                    if exp.get("spelling_choices") and set(((a.get("spelling") or {}).get("ambiguous") or {})
+                                                           .get(exp["spelling_choices"][0], [])) != \
+                            set(exp["spelling_choices"][1:]):
+                        fails.append(f"spelling choices {a.get('spelling')}, expected {exp['spelling_choices']}")
+                    if "general_label" in exp and (grounding.GENERAL_LABEL in txt) != exp["general_label"]:
+                        fails.append("general-information label " + ("missing" if exp["general_label"] else "present"))
+                    for bad in exp.get("answer_excludes", []):
+                        if bad in txt:
+                            fails.append(f"answer still contains {bad!r}")
                     if a.get("status") == "general":
                         txt = a.get("answer") or ""
                         if not txt.startswith(("Not from your approved curriculum materials",)):
@@ -502,7 +531,9 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                                 "ms": round((time.time() - t0) * 1000, 1)})
     finally:
         (embeddings._gateway, grounding.chat, km.PIPE, km.INDEX, eth, general.chat, general.web_search,
-         config.GENERAL_ANSWERS, config.GENERAL_ROLES) = saved
+         config.GENERAL_ANSWERS, config.GENERAL_ROLES, config.SPELL_MIN_FREQ) = saved
+        outline.clear_cache()
+        spelling.clear_cache()
         config.EVIDENCE_THRESHOLDS = eth
         state["fault"] = None
     passed = sum(r["passed"] for r in results)

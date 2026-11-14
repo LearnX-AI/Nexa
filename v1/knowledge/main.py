@@ -34,7 +34,7 @@ from v1.identity.rbac import can
 from v1.observability import TraceMiddleware, audit_event, log_event, metrics, metrics_endpoint, new_trace_id
 from v1.shared.config import preflight
 
-from . import __version__, config, embeddings, general, grounding, outline
+from . import __version__, config, embeddings, general, grounding, outline, spelling
 from .access import retrieval_filter
 from .auth import require_principal
 from .ingestion import PIPELINE_VERSION
@@ -212,7 +212,11 @@ async def query(
                     principal=principal.subject, trace_id=trace_id)
         raise HTTPException(status_code=403, detail="Not permitted")
     started = time.time()
-    rr = await _retrieve(req.query, req.top_k, req.filters, principal, trace_id,
+    try:
+        spell = await spelling.check(INDEX, req.query)
+    except Exception:  # noqa: BLE001 - search the query as typed
+        spell = spelling.Check()
+    rr = await _retrieve(spell.corrected or req.query, req.top_k, req.filters, principal, trace_id,
                          mode=req.mode, rerank=req.rerank, profile=req.profile)
     idx = rr.index.index_id if rr.index else None
     fp = rr.index.fingerprint if rr.index else None
@@ -233,6 +237,8 @@ async def query(
         "index": idx,
         "mode": rr.explain.get("mode"),
     }
+    if spell.corrections or spell.ambiguous:
+        x_nexa["spelling"] = spell.payload()
     metrics.observe("nexa_knowledge_retrieval_ms", rr.explain.get("timings_ms", {}).get("total", 0.0),
                     mode=rr.explain.get("mode", "none"))
     return QueryResponse(query=req.query, results=results, retrieval=rr.explain if req.explain else None,
@@ -268,18 +274,35 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
     gives a controlled response, never an unsupported one."""
     trace_id = _trace(request)
     _require(principal, "knowledge.query", "knowledge.answer", trace_id)
+    try:
+        spell = await spelling.check(INDEX, req.question)
+    except Exception as exc:  # noqa: BLE001 - answer the question as typed
+        log_event(event="spelling_failed", service="nexa-knowledge", trace_id=trace_id, error=type(exc).__name__)
+        spell = spelling.Check()
+    if spell.ambiguous:
+        out = grounding.GroundedAnswer(
+            status="clarification_needed", answer=spelling.clarification_text(spell), confidence="none",
+            evidence=grounding.Evidence(level="none", reasons=["a word of the question is not in the curriculum "
+                                                               "and is close to more than one curriculum word"]),
+            source_kind="none", spelling=spell.payload(), notes=["no search was run"])
+        metrics.inc("nexa_knowledge_answers_total", status=out.status)
+        audit_event(action="knowledge.answer", decision=out.status, principal=principal.subject, trace_id=trace_id,
+                    citations=0, fabricated=0, source_kind=out.source_kind)
+        body = out.model_dump(mode="json")
+        body["x_nexa"] = {"service": "nexa-knowledge", "op": "answer", "trace_id": trace_id, "index": None}
+        return body
+    asked = spell.corrected or req.question
     built = None
     if config.CURRICULUM_OUTLINE:
         try:
-            built = await outline.build(INDEX, retrieval_filter(principal), req.question)
+            built = await outline.build(INDEX, retrieval_filter(principal), asked)
         except Exception as exc:  # noqa: BLE001 - fall back to ordinary retrieval
             log_event(event="outline_failed", service="nexa-knowledge", trace_id=trace_id, error=type(exc).__name__)
     if built:
         rr, question, outline_notes = built
     else:
-        rr = await _retrieve(req.question, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal,
-                             trace_id)
-        question, outline_notes = req.question, []
+        rr = await _retrieve(asked, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal, trace_id)
+        question, outline_notes = asked, []
     audience = req.audience or ("teacher" if set(principal.roles) & _STAFF_ROLES else "student")
     if audience == "teacher" and not set(principal.roles) & _STAFF_ROLES:
         audience = "student"
@@ -288,6 +311,11 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
     if outline_notes and out.status in ("grounded", "grounded_weak"):
         out.notes.extend(outline_notes)
         out.answer = (out.answer or "").rstrip() + "\n\n" + " ".join(outline_notes)
+    if spell.corrections:
+        line = spelling.correction_line(spell)
+        out.spelling = spell.payload()
+        out.notes.insert(0, line)
+        out.answer = line + "\n\n" + (out.answer or "")
     metrics.inc("nexa_knowledge_answers_total", status=out.status)
     audit_event(action="knowledge.answer", decision=out.status, principal=principal.subject, trace_id=trace_id,
                 citations=len(out.integrity.valid_markers), fabricated=len(out.integrity.fabricated_markers),

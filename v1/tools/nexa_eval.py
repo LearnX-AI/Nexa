@@ -131,7 +131,7 @@ def _commit() -> str | None:
 
 async def corpus_async(args) -> dict:
     from v1.identity.principal import Principal
-    from v1.knowledge import embeddings, grounding
+    from v1.knowledge import embeddings, grounding, spelling
     from v1.knowledge.access import retrieval_filter
     from v1.knowledge.indexing import IndexManager, info_of
     from v1.knowledge.ingestion.blobstore import BlobStore
@@ -180,14 +180,16 @@ async def corpus_async(args) -> dict:
         retr = Retriever(mgr)
         obs = []
         for n, it in enumerate(items, 1):
-            rr = await retr.retrieve(RetrievalRequest(it["question"], 10, filters=it.get("context_filters") or {}),
-                                     who)
+            chk = await spelling.check(mgr, it["question"])
+            rr = await retr.retrieve(RetrievalRequest(chk.corrected or it["question"], 10,
+                                                      filters=it.get("context_filters") or {}), who)
             res = [{**r, "file": files.get(r["chunk_id"])} for r in rr.results]
             o = {"item": it, "results": res, "ms": rr.explain["timings_ms"]["total"],
                  "source_types": [(src_md.get(r["file"]) or {}).get("source_type") for r in res],
                  "evidence": grounding.assess(rr).level}
-            if args.answers and it.get("approved", True) and it["type"] != "multilingual":
-                a = await grounding.answer(it["question"], rr, "student")
+            if args.answers and it.get("approved", True) and it["type"] in ("exact_fact", "conceptual", "ambiguous",
+                                                                             "no_answer"):
+                a = await grounding.answer(chk.corrected or it["question"], rr, "student")
                 ad = a.model_dump(mode="json")
                 for c in ad.get("citations", []):
                     f = files.get(c.get("chunk_id"))

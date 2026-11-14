@@ -95,9 +95,10 @@ def test_outline_lists_every_module_in_order_and_names_missing_terms(mgr):
     t2 = rr.results[0]["text"]
     assert t2.index("Agricultural Biodiversity") < t2.index("Ornithology") < t2.index("Concepts and Applications")
     assert t2.count("Ornithology") == 1 and "Thema: Biotechnology" in t2 and "Table 1.1" in t2
+    assert "from the syllabus" in t2
     assert "Module: Biological Energy Systems" in rr.results[1]["text"]
     # Term 1 exists elsewhere in the index (Physics), so it is reported missing for Grade 11 Biology
-    assert notes == ["NEXA holds the Grade 11 Biology syllabus for Terms 2, 3; Term 1 not yet available in NEXA."]
+    assert notes == ["Grade 11 Biology in NEXA: Terms 2, 3 from the syllabus. No outline available yet for Term 1."]
     assert "Do not add topics" in question
     # cited to a real chunk of each syllabus
     assert rr.results[0]["chunk_id"].startswith("png-ndoe:biology-g11-t2@v1:")
@@ -139,7 +140,7 @@ def test_answer_endpoint_gives_a_cited_outline_answer(mgr, monkeypatch, make_tok
         assert a["retrieval"]["mode"] == "curriculum_outline"
         assert [x["provenance"]["title"] for x in a["citations"] if x["used"]] == [
             "STEM Biology Syllabus, Grade 11, Term 2", "STEM Biology Syllabus, Grade 11, Term 3"]
-        assert a["answer"].endswith("Term 1 not yet available in NEXA.")
+        assert a["answer"].endswith("No outline available yet for Term 1.")
         assert "Module 11.2: Ornithology" in seen[0][1]["content"]
         monkeypatch.setattr(config, "CURRICULUM_OUTLINE", False)
         a = c.post("/v1/knowledge/answer", headers=h, json={"question": "What are the topics in Grade 11 Biology?",

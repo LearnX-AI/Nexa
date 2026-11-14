@@ -89,7 +89,7 @@ def test_off_curriculum_question_gets_a_labelled_general_answer(svc):
     assert set(a["general"]["fabricated_markers"]) == {"S1", "3"}
     sysmsg = state["general_calls"][0][0]["content"]
     assert "PNG curriculum" in sysmsg and "kina" in sysmsg  # PNG-specific, and told not to claim curriculum
-    assert a["schema_version"] == "1.1.0"
+    assert a["schema_version"] == grounding.CITATION_SCHEMA_VERSION
 
 
 def test_curriculum_answers_are_unchanged(svc):
