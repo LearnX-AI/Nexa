@@ -109,6 +109,16 @@ A request can always opt out with `"general": false`, but `"general": true` cann
 
 **General answers** (section 3.1) are told to be specific to Papua New Guinea wherever the topic allows: PNG examples, places, crops, animals, industries and health issues, kina and metric units, and links to students' daily life, with Tok Pisin words in brackets where they help. They must not invent PNG statistics, names or events, and must say when a question about the PNG syllabus is one NEXA does not hold yet.
 
+### 3.3 Answer quality (schema 1.2.0)
+
+**Spelling** (`spelling.py`, `NEXA_SPELLING`, default on). Each word of five or more letters that never occurs in the active index is compared with the curriculum's own vocabulary. One close match (one edit, or two for words over seven letters) is corrected and the answer starts "Showing results for 'photosynthesis' (you typed 'photosinthesis')." When two different curriculum words are equally close ("metosis": mitosis and meiosis), status `clarification_needed` asks which was meant; no search or model call is made. Forms of one word (homeostasis/homeostatic, gene/genes) count as one. Words with no close curriculum match ("rugby") are left alone. `spelling` in the response records what was done; `/query` applies the same corrections and reports them in `x_nexa.spelling`.
+
+**Course outlines** (section 3.2) now use, for each term, the best document NEXA holds: the syllabus, else the Student Guide, else the Teacher Guide (staff only), with Themas, modules and topics; and the EduNex course for that subject and grade, its lessons grouped by unit. The answer ends by saying which document each term came from and which terms have no outline yet.
+
+**Honest confidence.** A curriculum answer is `grounded_weak` with low confidence when the evidence is weak **or** the answer itself says the sources fall short ("there isn't much information in the sources", "the sources do not mention…"); `integrity.hedged` records it. Reference lines the model echoes at the end ("[S1] STEM Physics Syllabus…, p. 22") are removed instead of counting as unsupported sentences (`integrity.reference_lines_removed`).
+
+**General content inside a curriculum answer.** An uncited paragraph that the passages do not support (the model's own knowledge) is moved under *"General information (not from your curriculum materials):"* at the end, with a note; a restating summary the passages do support stays where it is. `integrity.general_paragraphs` counts them.
+
 ## 4. Evidence thresholds
 
 Cosine similarity scales differ between embedding models, so thresholds are kept per prefix scheme in `config.EVIDENCE_THRESHOLDS`. They can be overridden with `NEXA_EVIDENCE_MIN` and `NEXA_EVIDENCE_STRONG`.

@@ -42,9 +42,10 @@ from . import config, general
 from .general import GeneralInfo
 from .retrieval import RetrievalResult, _terms
 
-CITATION_SCHEMA_VERSION = "1.1.0"
+CITATION_SCHEMA_VERSION = "1.2.0"
 
-Status = Literal["grounded", "grounded_weak", "no_evidence", "ungrounded", "generation_unavailable", "general"]
+Status = Literal["grounded", "grounded_weak", "no_evidence", "ungrounded", "generation_unavailable", "general",
+                 "clarification_needed"]
 
 
 class Provenance(BaseModel):
@@ -98,6 +99,10 @@ class Integrity(BaseModel):
     fabricated_markers: list[str] = Field(default_factory=list)
     uncited_sentences: int = 0
     weakly_supported_sentences: int = 0
+    general_paragraphs: int = Field(0, description="Uncited paragraphs the passages do not support, moved under "
+                                    "the general-information label")
+    hedged: bool = Field(False, description="The answer itself says the sources only partly cover the question")
+    reference_lines_removed: int = 0
 
 
 class GroundedAnswer(BaseModel):
@@ -110,6 +115,8 @@ class GroundedAnswer(BaseModel):
     evidence: Evidence
     integrity: Integrity = Field(default_factory=Integrity)
     model: Optional[str] = None
+    spelling: Optional[dict[str, Any]] = Field(
+        None, description="Spelling corrections applied, or the choices offered when a word was ambiguous")
     source_kind: Literal["curriculum", "general_knowledge", "web", "none"] = Field(
         "curriculum", description="Where the answer text comes from. Only 'curriculum' is grounded.")
     general: Optional[GeneralInfo] = Field(
@@ -245,6 +252,9 @@ FALLBACK_GENERATION = (
     "The answer service is unavailable right now. These are the curriculum passages that match your question."
 )
 NOTE_WEAK = "The approved material only partly covers this question, so treat this answer with care."
+GENERAL_LABEL = "General information (not from your curriculum materials):"
+NOTE_GENERAL_PART = ("Part of this answer is general information, not from your curriculum materials; "
+                     "it is shown separately.")
 NOTE_CONFLICT = ("Different sources cover this point. This answer follows the official curriculum; "
                  "school or LMS material is used only to add explanation.")
 
@@ -254,6 +264,20 @@ NOTE_CONFLICT = ("Different sources cover this point. This answer follows the of
 _MARKER = re.compile(r"\[\s*(S\d+(?:\s*[,;]\s*S\d+)*)\s*\]", re.I)
 _NUMERIC_REF = re.compile(r"\[\s*\d+(?:\s*[,;-]\s*\d+)*\s*\]")
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9(\[])")
+# A line the model adds to list its sources ("[S1] STEM Physics Syllabus, Grade 12, Term 2, p. 22"); the
+# citations already carry this, so it is removed rather than read as an unsupported sentence.
+_REF_LINE = re.compile(r"^\s*(?:[-*\u2022]\s*)?(?:\[S\d+\][\s:,-]*)+[^\n.?!]{0,160}(?:\bp\.?\s*\d+|page\s*\d+|"
+                       r"syllabus|guide|lesson|notes|course)[^\n.?!]{0,60}\.?\s*$", re.I | re.M)
+_REF_HEADER = re.compile(r"^\s*(?:sources|references|citations)\s*:?\s*$", re.I | re.M)
+# The model saying its sources do not (fully) cover the question.
+_HEDGE = re.compile(
+    r"(?:is|are|was|were)(?:n't| not) (?:much |any |enough |a lot of )?(?:specific )?(?:information|detail|mention)"
+    r"|(?:is|are|was|were)(?:n't| not) (?:mentioned|covered|provided|included|explained|discussed)"
+    r"|sources? (?:do|does|did)(?:n't| not) (?:provide|mention|cover|contain|include|explain|discuss|say)"
+    r"|not (?:mentioned|covered|found|provided|included) in (?:any of )?the (?:provided |given )?(?:sources|passages)"
+    r"|(?:limited|little|no) (?:specific )?information (?:about|on|is)"
+    r"|(?:i )?(?:can only|could not|cannot|can't) (?:answer|find)"
+    r"|only (?:partly|partially) (?:covers?|answers?)", re.I)
 
 
 def validate(answer: str, used: list[dict[str, Any]]) -> tuple[str, Integrity, dict[str, float]]:
@@ -272,13 +296,35 @@ def validate(answer: str, used: list[dict[str, Any]]) -> tuple[str, Integrity, d
                 fabricated.append(mk)
         return "".join(f"[{k}]" for k in keep)
 
+    refs_removed = len(_REF_LINE.findall(answer)) + len(_REF_HEADER.findall(answer))
+    answer = _REF_HEADER.sub("", _REF_LINE.sub("", answer))
     text = _MARKER.sub(fix, answer)
     for m in _NUMERIC_REF.findall(text):
         fabricated.append(m.strip("[] "))
     text = _NUMERIC_REF.sub("", text)
     text = re.sub(r"[ \t]+([.,;:!?])", r"\1", re.sub(r"[ \t]{2,}", " ", text)).strip()
 
-    sentences = [s for s in _SENT.split(text) if s.strip()]
+    # An uncited paragraph the passages do not support (the model's own knowledge)
+    # is moved under a label, so curriculum and general content never mix unmarked.
+    all_terms: set[str] = set()
+    for u in used:
+        all_terms |= set(_terms(u["item"].get("text") or ""))
+    keep, moved = [], []
+    for para in re.split(r"\n\s*\n", text):
+        if not para.strip():
+            continue
+        content = _terms(_MARKER.sub("", para))
+        if (not re.search(r"\[S\d+\]", para, re.I) and len(content) >= 6
+                and sum(t in all_terms for t in content) / len(content) < config.CITATION_MIN_SUPPORT):
+            moved.append(para.strip())
+        else:
+            keep.append(para.strip())
+    text = "\n\n".join(keep)
+    if moved:
+        text += "\n\n" + GENERAL_LABEL + "\n" + "\n\n".join(moved)
+    hedged = bool(_HEDGE.search(" ".join(keep)))
+
+    sentences = [s for s in _SENT.split("\n\n".join(keep)) if s.strip()]
     uncited = weak = 0
     support: dict[str, list[float]] = {}
     for s in sentences:
@@ -298,7 +344,8 @@ def validate(answer: str, used: list[dict[str, Any]]) -> tuple[str, Integrity, d
             support.setdefault(mk, []).append(overlap)
     found = sorted({m.upper() for m in re.findall(r"\[(S\d+)\]", text, re.I)}, key=lambda x: int(x[1:]))
     integ = Integrity(valid_markers=found, fabricated_markers=sorted(set(fabricated)),
-                      uncited_sentences=uncited, weakly_supported_sentences=weak)
+                      uncited_sentences=uncited, weakly_supported_sentences=weak, general_paragraphs=len(moved),
+                      hedged=hedged, reference_lines_removed=refs_removed)
     return text, integ, {k: round(sum(v) / len(v), 3) for k, v in support.items()}
 
 
@@ -383,14 +430,20 @@ async def answer(question: str, result: RetrievalResult, audience: str = "studen
         return GroundedAnswer(status="ungrounded", answer=FALLBACK_UNGROUNDED, confidence="none", evidence=ev,
                               integrity=integ, citations=cites, model=model,
                               notes=["the generated answer cited none of the passages and was withheld"])
+    # Partial: the evidence grade says so, or the answer itself says the sources only partly cover it.
+    partial = ev.level == "weak" or integ.hedged
     notes = []
-    if ev.level == "weak":
+    if partial:
         notes.append(NOTE_WEAK)
+        if integ.hedged and ev.level != "weak":
+            ev.reasons.append("the answer says the passages only partly cover the question")
     if ev.conflict:
         notes.append(NOTE_CONFLICT)
+    if integ.general_paragraphs:
+        notes.append(NOTE_GENERAL_PART)
     if integ.fabricated_markers:
         notes.append(f"removed {len(integ.fabricated_markers)} reference(s) that did not match a source")
-    weak = ev.level == "weak" or integ.weakly_supported_sentences > 0
-    return GroundedAnswer(status="grounded_weak" if ev.level == "weak" else "grounded", answer=text,
-                          confidence="low" if weak else "high", notes=notes, citations=cites, evidence=ev,
+    low = partial or integ.weakly_supported_sentences > 0
+    return GroundedAnswer(status="grounded_weak" if partial else "grounded", answer=text,
+                          confidence="low" if low else "high", notes=notes, citations=cites, evidence=ev,
                           integrity=integ, model=model)

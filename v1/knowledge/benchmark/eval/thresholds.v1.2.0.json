@@ -1,7 +1,7 @@
 {
   "name": "nexa-eval-thresholds",
   "version": "1.2.0",
-  "dataset_version": "1.1.0",
+  "dataset_version": "1.2.0",
   "status": "set from the first DGX baseline run (2026-11-11, commit 0f43e0e)",
   "note": "Absolute floors ('min'/'max') and the largest drop allowed against the recorded baseline for the same embedding model ('max_drop_vs_baseline', in the metric's own units: points for recall, absolute for MRR, nDCG and rates). Set from the first DGX baseline (docs/knowledge/NEXA-M2-008-rag-evaluation-benchmarks.md section 6). Changing a threshold is a reviewed change to this file with a new version.",
   "fixture": {

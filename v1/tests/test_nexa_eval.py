@@ -118,7 +118,7 @@ def test_gate_absolute_and_regression(thresholds):
     rep = {"suite": "corpus", "metrics": {"retrieval": {"gating": {"recall@5": 95.0, "recall@1": 70.0,
                                                                    "mrr@10": 0.7, "ndcg@10": 0.75},
                                                         "by_type": {t: {"recall@5": 95.0} for t in
-                                                                    ("exact_fact", "conceptual", "ambiguous")}},
+                                                                    ("exact_fact", "conceptual", "ambiguous", "spelling")}},
                                           "authority": {"syllabus_first_rate": 1.0},
                                           "no_answer": {"correct_refusal_rate": 0.9, "false_refusal_rate": 0.02},
                                           "latency": {"p95_ms": 100.0}}}

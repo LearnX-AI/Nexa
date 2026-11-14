@@ -5,8 +5,8 @@ Milestone: M2
 Aligns with: NEXA-M2-001 (authority tiers), NEXA-M2-002 (corpus), NEXA-M2-004 (index versioning), NEXA-M2-005 (retrieval), NEXA-M2-006 (grounding), NEXA-M2-007 (school and national scope)
 
 Implementation:
-- Dataset: `v1/knowledge/benchmark/eval/dataset.v1.1.0.json` (1.0.0 kept for history; 1.1.0 adds the general-answer items x18 to x20).
-- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.2.0.json` (set from the DGX baseline).
+- Dataset: `v1/knowledge/benchmark/eval/dataset.v1.2.0.json` (earlier versions kept for history; 1.1.0 added the general-answer items x18 to x20; 1.2.0 adds spelling and answer-quality fixture items x21 to x25 and fixture document F10, and 10 corpus questions with a misspelt word, type `spelling`, reported and gated separately from the 48-question gating set).
+- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.3.0.json` (1.2.0 set from the DGX baseline; 1.3.0 adds a spelling floor, recall@5 ≥ 80 on the misspelt questions, provisional until the next DGX run).
 - Baselines: `v1/knowledge/benchmark/eval/baselines/`.
 - Metrics, gate and fixture runner: `v1/knowledge/benchmark/evalsuite.py`.
 - Runner: `v1/tools/nexa_eval.py`, with three suites: `fixture`, `corpus` and `live`.
