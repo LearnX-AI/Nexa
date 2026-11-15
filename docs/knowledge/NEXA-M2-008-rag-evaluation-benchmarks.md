@@ -43,7 +43,7 @@ Each item carries:
 - for corpus items: the expected `files` and `evidence` phrases, plus `subject`, `grade`, `term`, `source_type` and `format` for slicing;
 - an `expect` block with the required behaviour.
 
-A corpus hit is a retrieved chunk from an expected file that contains every evidence phrase. This is the M2-004/005 rule, so the numbers stay comparable.
+A hit is a retrieved passage that contains every evidence phrase (the phrases are specific: a value, a name, a defining sentence), from any approved source. The first live (DEV) run on 2026-11-15 showed why: the same EduNex lesson is synced from several Moodle courses (lesson notes, teacher note, PPT), and the stricter M2-004/005 rule, which also required the exact file named in the dataset, counted the right content in another copy as a miss. That stricter rule is still reported as `source_recall@5`. recall@k, MRR and nDCG use the passage rule from dataset 1.2.0 / evaluation code of 2026-11-15 on; earlier reports used the file rule.
 
 | Type | Items | What it tests |
 |---|---|---|
@@ -191,6 +191,8 @@ v1 by type, recall@5: exact fact 95.0, conceptual 100.0, ambiguous 87.5, Tok Pis
 **Refusal is two layers, and is gated on both.** The evidence grade (similarity and word coverage) refused 8 of 16 unanswerable questions (0.50): it is tuned to never refuse an answerable one (0/48). The other 8 reach the answer model, which must reply INSUFFICIENT_EVIDENCE when the passages do not answer (as it did live for the bird-count question asked as a student). So the corpus gate keeps the evidence-grade rate as a regression floor (≥ 0.40, at most 0.10 below baseline), and the end-to-end check (`--answers`, and the live suite) requires that an unanswerable question gets a curriculum answer at most 10% of the time (`no_answer.curriculum_answer_rate`); a labelled general answer or the refusal both count as correct.
 
 **Thresholds 1.2.0**, set from this run: gating recall@5 ≥ 92.5, MRR@10 ≥ 0.65, exact ≥ 90, conceptual ≥ 92.5, ambiguous ≥ 75, syllabus-first ≥ 0.90, plus the regression limits against the baseline in section 5.
+
+**First live (DEV) run, 2026-11-15** (commit `7e1bdd1`, the running Knowledge Service with the M2-002 corpus and 473 synced EduNex items): answers 0.759 accurate, 0 fabricated citations, end-to-end refusal 1.0, false refusal 0.0, p95 100 ms; gating recall@5 79.2 under the file rule, below the live floor of 80. The drop was in EduNex lessons (60.9 vs 91.3 in the corpus run): copies of the same lesson from other Moodle courses filled the top results (precision@5 0.40) and were counted as misses. Two changes followed: result diversity in retrieval (at most two passages per source, near copies dropped; NEXA-M2-005 step 6) and the passage rule above.
 
 ## 7. Acceptance criteria (NEXA-M2-008)
 

@@ -22,6 +22,10 @@ One request runs these stages, each timed and explained:
    lower-authority one is placed above it, never silently replaced.
 6. Cut to top_k. Every result keeps its stage scores and the reasons it was
    selected, and the response carries the stage timings and what was applied.
+6. Diversity. diversify() keeps at most NEXA_MAX_PER_SOURCE passages per
+   source and drops near copies of a higher-ranked passage (the same lesson
+   synced from several Moodle courses), so the results show different
+   sources; dropped passages fill in only when too few remain.
 
 `score` on a result is its semantic similarity to the query (cosine), the same
 meaning it had in M1, so it can be compared across queries and used to judge
@@ -31,6 +35,7 @@ which is not always score order.
 from __future__ import annotations
 
 import math
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -122,6 +127,45 @@ class FeatureReranker:
                  + w["heading"] * cov["heading"] + w["fused"] * it["scores"]["rrf"] / best)
             it["scores"]["rerank"] = round(s, 6)
         return sorted(items, key=lambda r: (-r["scores"]["rerank"], r["chunk_id"]))
+
+
+def _shingles(text: str, n: int = 5) -> set[str]:
+    w = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return {" ".join(w[i:i + n]) for i in range(max(1, len(w) - n + 1))}
+
+
+def _source_key(it: dict[str, Any]) -> str:
+    md = it.get("metadata") or {}
+    return str(md.get("version_id") or md.get("source_id") or md.get("title") or it.get("chunk_id"))
+
+
+def diversify(items: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Keep rank order, but at most MAX_PER_SOURCE passages per source and no
+    near copy of a passage already kept. Dropped passages fill in only when
+    too few remain."""
+    kept: list[dict[str, Any]] = []
+    spare: list[dict[str, Any]] = []
+    per: dict[str, int] = {}
+    seen: list[set[str]] = []
+    dropped = {"same_source": 0, "near_duplicate": 0}
+    for it in items:
+        if len(kept) >= top_k:
+            break
+        key = _source_key(it)
+        sh = _shingles(it.get("text") or "")
+        if per.get(key, 0) >= config.MAX_PER_SOURCE:
+            dropped["same_source"] += 1
+            spare.append(it)
+            continue
+        if sh and any(len(sh & o) / len(sh | o) >= config.DEDUP_SIMILARITY for o in seen if o):
+            dropped["near_duplicate"] += 1
+            spare.append(it)
+            continue
+        kept.append(it)
+        per[key] = per.get(key, 0) + 1
+        seen.append(sh)
+    kept += spare[:max(0, top_k - len(kept))]
+    return kept, {k: v for k, v in dropped.items() if v}
 
 
 class Retriever:
@@ -218,10 +262,12 @@ class Retriever:
                 it["scores"]["rerank_rank"] = i
             t = lap("rerank", t)
 
-        arbitration_pool = pool[:max(2 * top_k, 10)]
+        arbitration_pool = pool[:max(3 * top_k, 15)]
         arbitrated, conflicts = arbitrate(arbitration_pool, claim)
         t = lap("authority", t)
-        final = arbitrated[:top_k]
+        final, dropped = diversify(arbitrated, top_k)
+        if dropped:
+            explain["diversity"] = dropped
 
         for i, it in enumerate(final, 1):
             s = it["scores"]

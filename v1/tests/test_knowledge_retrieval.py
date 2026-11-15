@@ -428,3 +428,22 @@ def test_default_mode_follows_the_index_model(monkeypatch):
         return auto.explain["mode"], auto.explain["reranker"], forced.explain["mode"]
     assert run(go("nomic-embed-text:v1.5", "nomic-embed")) == ("hybrid", None, "lexical")
     assert run(go("bge-m3:567m-cpu", "bge-m3")) == ("vector", None, "lexical")
+
+
+def test_diversify_limits_one_source_and_drops_near_copies(monkeypatch):
+    from v1.knowledge import config as kconfig
+    from v1.knowledge.retrieval import diversify
+    monkeypatch.setattr(kconfig, "MAX_PER_SOURCE", 2)
+    monkeypatch.setattr(kconfig, "DEDUP_SIMILARITY", 0.8)
+    lesson = "DNA is copied in the S (Synthesis) phase of the cell cycle before the cell divides by mitosis."
+
+    def it(cid, src, text):
+        return {"chunk_id": cid, "text": text, "metadata": {"version_id": src}}
+    items = [it("a1", "A", lesson), it("a2", "A", "Helicase unwinds the double helix."),
+             it("a3", "A", "Primase lays down a primer."), it("b1", "B", lesson + " See the diagram."),
+             it("c1", "C", "Mitosis gives two identical cells."), it("d1", "D", "Meiosis gives four gametes.")]
+    kept, dropped = diversify(items, 4)
+    assert [k["chunk_id"] for k in kept] == ["a1", "a2", "c1", "d1"]
+    assert dropped == {"same_source": 1, "near_duplicate": 1}
+    kept, _ = diversify(items[:4], 4)  # too few others: dropped passages fill in, in rank order
+    assert [k["chunk_id"] for k in kept] == ["a1", "a2", "a3", "b1"]

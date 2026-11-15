@@ -102,21 +102,28 @@ def key_terms(phrases: Iterable[str]) -> list[str]:
 
 def file_of_result(r: dict[str, Any]) -> Optional[str]:
     """The source file a result came from: metadata file name, else the last
-    path segment of a repo:// source URI."""
+    path segment of a repo:// source URI, else (an LMS item) its title."""
     md = r.get("metadata") or {}
     if md.get("file_name"):
         return md["file_name"]
     uri = (r.get("provenance") or {}).get("source_uri") or md.get("source_uri") or ""
     if uri.startswith("repo://"):
-        return unquote(uri.rsplit("/", 1)[-1])
-    return None
+        return unquote(uri.rsplit("/", 1)[-1].split("?")[0])
+    return md.get("title") or (r.get("provenance") or {}).get("title")
 
 
 def hit_rank(results: list[dict[str, Any]], item: dict[str, Any],
-             file_of: Callable[[dict[str, Any]], Optional[str]] = file_of_result) -> Optional[int]:
+             file_of: Callable[[dict[str, Any]], Optional[str]] = file_of_result,
+             strict: bool = False) -> Optional[int]:
+    """Rank of the first passage that contains every evidence phrase: the
+    passage that answers the question. The phrases are specific (a value, a
+    name, a defining sentence), so any approved source that contains them
+    answers it, including another copy of the same lesson synced from a
+    different Moodle course. strict=True also requires an expected file
+    (reported as source_recall)."""
     ev = [norm(e) for e in item["evidence"]]
     for i, r in enumerate(results, 1):
-        if file_of(r) in item["files"] and all(e in norm(r.get("text", "")) for e in ev):
+        if (not strict or file_of(r) in item["files"]) and all(e in norm(r.get("text", "")) for e in ev):
             return i
     return None
 
@@ -145,6 +152,8 @@ def retrieval_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "mrr@10": round(sum(1 / x for x in ranks if x and x <= 10) / n, 3),
         "ndcg@10": round(sum(1 / math.log2(x + 1) for x in ranks if x and x <= 10) / n, 3),
         "precision@5": round(statistics.mean(r["precision@5"] for r in rows), 3),
+        "source_recall@5": round(100 * sum(1 for r in rows if r.get("source_rank") and r["source_rank"] <= 5)
+                                 / n, 1) if any("source_rank" in r for r in rows) else None,
     }
 
 
@@ -215,19 +224,20 @@ def score_corpus(observations: list[dict[str, Any]]) -> dict[str, Any]:
                 rec["answer_status"] = o["answer"].get("status")
         else:
             rank = hit_rank(res, it, fof)
+            source_rank = hit_rank(res, it, fof, strict=True)
             p5 = precision_at(res, it, 5, fof)
-            rec.update({"rank": rank, "precision@5": round(p5, 2),
+            rec.update({"rank": rank, "source_rank": source_rank, "precision@5": round(p5, 2),
                         "top": (fof(res[0]) if res else None)})
             if it.get("approved", True):
-                rows.append({**{k: it.get(k) for k in SLICES}, "rank": rank, "precision@5": p5,
-                             "gating": it["type"] in GATING_TYPES})
+                rows.append({**{k: it.get(k) for k in SLICES}, "rank": rank, "source_rank": source_rank,
+                             "precision@5": p5, "gating": it["type"] in GATING_TYPES})
                 if o.get("evidence") is not None:
                     refusals["answerable"] += 1
                     if o["evidence"] == "none":
                         refusals["false_refusals"] += 1
             else:
-                rows.append({**{k: it.get(k) for k in SLICES}, "rank": rank, "precision@5": p5,
-                             "gating": False, "unapproved": True})
+                rows.append({**{k: it.get(k) for k in SLICES}, "rank": rank, "source_rank": source_rank,
+                             "precision@5": p5, "gating": False, "unapproved": True})
             want = (it.get("expect") or {}).get("top_source_type")
             if want and it.get("approved", True):
                 got = (o.get("source_types") or [None])[0]
