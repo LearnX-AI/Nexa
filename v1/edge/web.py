@@ -270,7 +270,7 @@ async def embed_probe(texts: list[str]) -> list[list[float]]:
     """Embed the package's probe texts with the local model, raw (the texts
     already carry their prefix)."""
     from ..knowledge import embeddings
-    vecs, _ = await embeddings._gateway(texts, config.EMBED_MODEL)
+    vecs, _ = await embeddings._gateway(texts, config.EMBED_MODEL, None)
     return vecs
 
 

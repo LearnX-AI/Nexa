@@ -53,7 +53,7 @@ async def _build(a) -> int:
         items, skipped = await collect(store, iid, pol)
     finally:
         await store.close()
-    probes, _ = await embeddings._gateway(list(PROBE_TEXTS), rec.logical)
+    probes, _ = await embeddings._gateway(list(PROBE_TEXTS), rec.logical, None)
     root = os.path.join(out, a.school)
     prev = None
     versions = sorted(int(n[1:]) for n in os.listdir(root) if n.startswith("v") and n[1:].isdigit()) \
