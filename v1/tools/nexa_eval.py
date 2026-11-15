@@ -264,7 +264,9 @@ def run_corpus(args) -> int:
     jp, mp = write_report(rep, args.out, stem)
     print(markdown(rep))
     print(f"report: {mp}\n        {jp}")
-    if args.write_baseline and not args.offline:
+    if args.write_baseline and not args.offline and not rep["gate"]["passed"]:
+        print("not writing a baseline: the gate failed")
+    elif args.write_baseline and not args.offline:
         os.makedirs(BASELINES, exist_ok=True)
         slim = {k: rep[k] for k in ("suite", "dataset_version", "generated_at", "commit", "gate_key", "index",
                                     "corpus", "metrics", "v0_baseline") if k in rep}

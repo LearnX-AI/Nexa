@@ -447,3 +447,11 @@ def test_diversify_limits_one_source_and_drops_near_copies(monkeypatch):
     assert dropped == {"same_source": 1, "near_duplicate": 1}
     kept, _ = diversify(items[:4], 4)  # too few others: dropped passages fill in, in rank order
     assert [k["chunk_id"] for k in kept] == ["a1", "a2", "a3", "b1"]
+
+
+def test_diversify_by_default_only_drops_near_copies():
+    from v1.knowledge.retrieval import diversify
+    same = [{"chunk_id": f"a{i}", "text": f"Passage {i} about a different part of the lesson number {i * 7}.",
+             "metadata": {"version_id": "A"}} for i in range(5)]
+    kept, dropped = diversify(same, 5)
+    assert [k["chunk_id"] for k in kept] == ["a0", "a1", "a2", "a3", "a4"] and not dropped
