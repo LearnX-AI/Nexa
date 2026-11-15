@@ -17,7 +17,7 @@ RUN_AS="${NEXA_EDGE_USER:-nvidia}"
 
 echo "== code -> $APP"
 mkdir -p "$APP" "$HOME_DIR" /etc/nexa-edge
-rsync -a --delete --exclude '.git' "$SRC/v1" "$APP/"
+rm -rf "$APP/v1.new" && cp -a "$SRC/v1" "$APP/v1.new" && rm -rf "$APP/v1" && mv "$APP/v1.new" "$APP/v1"
 chown -R "$RUN_AS": "$HOME_DIR" /opt/nexa-edge
 
 echo "== python environment"
