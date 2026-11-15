@@ -312,4 +312,7 @@ def get_store() -> VectorStore:
     if backend == "pgvector":
         from .pgstore import PgVectorStore
         return PgVectorStore(config.PG_DSN, schema=config.PG_SCHEMA)
+    if backend == "edge":
+        from ..edge.edgestore import EdgeStore
+        return EdgeStore(config.EDGE_HOME)
     raise ValueError(f"Unknown store backend: {backend}")

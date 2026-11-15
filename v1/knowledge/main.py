@@ -76,6 +76,12 @@ INDEX = IndexManager(_STORE, PIPE.registry)
 _RETRIEVER: Optional[Retriever] = None
 _LMS: Optional[LmsSync] = None
 
+# School edge (NEXA-M2-009): core serves packages; a school server is read-only.
+from v1.edge import web as edge_web  # noqa: E402
+from .auth import require_principal as _require_principal_dep  # noqa: E402
+edge_web.install_core(app, _require_principal_dep)
+edge_web.install_edge(app, lambda: INDEX.store)   # active only when NEXA_EDGE_MODE=true
+
 
 def retriever() -> Retriever:
     """The retriever over the current INDEX (rebuilt if INDEX is replaced)."""
@@ -102,7 +108,7 @@ async def _startup():
     import asyncio
     if config.REINDEX_ON_START:
         asyncio.get_running_loop().create_task(reindex_all())
-    if config.LMS_RETRY_INTERVAL_S > 0:
+    if config.LMS_RETRY_INTERVAL_S > 0 and not config.EDGE_MODE:
         asyncio.get_running_loop().create_task(_lms_retry_loop())
 
 
@@ -157,6 +163,9 @@ async def health():
         "store": config.STORE_BACKEND,
         "embed_model": config.EMBED_MODEL,
         **index,
+        **({"edge": {"school_id": config.EDGE_SCHOOL_ID, "answer_route": config.EDGE_ANSWER_ROUTE,
+                     "package_version": (INDEX.store.manifest() or {}).get("version")
+                     if hasattr(INDEX.store, "manifest") else None}} if config.EDGE_MODE else {}),
         "metadata_schema": SCHEMA_VERSION,
         "pipeline": PIPELINE_VERSION,
         "normalizer": NORMALIZER_VERSION,
@@ -207,6 +216,7 @@ async def query(
     explain=true adds the pipeline report (filters applied, candidate counts,
     authority adjustments, timings)."""
     trace_id = _trace(request)
+    principal = edge_web.effective_principal(principal, request)
     if not can(principal, "knowledge.query"):
         audit_event(action="knowledge.query", decision="deny",
                     principal=principal.subject, trace_id=trace_id)
@@ -271,7 +281,38 @@ _STAFF_ROLES = {"teacher", "school_admin", "ai_engineer", "admin", "platform_adm
 async def answer(req: AnswerRequest, request: Request, principal: Principal = Depends(require_principal)):
     """Answer from approved curriculum passages only, with machine-readable
     citations (NEXA-M2-006 contract). Weak, conflicting or missing evidence
-    gives a controlled response, never an unsupported one."""
+    gives a controlled response, never an unsupported one.
+
+    On core NEXA a school server may ask on behalf of one of its users
+    (NEXA-M2-009): the request is authorised as that role at that school. On a
+    school server, repeated questions come from the answer cache and, with
+    NEXA_EDGE_ANSWER_ROUTE=core_first, core NEXA writes the answer when it is
+    reachable; retrieval and the fallback answer are always local."""
+    principal = edge_web.effective_principal(principal, request)
+    if not config.EDGE_MODE:
+        return await _answer(req, request, principal)
+    trace_id = _trace(request)
+    manifest = INDEX.store.manifest() if hasattr(INDEX.store, "manifest") else None
+    version = (manifest or {}).get("version")
+    key = edge_web.CACHE.key(version, principal, req.question, req.general)
+    hit = edge_web.CACHE.get(key)
+    if hit is not None:
+        body = json.loads(json.dumps(hit))
+        body.setdefault("x_nexa", {}).update(trace_id=trace_id, route="cache", package_version=version)
+        edge_web.COUNTS["routes"]["cache"] += 1
+        return body
+    body = await edge_web.forward_answer(req.model_dump(exclude_unset=True), principal, trace_id)
+    route = "core"
+    if body is None:
+        body, route = await _answer(req, request, principal), "local"
+    body.setdefault("x_nexa", {}).update(route=route, package_version=version, school_id=config.EDGE_SCHOOL_ID)
+    edge_web.COUNTS["routes"][route] += 1
+    edge_web.COUNTS["statuses"][body.get("status")] += 1
+    edge_web.CACHE.put(key, body)
+    return body
+
+
+async def _answer(req: AnswerRequest, request: Request, principal: Principal):
     trace_id = _trace(request)
     _require(principal, "knowledge.query", "knowledge.answer", trace_id)
     try:
