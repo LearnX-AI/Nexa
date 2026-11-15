@@ -6,8 +6,10 @@ answer therefore:
 
 - has its own status, ``general``, and ``source_kind`` ``general_knowledge``
   or ``web``, never ``grounded``;
-- starts with a fixed label saying it is not from the approved curriculum
-  materials, so a client that shows only the answer text still shows it;
+- carries the fixed label saying it is not from the approved curriculum
+  materials in ``general.label``; the answer text starts with it only when
+  NEXA_GENERAL_LABEL=shown (default hidden: the answer reads naturally and
+  clients use the status to mark it);
 - carries no curriculum citations ([S1]...). A web answer cites the pages it
   used as [W1]..[Wn]; any other marker is removed and reported;
 - is told not to invent syllabus codes, outcomes or curriculum references.
@@ -214,7 +216,9 @@ async def general_answer(question: str, audience: str, trace_id: Optional[str], 
     info = GeneralInfo(source_kind=kind, mode=mode, label=label, model=model,
                        web_provider=config.WEB_SEARCH_PROVIDER if mode == "web" else None,
                        web_sources=web, fabricated_markers=bad, reason="; ".join(x for x in (reason, note) if x))
-    return f"{label}\n\n{text}", info
+    if config.GENERAL_LABEL == "shown":
+        return f"{label}\n\n{text}", info
+    return text, info
 
 
 def payload(info: GeneralInfo) -> dict[str, Any]:

@@ -82,7 +82,8 @@ def test_off_curriculum_question_gets_a_labelled_general_answer(svc):
     c, h, state, *_ = svc
     a = _ask(c, h, QUESTION_OFF)
     assert a["status"] == "general" and a["source_kind"] == "general_knowledge"
-    assert a["answer"].startswith(general.LABEL_LLM)
+    assert not a["answer"].startswith(general.LABEL_LLM)  # label hidden by default
+    assert a["general"]["label"] == general.LABEL_LLM
     assert a["confidence"] == "low" and a["model"] == "nexa-general"
     # never passed off as curriculum: no curriculum citations, invented markers removed and reported
     assert a["citations"] == [] and "[S1]" not in a["answer"] and "[3]" not in a["answer"]
@@ -103,7 +104,7 @@ def test_passages_that_do_not_answer_also_fall_back_to_general(svc):
     c, h, state, *_ = svc
     state["curriculum_reply"] = "INSUFFICIENT_EVIDENCE"
     a = _ask(c, h, QUESTION_ON)
-    assert a["status"] == "general" and a["answer"].startswith(general.LABEL_LLM)
+    assert a["status"] == "general" and a["general"]["label"] == general.LABEL_LLM
     assert "do not answer" in a["general"]["reason"]
 
 
@@ -129,7 +130,7 @@ def test_web_mode_cites_only_the_results_it_was_given(svc, monkeypatch):
     state["general_reply"] = "It is played every year [W1]. Queensland won [W7]."
     a = _ask(c, h, QUESTION_OFF)
     assert a["status"] == "general" and a["source_kind"] == "web"
-    assert a["answer"].startswith(general.LABEL_WEB) and "[W1]" in a["answer"] and "[W7]" not in a["answer"]
+    assert a["general"]["label"] == general.LABEL_WEB and "[W1]" in a["answer"] and "[W7]" not in a["answer"]
     ws = a["general"]["web_sources"]
     assert [w["used"] for w in ws] == [True, False] and ws[0]["url"].startswith("https://")
     assert a["general"]["fabricated_markers"] == ["W7"]
@@ -165,3 +166,10 @@ def test_general_model_falls_back_to_the_answer_model(monkeypatch):
     import asyncio
     text, model = asyncio.run(general._general_chat([{"role": "user", "content": "q"}], None))
     assert (text, model) == ("An answer.", "nexa-chat-precise") and seen == ["nexa-general", "nexa-chat-precise"]
+
+
+def test_label_can_be_shown_in_the_text(svc, monkeypatch):
+    c, h, *_ = svc
+    monkeypatch.setattr(config, "GENERAL_LABEL", "shown")
+    a = _ask(c, h, QUESTION_OFF)
+    assert a["status"] == "general" and a["answer"].startswith(general.LABEL_LLM)

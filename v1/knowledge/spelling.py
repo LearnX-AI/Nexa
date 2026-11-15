@@ -140,8 +140,9 @@ async def check(index_mgr, question: str) -> Check:
             continue
         cands = suggest(lw, vocab)
         if len(cands) == 1:
-            out.corrections[w] = cands[0]
-            fixed = re.sub(rf"\b{re.escape(w)}\b", cands[0], fixed)
+            c = cands[0].capitalize() if w[0].isupper() else cands[0]
+            out.corrections[w] = c
+            fixed = re.sub(rf"\b{re.escape(w)}\b", c, fixed)
         elif len(cands) > 1:
             out.ambiguous[w] = cands
     if out.corrections:
