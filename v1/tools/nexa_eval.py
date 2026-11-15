@@ -381,7 +381,7 @@ def markdown(r: dict) -> str:
             L.append(f"| {it['id']} | {it['type']} | {'pass' if it['passed'] else '**FAIL**'} | "
                      f"{'; '.join(it['failures'])} |")
         return "\n".join(L) + "\n"
-    cols = ("n", "recall@1", "recall@5", "recall@10", "mrr@10", "ndcg@10", "precision@5")
+    cols = ("n", "recall@1", "recall@5", "recall@10", "mrr@10", "ndcg@10", "precision@5", "source_recall@5")
     L += ["", "## Retrieval", "", "| Set | " + " | ".join(cols) + " |", "|---" * (len(cols) + 1) + "|"]
     rows = [("gating (approved, EN)", m["retrieval"]["gating"])]
     if r.get("v0_baseline"):

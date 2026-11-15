@@ -118,6 +118,14 @@ ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
 ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
+# Result diversity (retrieval.py): at most this many passages from one source
+# in the results, and a passage whose text is a near copy (shingle Jaccard at
+# or above NEXA_DEDUP_SIMILARITY) of a higher-ranked one is dropped. The same
+# lesson synced from several Moodle courses (lesson notes, teacher note, PPT)
+# otherwise fills the top results with one source.
+MAX_PER_SOURCE = int(os.environ.get("NEXA_MAX_PER_SOURCE", "2"))
+DEDUP_SIMILARITY = float(os.environ.get("NEXA_DEDUP_SIMILARITY", "0.8"))
+
 # Correct misspelt subject words against the curriculum's vocabulary (spelling.py).
 SPELLING = os.environ.get("NEXA_SPELLING", "true").lower() == "true"
 SPELL_MIN_LEN = int(os.environ.get("NEXA_SPELL_MIN_LEN", "5"))

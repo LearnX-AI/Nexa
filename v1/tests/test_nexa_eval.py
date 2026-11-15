@@ -77,12 +77,13 @@ def test_ranking_metrics():
     assert s["precision@5"] == 0.35
 
 
-def test_hit_needs_the_expected_file_and_all_evidence():
+def test_hit_needs_all_evidence_and_strict_hit_the_expected_file():
     item = {"files": ["a.pdf"], "evidence": ["helicase", "hydrogen bonds"]}
     rows = [{"file": "b.pdf", "text": "helicase breaks hydrogen bonds"},
             {"file": "a.pdf", "text": "helicase unwinds DNA"},
             {"file": "a.pdf", "text": "Helicase breaks the HYDROGEN bonds."}]
-    assert ev.hit_rank(rows, item, lambda r: r["file"]) == 3
+    assert ev.hit_rank(rows, item, lambda r: r["file"]) == 1                 # any passage that answers it
+    assert ev.hit_rank(rows, item, lambda r: r["file"], strict=True) == 3    # from an expected file
     assert ev.precision_at(rows, item, 5, lambda r: r["file"]) == pytest.approx(2 / 3)
     assert ev.file_of_result({"provenance": {"source_uri": "repo://curriculum/STEM%20Bio.pdf"}}) == "STEM Bio.pdf"
 
