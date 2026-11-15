@@ -54,8 +54,11 @@ one_run() {  # $1 config, $2 students, $3 extra args, $4 label
   systemctl restart nexa-edge-knowledge
   wait_health || return 1
   log "run: $4"
-  sudo -u "$RUN_AS" bash -c "set -a; . /etc/nexa-edge/edge.env; set +a; cd $APP && $PY v1/tools/nexa_load.py --students $2 $3 --label '$4' --out $OUT" \
-    | grep -E 'Students who got|unavailable|HTTP errors|Wait, median|Whole class|Answers correct|Answer queue'
+  # The label goes in as an argument, never inside the quoted command, so any text is safe.
+  sudo -u "$RUN_AS" bash -c 'set -a; . /etc/nexa-edge/edge.env; set +a; cd "$1" && "$2" v1/tools/nexa_load.py --students "$3" $4 --label "$5" --out "$6"' \
+    _ "$APP" "$PY" "$2" "$3" "$4" "$OUT" \
+    | grep -E 'Students who got|unavailable|HTTP errors|Wait, median|Whole class|Answers correct|Answer queue' \
+    || log "RUN FAILED (no report): $4"
 }
 
 log "system: $(cat /proc/device-tree/model 2>/dev/null | tr -d '\0'), $(nproc) cores, $(free -g | awk '/Mem/{print $2}') GB"
@@ -63,7 +66,7 @@ log "ollama $(ollama --version 2>/dev/null | awk '{print $NF}'), environment: $(
 log "package: $(curl -s http://127.0.0.1:8103/health | $PY -c 'import sys,json;print(json.load(sys.stdin).get("edge"))')"
 
 configure before
-for n in $SIZES_BEFORE; do one_run before "$n" "" "before (today's settings), $n students at once"; done
+for n in $SIZES_BEFORE; do one_run before "$n" "" "before (current settings), $n students at once"; done
 configure after
 for n in $SIZES_AFTER; do one_run after "$n" "" "after (queue + parallel $PARALLEL), $n students at once"; done
 one_run after 100 "--spread 300 --repeat-share 0.3" "after (queue + parallel $PARALLEL), 100 students over 5 min, 30% repeat a popular question"
