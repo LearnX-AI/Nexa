@@ -44,7 +44,7 @@ from urllib.parse import unquote
 
 HERE = os.path.join(os.path.dirname(__file__), "eval")
 DEFAULT_DATASET = os.path.join(HERE, "dataset.v1.2.0.json")
-DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.3.0.json")
+DEFAULT_THRESHOLDS = os.path.join(HERE, "thresholds.v1.4.0.json")
 TYPES = {"exact_fact", "conceptual", "ambiguous", "multilingual", "no_answer", "conflict", "scope", "access",
          "filters", "citation_integrity", "failure", "general", "spelling", "confidence"}
 _W = re.compile(r"[a-z0-9]+")

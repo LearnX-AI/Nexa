@@ -1,12 +1,12 @@
 # NEXA-M2-008: RAG Evaluation Dataset & Retrieval Benchmarks
 
-Status: Complete. Fixture suite passing in CI; v0 and v1 baselines recorded on the DGX on 2026-11-11 (section 6); thresholds 1.2.0 set from them.
+Status: Complete. Fixture suite passing in CI; v0 and v1 baselines recorded on the DGX (final run 2026-11-15, section 6); corpus and live (DEV) gates passing; thresholds 1.4.0 final.
 Milestone: M2
 Aligns with: NEXA-M2-001 (authority tiers), NEXA-M2-002 (corpus), NEXA-M2-004 (index versioning), NEXA-M2-005 (retrieval), NEXA-M2-006 (grounding), NEXA-M2-007 (school and national scope)
 
 Implementation:
 - Dataset: `v1/knowledge/benchmark/eval/dataset.v1.2.0.json` (earlier versions kept for history; 1.1.0 added the general-answer items x18 to x20; 1.2.0 adds spelling and answer-quality fixture items x21 to x25 and fixture document F10, and 10 corpus questions with a misspelt word, type `spelling`, reported and gated separately from the 48-question gating set).
-- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.3.0.json` (1.2.0 set from the DGX baseline; 1.3.0 adds a spelling floor, recall@5 ≥ 80 on the misspelt questions, provisional until the next DGX run).
+- Thresholds: `v1/knowledge/benchmark/eval/thresholds.v1.4.0.json`, final, set from the DGX corpus and live runs of 2026-11-15 (earlier versions kept for history).
 - Baselines: `v1/knowledge/benchmark/eval/baselines/`.
 - Metrics, gate and fixture runner: `v1/knowledge/benchmark/evalsuite.py`.
 - Runner: `v1/tools/nexa_eval.py`, with three suites: `fixture`, `corpus` and `live`.
@@ -130,7 +130,7 @@ Notes on the corpus suite:
 
 ## 5. Thresholds and the release gate
 
-`thresholds.v1.0.0.json`, the first provisional values (the current values are in `thresholds.v1.2.0.json`, section 6):
+`thresholds.v1.0.0.json`, the first provisional values (the current values are in `thresholds.v1.4.0.json`, section 6):
 
 | Metric | Fixture | Corpus | Live |
 |---|---|---|---|
@@ -194,15 +194,37 @@ v1 by type, recall@5: exact fact 95.0, conceptual 100.0, ambiguous 87.5, Tok Pis
 
 **First live (DEV) run, 2026-11-15** (commit `7e1bdd1`, the running Knowledge Service with the M2-002 corpus and 473 synced EduNex items): answers 0.759 accurate, 0 fabricated citations, end-to-end refusal 1.0, false refusal 0.0, p95 100 ms; gating recall@5 79.2 under the file rule, below the live floor of 80. The drop was in EduNex lessons (60.9 vs 91.3 in the corpus run): copies of the same lesson from other Moodle courses filled the top results (precision@5 0.40) and were counted as misses. Two changes followed: result diversity in retrieval (at most two passages per source, near copies dropped; NEXA-M2-005 step 6) and the passage rule above.
 
+### Final baseline, 2026-11-15
+
+**Corpus suite** (commit `9b6c06c`, gate key `a394165cff58f30f`, dataset 1.2.0, passage scoring, near-copy removal; `evidence/m2-008-eval-corpus-dgx-20261115.md`, `baselines/corpus-nomic-embed.json`). Gate PASS.
+
+| Gating set (48 approved English questions) | v0 | v1 |
+|---|---|---|
+| recall@1 | 29.2 | 58.3 |
+| recall@5 | 56.2 | 95.8 |
+| recall@10 | 58.3 | 97.9 |
+| MRR@10 | 0.391 | 0.727 |
+| nDCG@10 | 0.438 | 0.790 |
+| source_recall@5 (expected file) | 56.2 | 93.8 |
+| Syllabus first, syllabus-defined questions | 0.33 | 1.00 |
+
+v1 recall@5 by slice: exact fact 95.0, conceptual 100, ambiguous 87.5, misspelt questions 100 (v0 70), Tok Pisin (not gating) 81.2 (v0 37.5); EduNex lessons 91.3 (v0 26.1). Grounded answers: accuracy 0.875 (48), cites an expected source 0.896, 0 fabricated citations, 0 ungrounded. Unanswerable questions: evidence grade refuses 0.50, end to end 1.00 (no curriculum answer); answerable wrongly refused 0.00. Latency p50 74 ms, p95 101 ms.
+
+**Live suite** against the deployed DEV service (same commit; corpus plus 473 synced EduNex items; `evidence/m2-008-eval-live-dgx-20261115.md`). Gate PASS: gating recall@5 83.3, recall@10 93.8, MRR 0.644, answer accuracy 0.776, 0 fabricated citations, end-to-end refusal 1.0, false refusal 0.0, p95 111 ms. Live is lower than the corpus run because the live index also holds the EduNex lessons of other Moodle courses (for example Grade 11 Biology, course 11), which compete for the top results; Biology is the weakest live slice (recall@5 69.0, recall@10 89.7) and is the first target for retrieval work in M3.
+
+**What changed between the 2026-11-11 and 2026-11-15 runs.** Spelling correction, course outlines, honest confidence and general answers (answer path only); passage scoring; near-copy removal in retrieval. A per-source cap of two passages was also tried and refused by the gate (recall@5 95.8 to 81.2, commit `7a174fd`); it is off by default. That refusal is the release gate working as intended.
+
+**Thresholds 1.4.0 (final).** Corpus: gating recall@5 ≥ 92.5, MRR@10 ≥ 0.65, exact ≥ 90, conceptual ≥ 92.5, ambiguous ≥ 75, misspelt ≥ 90, syllabus-first ≥ 0.90, evidence-grade refusal ≥ 0.40, false refusal ≤ 0.10, p95 ≤ 450 ms; with answers, accuracy ≥ 0.70, valid citations ≥ 0.95, fabricated = 0, ungrounded ≤ 0.05, curriculum answers to unanswerable questions ≤ 0.10; and no metric more than its allowed drop below the baseline (recall@5 2.5 points, recall@1 5 points, MRR and nDCG 0.05, rates 0.10). Live: recall@5 ≥ 80, recall@10 ≥ 90, accuracy ≥ 0.70, end-to-end refusal ≥ 0.90, false refusal ≤ 0.10, fabricated = 0, p95 ≤ 1000 ms.
+
 ## 7. Acceptance criteria (NEXA-M2-008)
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Versioned benchmark dataset exists | **Met** | `dataset.v1.0.0.json` (97 items: 80 corpus, 17 fixture), validated by `load_dataset`; `test_dataset_is_versioned_and_covers_the_required_cases` |
-| Baseline results recorded for v0 and the v1 candidate pipeline | **Met** | Section 6: DGX run 2026-11-11, v1 recall@5 95.8 vs v0 56.2; `baselines/corpus-nomic-embed.json` |
-| Regression thresholds defined | **Met** | `thresholds.v1.2.0.json`, set from the baseline; sections 5 and 6 |
-| Evaluation runnable repeatedly in DEV/QA | **Met** | `nexa_eval.py corpus` uses a scratch schema each run and drops it; `nexa_eval.py live` is read-only |
-| An M2 release cannot pass if retrieval quality regresses below thresholds | **Met**, and shown on the DGX: `deploy.sh` refused `0f43e0e` until its evaluation passed | CI fixture gate; `deploy.sh` step 2a; `test_deploy_refuses_a_retrieval_change_without_a_passing_evaluation`, `test_fixture_suite_catches_an_authority_regression`, `test_fixture_suite_catches_an_access_regression` |
+| Versioned benchmark dataset exists | **Met** | `dataset.v1.2.0.json` (122 items; 1.0.0 and 1.1.0 kept), validated by `load_dataset`; `test_dataset_is_versioned_and_covers_the_required_cases` |
+| Baseline results recorded for v0 and the v1 candidate pipeline | **Met** | Section 6: DGX run 2026-11-15, v1 recall@5 95.8 vs v0 56.2, MRR 0.727 vs 0.391; `baselines/corpus-nomic-embed.json` |
+| Regression thresholds defined | **Met** | `thresholds.v1.4.0.json` (final), set from the corpus and live baselines; sections 5 and 6 |
+| Evaluation runnable repeatedly in DEV/QA | **Met** | Six corpus runs and two live runs on the DGX between 2026-11-11 and 2026-11-15; `corpus` uses a scratch schema each run and drops it; `live` is read-only against the running service |
+| An M2 release cannot pass if retrieval quality regresses below thresholds | **Met**, and shown on the DGX: `deploy.sh` refused `0f43e0e` until its evaluation passed, and the gate refused `7a174fd` when its retrieval change lowered recall@5 from 95.8 to 81.2 | CI fixture gate; `deploy.sh` step 2a; `test_deploy_refuses_a_retrieval_change_without_a_passing_evaluation`, `test_fixture_suite_catches_an_authority_regression`, `test_fixture_suite_catches_an_access_regression` |
 
 ## 8. Limitations
 
