@@ -40,6 +40,7 @@ from pydantic import BaseModel, Field
 
 from . import config, general
 from .general import GeneralInfo
+from .limiter import GENERATION
 from .retrieval import RetrievalResult, _terms
 
 CITATION_SCHEMA_VERSION = "1.2.0"
@@ -414,7 +415,7 @@ async def answer(question: str, result: RetrievalResult, audience: str = "studen
         {"role": "user", "content": f"Sources:\n{context}\n\nQuestion: {question}"},
     ]
     try:
-        raw, model = await chat(msgs, trace_id)
+        raw, model = await GENERATION.run(chat, msgs, trace_id)
     except Exception:  # noqa: BLE001 - the passages are still useful without generation
         cites = _citations(used, result, Integrity(), {})
         return GroundedAnswer(status="generation_unavailable", answer=FALLBACK_GENERATION, confidence="none",

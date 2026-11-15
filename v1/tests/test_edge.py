@@ -428,3 +428,89 @@ def test_package_carries_the_exact_embedding_text(tmp_path):
     items, _ = asyncio.run(pkg.collect(s, "idx_core", pkg.Policy(school_id="pomnsoe"),
                                        lambda cid: f"Header > Section\n\n{cid}"))
     assert items[0]["embedding_text"].startswith("Header > Section")
+
+
+# ---------------------------------------------------------------- classroom load
+
+@pytest.fixture
+def slow_school(tmp_path, home, monkeypatch):
+    full = _build(tmp_path, corpus(), 1)[0]
+    asyncio.run(sync.install_bundle(home, full.bundle, KEY, "pomnsoe", _probe))
+    monkeypatch.setattr(km, "INDEX", IndexManager(EdgeStore(home), Pipeline().registry))
+    monkeypatch.setattr(embeddings, "_gateway", FakeGateway(dim=DIM))
+    for k, v in {"EDGE_MODE": True, "EDGE_HOME": home, "EDGE_SCHOOL_ID": "pomnsoe", "EDGE_ANSWER_ROUTE": "local",
+                 "EVIDENCE_THRESHOLDS": {"default": {"min": 0.2, "strong": 0.3}}, "GENERATION_CONCURRENCY": 2,
+                 "GENERATION_QUEUE_TIMEOUT_S": 30.0}.items():
+        monkeypatch.setattr(config, k, v)
+    monkeypatch.setattr(edge_web, "CACHE", edge_web.AnswerCache(100, 3600))
+    from v1.knowledge import limiter
+    monkeypatch.setattr(limiter, "GENERATION", limiter.Limiter())
+    monkeypatch.setattr(grounding, "GENERATION", limiter.GENERATION)
+    state = {"running": 0, "peak": 0, "calls": 0}
+
+    async def slow_chat(messages, trace_id=None):
+        state["calls"] += 1
+        state["running"] += 1
+        state["peak"] = max(state["peak"], state["running"])
+        await asyncio.sleep(0.2)
+        state["running"] -= 1
+        return "DNA is copied in the S (Synthesis) phase [S1].", "slow-model"
+    monkeypatch.setattr(grounding, "chat", slow_chat)
+    return state, limiter
+
+
+async def _class(n, question=lambda i: f"Student {i}: during which phase of the cell cycle is DNA copied?"):
+    h = {"Authorization": "Bearer " + tokens.issue_token("s", ["student"], "user", 300)}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=km.app), base_url="http://edge", timeout=60) as c:
+        rs = await asyncio.gather(*(c.post("/v1/knowledge/answer", headers=h, json={"question": question(i)})
+                                    for i in range(n)))
+    return [r.json() for r in rs]
+
+
+def test_queue_limits_concurrent_generation_and_everyone_is_answered(slow_school):
+    state, limiter = slow_school
+    out = asyncio.run(_class(8))
+    assert all(b["status"] == "grounded" for b in out)
+    assert state["peak"] == 2 and state["calls"] == 8                 # never more than 2 at once
+    st = limiter.GENERATION.stats()
+    assert st["completed"] == 8 and st["max_waiting"] >= 5 and st["timed_out"] == 0
+
+
+def test_same_question_at_once_is_written_once(slow_school):
+    state, _ = slow_school
+    out = asyncio.run(_class(6, question=lambda i: "During which phase of the cell cycle is DNA copied?"))
+    assert state["calls"] == 1                                          # one generation for the whole group
+    assert sorted(b["x_nexa"]["route"] for b in out) == ["local"] + ["shared"] * 5
+    assert len({b["answer"] for b in out}) == 1
+
+
+def test_queue_timeout_gives_the_controlled_answer_not_an_error(slow_school, monkeypatch):
+    state, limiter = slow_school
+    monkeypatch.setattr(config, "GENERATION_CONCURRENCY", 1)
+    monkeypatch.setattr(config, "GENERATION_QUEUE_TIMEOUT_S", 0.05)
+    out = asyncio.run(_class(4))
+    statuses = sorted(b["status"] for b in out)
+    assert statuses.count("grounded") >= 1 and "generation_unavailable" in statuses
+    gu = next(b for b in out if b["status"] == "generation_unavailable")
+    assert gu["citations"]                                               # the passages still come back
+    assert limiter.GENERATION.stats()["timed_out"] >= 1
+
+
+def test_load_tool_reports_wait_answers_and_correctness(slow_school, tmp_path, monkeypatch):
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+    import nexa_load
+    real = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.ASGITransport(app=km.app), **{k: v for k, v in kw.items()
+                                                                                       if k != "limits"}))
+
+    class A:
+        base_url, students, spread, repeat_share, role, timeout, seed = "http://edge", 6, 0.0, 0.5, "student", 60, 3
+        warmup, edge_status, dataset, label = True, True, nexa_load.ev.DEFAULT_DATASET, "test"
+    rep = asyncio.run(nexa_load.run(A))
+    m = rep["metrics"]
+    assert m["students"] == 6 and m["http_errors"] == 0 and m["got_an_answer"] == 6
+    assert m["latency_s"]["max"] >= m["latency_s"]["p50"] > 0 and m["answers_per_minute"] > 0
+    assert rep["service"]["generation_after"]["concurrency"] == 2
+    assert "Students who got an answer | 6/6" in nexa_load.markdown(rep)

@@ -163,6 +163,7 @@ class AnswerCache:
 
 
 CACHE = AnswerCache(config.EDGE_ANSWER_CACHE_SIZE, config.EDGE_ANSWER_CACHE_TTL_S)
+IN_FLIGHT: dict[str, Any] = {}   # cache key -> future of the answer being written
 COUNTS: dict[str, collections.Counter] = {"routes": collections.Counter(), "statuses": collections.Counter()}
 
 
@@ -226,6 +227,7 @@ def install_edge(app, store_of) -> None:
                                                                 ("version", "created_at", "stats", "index")},
                 "answer_route": config.EDGE_ANSWER_ROUTE, "core_url": config.EDGE_CORE_URL or None,
                 "cache": {"entries": len(CACHE._d), "hits": CACHE.hits, "misses": CACHE.misses},
+                "generation": _gen_stats(),
                 "routes": dict(COUNTS["routes"]), "statuses": dict(COUNTS["statuses"]),
                 "sync": history(config.EDGE_HOME, 10)}
 
@@ -316,3 +318,8 @@ async def send_report() -> None:
                          headers={"Authorization": f"Bearer {config.EDGE_CORE_TOKEN}"})
     except httpx.HTTPError:
         pass
+
+
+def _gen_stats() -> dict:
+    from ..knowledge.limiter import GENERATION
+    return GENERATION.stats()

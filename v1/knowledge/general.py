@@ -47,7 +47,7 @@ GENERAL_PROMPT = (
     "and coffee growing; birds of paradise and tree kangaroos; the Sepik and Fly rivers; the reefs of Milne Bay "
     "and Kimbe Bay; the volcanoes of Rabaul and Manam; malaria, tuberculosis and clean water; mining, LNG, "
     "fisheries and forestry; village gardens and town life in Port Moresby, Lae, Mt Hagen and Goroka), give "
-    "money in kina and use metric units, and relate the idea to students' daily life in PNG. Where a Tok Pisin "
+    "money amounts in kina (PNG's currency, never a person's name) and use metric units, and relate the idea to students' daily life in PNG. Where a Tok Pisin "
     "word helps understanding, you may add it in brackets. Keep the science internationally correct, and never "
     "invent PNG statistics, names or events: if you are not sure of a PNG fact, say so. "
     "Do not claim the answer comes from the PNG curriculum, a syllabus or a textbook, and never invent syllabus "
@@ -207,7 +207,8 @@ async def general_answer(question: str, audience: str, trace_id: Optional[str], 
     else:
         msgs = [{"role": "system", "content": GENERAL_PROMPT + " " + aud},
                 {"role": "user", "content": question}]
-    raw, model = await chat(msgs, trace_id)
+    from .limiter import GENERATION
+    raw, model = await GENERATION.run(chat, msgs, trace_id)
     text, used, bad = _clean(raw, len(results))
     web = [WebSource(marker=f"W{i}", title=r["title"], url=r["url"], snippet=(r.get("snippet") or "")[:300],
                      used=f"W{i}" in used) for i, r in enumerate(results, 1)]
