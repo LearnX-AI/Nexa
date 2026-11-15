@@ -85,7 +85,7 @@ Strict refusal helps nobody when a student asks something reasonable that the co
 |---|---|---|
 | `status` | `grounded` / `grounded_weak` | `general` |
 | `source_kind` | `curriculum` | `general_knowledge` or `web` |
-| Answer text | As generated, with [S] markers | Starts with a fixed label: *"Not from your approved curriculum materials: …"* |
+| Answer text | As generated, with [S] markers | Reads naturally. The fixed label *"Not from your approved curriculum materials: …"* is in `general.label`; the text starts with it only when `NEXA_GENERAL_LABEL=shown` (default `hidden`, owner decision 2026-11-15) |
 | Citations | Curriculum passages | None. A web answer lists its pages in `general.web_sources` and cites them as [W1]..[Wn] |
 | Invented markers | Removed, reported in `integrity` | [S..], numbered and unknown [W..] markers removed, reported in `general.fabricated_markers` |
 | `confidence` | `high` / `low` | Always `low` |
@@ -97,6 +97,7 @@ The general model is told never to claim the answer comes from the PNG curriculu
 | Variable | Default | Meaning |
 |---|---|---|
 | `NEXA_GENERAL_ANSWERS` | `llm` | `off` = strict refusal; `llm` = the general model; `web` = web search, then the model over the results, falling back to `llm` |
+| `NEXA_GENERAL_LABEL` | `hidden` | `shown` prefixes the label to the answer text; either way `status: general`, `source_kind` and `general.label` mark the answer for clients and audit |
 | `NEXA_GENERAL_ROLES` | `*` | Comma-separated roles that may get general answers (for example `teacher,school_admin`) |
 | `NEXA_GENERAL_MODEL` | `nexa-general` | Gateway model; OpenAI gpt-4o in the default registry (needs `OPENAI_API_KEY` in the Model Gateway). Falls back to `NEXA_ANSWER_MODEL` (local Llama) when it fails |
 | `NEXA_WEB_SEARCH_PROVIDER` | `wikipedia` | `wikipedia` (no key), `tavily` (`NEXA_WEB_SEARCH_API_KEY`) or `searxng` (`NEXA_WEB_SEARCH_URL`) |

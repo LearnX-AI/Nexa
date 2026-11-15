@@ -134,6 +134,13 @@ CURRICULUM_OUTLINE = os.environ.get("NEXA_CURRICULUM_OUTLINE", "true").lower() =
 GENERAL_ANSWERS = os.environ.get("NEXA_GENERAL_ANSWERS", "llm").lower()
 if GENERAL_ANSWERS not in ("off", "llm", "web"):
     raise ValueError("NEXA_GENERAL_ANSWERS must be off, llm or web")
+# Whether a general answer's text starts with the "Not from your approved
+# curriculum materials" label. hidden (owner decision 2026-11-15): the answer
+# reads naturally; status 'general', source_kind and general.label in the
+# response still mark it, for clients and audit. shown: the label is prefixed.
+GENERAL_LABEL = os.environ.get("NEXA_GENERAL_LABEL", "hidden").lower()
+if GENERAL_LABEL not in ("hidden", "shown"):
+    raise ValueError("NEXA_GENERAL_LABEL must be hidden or shown")
 # Roles that may get general answers; "*" = everyone.
 GENERAL_ROLES = frozenset(r.strip() for r in os.environ.get("NEXA_GENERAL_ROLES", "*").split(",") if r.strip())
 # Model Gateway logical model for general answers; the answer model is the fallback.

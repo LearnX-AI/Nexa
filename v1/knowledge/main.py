@@ -315,7 +315,10 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
         line = spelling.correction_line(spell)
         out.spelling = spell.payload()
         out.notes.insert(0, line)
-        out.answer = line + "\n\n" + (out.answer or "")
+        # Say so only where the correction changed what was found in the
+        # curriculum; a general answer simply answers the question.
+        if out.source_kind == "curriculum":
+            out.answer = line + "\n\n" + (out.answer or "")
     metrics.inc("nexa_knowledge_answers_total", status=out.status)
     audit_event(action="knowledge.answer", decision=out.status, principal=principal.subject, trace_id=trace_id,
                 citations=len(out.integrity.valid_markers), fabricated=len(out.integrity.fabricated_markers),

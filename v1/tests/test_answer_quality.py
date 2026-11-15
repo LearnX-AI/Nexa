@@ -200,3 +200,29 @@ def test_an_answer_that_says_the_sources_fall_short_is_marked_partial(hedge, mon
     a = asyncio.run(grounding.answer("Explain malaria", rr))
     assert a.status == "grounded_weak" and a.confidence == "low" and a.integrity.hedged
     assert grounding.NOTE_WEAK in a.notes
+
+
+def test_correction_keeps_capitals(mgr):
+    m, _ = mgr
+    c = asyncio.run(spelling.check(m, "Explain Photosinthesis"))
+    assert c.corrections == {"Photosinthesis": "Photosynthesis"} and c.corrected == "Explain Photosynthesis"
+
+
+def test_no_spelling_line_on_a_general_answer(mgr, monkeypatch, make_token, auth):
+    from v1.knowledge import general
+    m, pipe = mgr
+    monkeypatch.setattr(embeddings, "_gateway", FakeGateway())
+    monkeypatch.setattr(km, "PIPE", pipe)
+    monkeypatch.setattr(km, "INDEX", m)
+    monkeypatch.setattr(config, "GENERAL_ANSWERS", "llm")
+    monkeypatch.setattr(config, "GENERAL_ROLES", frozenset({"*"}))
+    monkeypatch.setattr(config, "EVIDENCE_THRESHOLDS", {"default": {"min": 0.99, "strong": 0.995}})
+
+    async def gchat(messages, trace_id=None):
+        return "Sir Michael Somare was the first Prime Minister.", "nexa-general"
+    monkeypatch.setattr(general, "chat", gchat)
+    with TestClient(km.app) as c:
+        a = c.post("/v1/knowledge/answer", headers=auth(make_token(["student"])),
+                   json={"question": "Who led the photosinthesis research team?"}).json()
+        assert a["status"] == "general" and a["answer"] == "Sir Michael Somare was the first Prime Minister."
+        assert a["spelling"]["corrections"] and not a["answer"].startswith("Showing results")

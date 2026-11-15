@@ -264,6 +264,7 @@ async def build(index_mgr, where: RetrievalFilter, question: str) -> Optional[tu
         md = dict(lms_rep.get("metadata") or {})
         course = md.get("publisher")
         md["citation"] = f"EduNex course: {course}" if course else "EduNex course lessons"
+        md["title"] = md["citation"]  # the source is the course, not the lesson that represents it
         lines = [f"Lessons in the EduNex course{' ' + course if course else ''}, grouped by unit:"]
         n = 0
         for unit, lessons in units:
@@ -300,5 +301,7 @@ async def build(index_mgr, where: RetrievalFilter, question: str) -> Optional[tu
     q = (question + "\n\nThe sources are outlines of the PNG curriculum documents NEXA holds for this course, one "
          "per term, and the EduNex course lessons. Answer by listing, term by term, each Thema with its modules "
          "(and topics where given), then the EduNex course units with their lessons. Cite each source. Do not add "
-         "topics that are not in the sources, and do not add notes about missing terms or sources: NEXA adds those.")
+         "topics that are not in the sources. List only what the sources contain: do not write placeholder lines such "
+         "as 'no specific topics listed', and do not add notes or comments about the sources or about missing "
+         "terms: NEXA adds those.")
     return RetrievalResult(results=results, explain=explain, index=rec), q, notes

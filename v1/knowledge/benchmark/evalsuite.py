@@ -506,8 +506,11 @@ def run_fixture_suite(ds: dict[str, Any]) -> dict[str, Any]:
                             fails.append(f"answer still contains {bad!r}")
                     if a.get("status") == "general":
                         txt = a.get("answer") or ""
-                        if not txt.startswith(("Not from your approved curriculum materials",)):
-                            fails.append("general answer is not labelled as outside the curriculum")
+                        if not (a.get("general") or {}).get("label", "").startswith(
+                                "Not from your approved curriculum materials"):
+                            fails.append("general answer is not marked as outside the curriculum")
+                        if (config.GENERAL_LABEL == "shown") != txt.startswith("Not from your approved"):
+                            fails.append("general label in the text does not follow NEXA_GENERAL_LABEL")
                         if a.get("citations") or a.get("source_kind") == "curriculum":
                             fails.append("general answer carries curriculum citations")
                         if "[S1]" in txt or "[2]" in txt:
