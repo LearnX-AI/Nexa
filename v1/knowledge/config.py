@@ -116,6 +116,11 @@ ANSWER_MODEL = os.environ.get("NEXA_ANSWER_MODEL", "nexa-chat-precise")
 ANSWER_TEMPERATURE = float(os.environ.get("NEXA_ANSWER_TEMPERATURE", "0.2"))
 ANSWER_MAX_TOKENS = int(os.environ.get("NEXA_ANSWER_MAX_TOKENS", "700"))
 ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
+# Fair queue in front of answer generation (limiter.py): at most this many
+# answers written at once (match the model server's parallelism, e.g. Ollama's
+# OLLAMA_NUM_PARALLEL); 0 = no limit. A question waits at most the timeout.
+GENERATION_CONCURRENCY = int(os.environ.get("NEXA_GENERATION_CONCURRENCY", "0"))
+GENERATION_QUEUE_TIMEOUT_S = float(os.environ.get("NEXA_GENERATION_QUEUE_TIMEOUT_S", "600"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
 # Result diversity (retrieval.py): a passage whose text is a near copy (shingle

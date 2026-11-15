@@ -21,6 +21,7 @@ Run:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from typing import Any, Optional
@@ -301,15 +302,34 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
         body.setdefault("x_nexa", {}).update(trace_id=trace_id, route="cache", package_version=version)
         edge_web.COUNTS["routes"]["cache"] += 1
         return body
-    body = await edge_web.forward_answer(req.model_dump(exclude_unset=True), principal, trace_id)
-    route = "core"
-    if body is None:
-        body, route = await _answer(req, request, principal), "local"
-    body.setdefault("x_nexa", {}).update(route=route, package_version=version, school_id=config.EDGE_SCHOOL_ID)
-    edge_web.COUNTS["routes"][route] += 1
-    edge_web.COUNTS["statuses"][body.get("status")] += 1
-    edge_web.CACHE.put(key, body)
-    return body
+    # Single flight: the same new question asked by several students at once is
+    # answered once; the others wait for that answer instead of queueing their own.
+    pending = edge_web.IN_FLIGHT.get(key)
+    if pending is not None:
+        shared = json.loads(json.dumps(await asyncio.shield(pending)))
+        shared.setdefault("x_nexa", {}).update(trace_id=trace_id, route="shared", package_version=version)
+        edge_web.COUNTS["routes"]["shared"] += 1
+        return shared
+    fut = asyncio.get_running_loop().create_future()
+    edge_web.IN_FLIGHT[key] = fut
+    try:
+        body = await edge_web.forward_answer(req.model_dump(exclude_unset=True), principal, trace_id)
+        route = "core"
+        if body is None:
+            body, route = await _answer(req, request, principal), "local"
+        body.setdefault("x_nexa", {}).update(route=route, package_version=version, school_id=config.EDGE_SCHOOL_ID)
+        edge_web.COUNTS["routes"][route] += 1
+        edge_web.COUNTS["statuses"][body.get("status")] += 1
+        edge_web.CACHE.put(key, body)
+        fut.set_result(body)
+        return body
+    except BaseException as exc:
+        if not fut.done():
+            fut.set_exception(exc)
+            fut.exception()  # mark retrieved: waiters re-raise it; no "never retrieved" warning
+        raise
+    finally:
+        edge_web.IN_FLIGHT.pop(key, None)
 
 
 async def _answer(req: AnswerRequest, request: Request, principal: Principal):
