@@ -22,10 +22,10 @@ One request runs these stages, each timed and explained:
    lower-authority one is placed above it, never silently replaced.
 6. Cut to top_k. Every result keeps its stage scores and the reasons it was
    selected, and the response carries the stage timings and what was applied.
-6. Diversity. diversify() keeps at most NEXA_MAX_PER_SOURCE passages per
-   source and drops near copies of a higher-ranked passage (the same lesson
-   synced from several Moodle courses), so the results show different
-   sources; dropped passages fill in only when too few remain.
+6. Diversity. diversify() drops near copies of a higher-ranked passage (the
+   same lesson synced from several Moodle courses), and, if
+   NEXA_MAX_PER_SOURCE is set, caps passages per source (off by default);
+   dropped passages fill in only when too few remain.
 
 `score` on a result is its semantic similarity to the query (cosine), the same
 meaning it had in M1, so it can be compared across queries and used to judge
@@ -153,7 +153,7 @@ def diversify(items: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, A
             break
         key = _source_key(it)
         sh = _shingles(it.get("text") or "")
-        if per.get(key, 0) >= config.MAX_PER_SOURCE:
+        if config.MAX_PER_SOURCE > 0 and per.get(key, 0) >= config.MAX_PER_SOURCE:
             dropped["same_source"] += 1
             spare.append(it)
             continue
