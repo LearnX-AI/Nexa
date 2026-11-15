@@ -127,6 +127,25 @@ ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 MAX_PER_SOURCE = int(os.environ.get("NEXA_MAX_PER_SOURCE", "0"))
 DEDUP_SIMILARITY = float(os.environ.get("NEXA_DEDUP_SIMILARITY", "0.8"))
 
+# School edge (NEXA-M2-009). Core NEXA: where per-school packages are built and
+# served from. School server: NEXA_EDGE_MODE=true with NEXA_KNOWLEDGE_STORE=edge.
+EDGE_PACKAGE_DIR = os.environ.get("NEXA_EDGE_PACKAGE_DIR", "")
+EDGE_MODE = os.environ.get("NEXA_EDGE_MODE", "false").lower() == "true"
+EDGE_HOME = os.environ.get("NEXA_EDGE_HOME", "/var/lib/nexa-edge")
+EDGE_SCHOOL_ID = os.environ.get("NEXA_EDGE_SCHOOL_ID", "")
+EDGE_CORE_URL = os.environ.get("NEXA_EDGE_CORE_URL", "")
+EDGE_CORE_TOKEN = os.environ.get("NEXA_EDGE_CORE_TOKEN", "")
+EDGE_SYNC_KEY = os.environ.get("NEXA_EDGE_SYNC_KEY", "")
+# local: every answer written on the school server. core_first: core NEXA
+# writes it when reachable within EDGE_CORE_TIMEOUT_S, else the school server.
+EDGE_ANSWER_ROUTE = os.environ.get("NEXA_EDGE_ANSWER_ROUTE", "local").lower()
+if EDGE_ANSWER_ROUTE not in ("local", "core_first"):
+    raise ValueError("NEXA_EDGE_ANSWER_ROUTE must be local or core_first")
+EDGE_CORE_TIMEOUT_S = float(os.environ.get("NEXA_EDGE_CORE_TIMEOUT_S", "25"))
+EDGE_ANSWER_CACHE_SIZE = int(os.environ.get("NEXA_EDGE_ANSWER_CACHE_SIZE", "2000"))
+EDGE_ANSWER_CACHE_TTL_S = int(os.environ.get("NEXA_EDGE_ANSWER_CACHE_TTL_S", "86400"))
+EDGE_SYNC_INTERVAL_S = int(os.environ.get("NEXA_EDGE_SYNC_INTERVAL_S", "1800"))
+
 # Correct misspelt subject words against the curriculum's vocabulary (spelling.py).
 SPELLING = os.environ.get("NEXA_SPELLING", "true").lower() == "true"
 SPELL_MIN_LEN = int(os.environ.get("NEXA_SPELL_MIN_LEN", "5"))

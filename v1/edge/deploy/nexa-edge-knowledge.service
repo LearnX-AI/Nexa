@@ -1,0 +1,18 @@
+[Unit]
+Description=NEXA school edge: Knowledge Service (local retrieval, read-only package)
+After=network-online.target nexa-edge-gateway.service
+Wants=network-online.target
+Requires=nexa-edge-gateway.service
+
+[Service]
+User=nvidia
+WorkingDirectory=/opt/nexa-edge/app
+EnvironmentFile=/etc/nexa-edge/edge.env
+Environment=PYTHONUNBUFFERED=1
+# Listens on the school network so the school's LMS can reach it.
+ExecStart=/opt/nexa-edge/venv/bin/python -m uvicorn v1.knowledge.main:app --host 0.0.0.0 --port 8103
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

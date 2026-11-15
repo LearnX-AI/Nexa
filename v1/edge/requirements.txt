@@ -1,0 +1,4 @@
+# School edge server (NEXA-M2-009), on top of v1/knowledge/requirements.txt.
+# numpy: exact vector search over the school's package in memory.
+# 2.2.x is the last series with Python 3.10 wheels (x86_64 and aarch64, Jetson).
+numpy==2.2.6

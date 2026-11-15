@@ -25,6 +25,9 @@ ROLE_PERMISSIONS = {
     # An LMS site's sync client (NEXA-M2-007). It can push and reconcile its own
     # site's content and nothing else: no queries, no direct uploads.
     "lms_sync": {"knowledge.lms.sync"},
+    # A school NEXA server (NEXA-M2-009): fetches its own school's packages and
+    # forwards answer requests on behalf of its students and teachers.
+    "edge_node": {"knowledge.query", "knowledge.edge.sync"},
 }
 for _r in ("admin", "platform_admin"):
     ROLE_PERMISSIONS[_r] |= {"knowledge.lms.sync", "knowledge.lms.admin"}
