@@ -236,7 +236,7 @@ def install_edge(app, store_of) -> None:
         from .sync import SyncError, pull
         try:
             got = await pull(config.EDGE_HOME, config.EDGE_CORE_URL, config.EDGE_CORE_TOKEN, sync_key(),
-                             config.EDGE_SCHOOL_ID, probe=embed_probe)
+                             config.EDGE_SCHOOL_ID, probe=embed_probe, reembed=reembed_fn())
         except SyncError as exc:
             return {"installed": None, "detail": str(exc)}
         return {"installed": got.__dict__ if got else None, "detail": "installed" if got else "up to date"}
@@ -266,6 +266,19 @@ def sync_key() -> bytes:
     return bytes.fromhex(k) if re.fullmatch(r"[0-9a-fA-F]{64}", k) else k.encode()
 
 
+def reembed_fn():
+    """The school server's document embedder, or None when re-embedding is off."""
+    if not config.EDGE_REEMBED:
+        return None
+    from ..knowledge.embeddings import Embedder
+    emb = Embedder(config.EMBED_MODEL)
+
+    async def embed(texts: list[str]) -> list[list[float]]:
+        vecs, _ = await emb.embed_documents(texts)
+        return vecs
+    return embed
+
+
 async def embed_probe(texts: list[str]) -> list[list[float]]:
     """Embed the package's probe texts with the local model, raw (the texts
     already carry their prefix)."""
@@ -283,7 +296,7 @@ async def _sync_forever() -> None:
     while True:
         try:
             await pull(config.EDGE_HOME, config.EDGE_CORE_URL, config.EDGE_CORE_TOKEN, sync_key(),
-                       config.EDGE_SCHOOL_ID, probe=embed_probe)
+                       config.EDGE_SCHOOL_ID, probe=embed_probe, reembed=reembed_fn())
             await send_report()
         except (SyncError, RuntimeError):
             pass

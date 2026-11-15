@@ -109,7 +109,7 @@ def test_package_holds_only_what_this_school_may_have(tmp_path):
     assert m["contains_learner_data"] is False and m["school_id"] == "pomnsoe"
     con = sqlite3.connect(os.path.join(full.directory, "knowledge.sqlite"))
     cols = {r[1] for r in con.execute("PRAGMA table_info(chunks)")}
-    assert cols == {"chunk_id", "version_id", "text", "metadata", "vector"}   # curriculum only
+    assert cols == {"chunk_id", "version_id", "text", "metadata", "vector", "embedding_text"}   # curriculum only
     no_teacher = _build(tmp_path / "b", corpus(), 1, policy=pkg.Policy(school_id="pomnsoe",
                                                                        include_teacher_only=False))[0]
     assert "Biology Teacher Guide" not in {s["title"] for s in no_teacher.manifest["sources"].values()}
@@ -374,3 +374,57 @@ def test_probe_calls_the_gateway_with_its_real_signature(monkeypatch):
         return [bow_vector(t, DIM) for t in texts], {}
     monkeypatch.setattr(embeddings, "_gateway", strict)
     assert len(asyncio.run(edge_web.embed_probe(list(pkg.PROBE_TEXTS)))) == 3 and seen[0][1] is None
+
+
+def _skewed(texts):
+    """The same model computed by another runtime: close to the core's vectors, not equal."""
+    out = []
+    for t in texts:
+        a, b = bow_vector(t, DIM), bow_vector("runtime drift " + t, DIM)
+        out.append([0.88 * x + 0.12 * y for x, y in zip(a, b)])
+    return out
+
+
+def test_same_model_other_runtime_is_re_embedded_locally(tmp_path, home):
+    v1 = _build(tmp_path, corpus(), 1)[0]
+    embedded = []
+
+    async def probe(texts):
+        return _skewed(texts)
+
+    async def reembed(texts):
+        embedded.extend(texts)
+        return _skewed(["search_document: " + t for t in texts])
+    with pytest.raises(sync.SyncError, match="does not match"):           # without re-embedding: refused
+        asyncio.run(sync.install_bundle(home, v1.bundle, KEY, "pomnsoe", probe))
+    r = asyncio.run(sync.install_bundle(home, v1.bundle, KEY, "pomnsoe", probe, reembed=reembed))
+    assert r.version == 1 and len(embedded) == v1.manifest["stats"]["chunks"]
+    last = sync.history(home, 1)[-1]
+    assert last["vectors"] == "local" and last["reembedded"] == len(embedded) and 0.8 < last["probe_cosine"] < 0.999
+    st = EdgeStore(home)
+    want = _skewed(["search_document: DNA is copied in the S (Synthesis) phase of the cell cycle."])[0]
+    hit = asyncio.run(st.query("edge_pomnsoe_v1", want, 1))[0]
+    assert hit["chunk_id"] == "bio-sg@v1:0" and hit["score"] > 0.999       # documents carry the local vectors
+    # a delta after a local install re-embeds only the new and changed sources
+    items = corpus() + _doc("chem-sg@v1", ["A covalent bond shares a pair of electrons."], subject="Chemistry")
+    delta = next(x for x in _build(tmp_path, items, 2, previous=v1.manifest) if x.kind == "delta")
+    embedded.clear()
+    asyncio.run(sync.install_bundle(home, delta.bundle, KEY, "pomnsoe", probe, reembed=reembed))
+    assert embedded == ["A covalent bond shares a pair of electrons."]
+
+
+def test_a_different_model_is_refused_even_with_re_embedding(tmp_path, home):
+    v1 = _build(tmp_path, corpus(), 1)[0]
+
+    async def other(texts):
+        return [bow_vector("completely unrelated model output " + t[::-1], DIM) for t in texts]
+    with pytest.raises(sync.SyncError, match="not the same model"):
+        asyncio.run(sync.install_bundle(home, v1.bundle, KEY, "pomnsoe", other, reembed=other))
+    assert current_version(home) is None
+
+
+def test_package_carries_the_exact_embedding_text(tmp_path):
+    s = asyncio.run(_core_store(corpus()))
+    items, _ = asyncio.run(pkg.collect(s, "idx_core", pkg.Policy(school_id="pomnsoe"),
+                                       lambda cid: f"Header > Section\n\n{cid}"))
+    assert items[0]["embedding_text"].startswith("Header > Section")

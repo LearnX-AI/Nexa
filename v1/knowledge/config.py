@@ -145,6 +145,9 @@ EDGE_CORE_TIMEOUT_S = float(os.environ.get("NEXA_EDGE_CORE_TIMEOUT_S", "25"))
 EDGE_ANSWER_CACHE_SIZE = int(os.environ.get("NEXA_EDGE_ANSWER_CACHE_SIZE", "2000"))
 EDGE_ANSWER_CACHE_TTL_S = int(os.environ.get("NEXA_EDGE_ANSWER_CACHE_TTL_S", "86400"))
 EDGE_SYNC_INTERVAL_S = int(os.environ.get("NEXA_EDGE_SYNC_INTERVAL_S", "1800"))
+# Re-embed a package's documents with the school server's own model when that
+# model computes vectors differently from the core's (another Ollama version).
+EDGE_REEMBED = os.environ.get("NEXA_EDGE_REEMBED", "true").lower() == "true"
 
 # Correct misspelt subject words against the curriculum's vocabulary (spelling.py).
 SPELLING = os.environ.get("NEXA_SPELLING", "true").lower() == "true"

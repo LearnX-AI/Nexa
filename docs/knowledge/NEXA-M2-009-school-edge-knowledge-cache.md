@@ -96,7 +96,11 @@ A school server installs a version only if every check passes. Otherwise it keep
 3. The version is newer than the installed one. A delta also requires the installed version to be its base.
 4. File hashes match the manifest.
 5. After the delta is applied, every source hash equals the manifest's target state, and no unlisted source remains.
-6. The local embedding model reproduces the core's probe vectors (cosine ≥ 0.999). This guarantees question vectors and document vectors share one space; a model mismatch is refused, not served wrongly.
+6. The local embedding model reproduces the core's probe vectors (cosine ≥ 0.999). This guarantees question vectors and document vectors share one space.
+
+   **When the same model is computed differently,** the school server re-embeds instead. This happens when the probe cosine is between 0.8 and 0.999, for example because the school runs a different Ollama version. Found on the Pomnsoe Jetson: Ollama 0.32.1 against 0.21.0 on the DGX, same model file `970aa74c…`, cosine 0.90. The school server then re-embeds the package's documents with its own model at install, using the exact text the core embedded (`embedding_text`, carried in the package), so questions and documents share one space. Content is still verified against the core's `content_sha256` (ids, text, metadata, embedding text). Only the vectors are local, recorded in `local.json` and the sync log. After a delta, only new and changed sources are re-embedded.
+
+   **Below 0.8** it is a different model, and the package is refused. `NEXA_EDGE_REEMBED=false` turns re-embedding off.
 
 **Install and rollback.** The new version is built beside the one being served. The switch is one atomic write of `current`, so the store picks it up on the next request without a restart. The previous version is kept for `rollback`.
 

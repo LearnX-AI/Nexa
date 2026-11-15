@@ -50,7 +50,15 @@ async def _build(a) -> int:
                      subjects=[x for x in (a.subjects or "").split(",") if x],
                      grades=[int(x) for x in (a.grades or "").split(",") if x],
                      languages=[x for x in (a.languages or "").split(",") if x])
-        items, skipped = await collect(store, iid, pol)
+        reg = None
+        if config.REGISTRY_URL and config.REGISTRY_URL != "memory":
+            from ..knowledge.ingestion.registry import Registry
+            reg = Registry(config.REGISTRY_URL)
+
+        def embedding_text_of(cid: str):
+            c = reg.get_chunk(cid) if reg else None
+            return (c or {}).get("embedding_text")
+        items, skipped = await collect(store, iid, pol, embedding_text_of)
     finally:
         await store.close()
     probes, _ = await embeddings._gateway(list(PROBE_TEXTS), rec.logical, None)
@@ -91,18 +99,23 @@ def _school_key(a) -> int:
 async def _edge(a) -> int:
     from ..knowledge import config
     from . import sync
-    from .web import embed_probe, sync_key
+    from .web import embed_probe, reembed_fn, sync_key
     home, school = config.EDGE_HOME, config.EDGE_SCHOOL_ID
     if not school:
         sys.exit("NEXA_EDGE_SCHOOL_ID is not set")
     probe = None if a.no_probe else embed_probe
     try:
         if a.cmd == "install":
-            r = await sync.install_bundle(home, a.bundle, sync_key(), school, probe)
+            r = await sync.install_bundle(home, a.bundle, sync_key(), school, probe, reembed=reembed_fn())
             print(f"installed v{r.version} ({r.kind}{f' from v{r.from_version}' if r.from_version else ''}): "
                   f"{r.sources} sources, {r.chunks} chunks")
+            last = (sync.history(home, 1) or [{}])[-1]
+            if last.get("vectors") == "local":
+                print(f"  re-embedded {last.get('reembedded')} chunks with this server's model "
+                      f"(its vectors differ from core's: probe cosine {last.get('probe_cosine')})")
         elif a.cmd == "pull":
-            r = await sync.pull(home, config.EDGE_CORE_URL, config.EDGE_CORE_TOKEN, sync_key(), school, probe)
+            r = await sync.pull(home, config.EDGE_CORE_URL, config.EDGE_CORE_TOKEN, sync_key(), school, probe,
+                                reembed=reembed_fn())
             print("up to date" if r is None else f"installed v{r.version} ({r.kind}): {r.sources} sources")
         elif a.cmd == "rollback":
             print(f"now serving v{sync.rollback(home)}")
