@@ -103,7 +103,8 @@ def select(md: dict[str, Any], p: Policy) -> tuple[bool, str]:
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chunks (
   chunk_id TEXT PRIMARY KEY, version_id TEXT NOT NULL, text TEXT NOT NULL,
-  metadata TEXT NOT NULL, vector BLOB NOT NULL);
+  metadata TEXT NOT NULL, vector BLOB NOT NULL, embedding_text TEXT);
+CREATE TABLE IF NOT EXISTS local_vectors (chunk_id TEXT PRIMARY KEY);
 CREATE INDEX IF NOT EXISTS chunks_version ON chunks(version_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(chunk_id UNINDEXED, body, tokenize='porter unicode61');
 CREATE TABLE IF NOT EXISTS removed (version_id TEXT PRIMARY KEY);
@@ -150,8 +151,9 @@ def write_db(path: str, items: list[dict[str, Any]], removed: Iterable[str] = ()
         con.executescript(SCHEMA)
         for it in items:
             md = it["metadata"]
-            con.execute("INSERT INTO chunks VALUES (?,?,?,?,?)",
-                        (it["chunk_id"], it["version_id"], it["text"], _canon(md), vec_bytes(it["vector"])))
+            con.execute("INSERT INTO chunks VALUES (?,?,?,?,?,?)",
+                        (it["chunk_id"], it["version_id"], it["text"], _canon(md), vec_bytes(it["vector"]),
+                         it.get("embedding_text") or it["text"]))
             con.execute("INSERT INTO chunks_fts VALUES (?,?)", (it["chunk_id"], fts_body(it["text"], md)))
         con.executemany("INSERT INTO removed VALUES (?)", [(v,) for v in removed])
         con.commit()
@@ -160,16 +162,33 @@ def write_db(path: str, items: list[dict[str, Any]], removed: Iterable[str] = ()
         con.close()
 
 
+def content_hash(rows: list[tuple[str, str, str, str]]) -> str:
+    """Hash of one source's content without its vectors: (chunk_id, text,
+    metadata json, embedding text). A school server that re-embeds with its own
+    model (sync.py) still proves the content is exactly the core's."""
+    h = hashlib.sha256()
+    for row in sorted(rows):
+        for part in row:
+            b = (part or "").encode()
+            h.update(len(b).to_bytes(4, "big"))
+            h.update(b)
+    return h.hexdigest()
+
+
 def db_sources(path: str) -> dict[str, dict[str, Any]]:
-    """version_id -> {sha256, chunks} for every source in a package database."""
+    """version_id -> {sha256, content_sha256, chunks} for every source in a package database."""
     con = sqlite3.connect(path)
     try:
         rows: dict[str, list] = {}
-        for cid, vid, text, md, vec in con.execute("SELECT chunk_id, version_id, text, metadata, vector FROM chunks"):
+        crows: dict[str, list] = {}
+        for cid, vid, text, md, vec, et in con.execute(
+                "SELECT chunk_id, version_id, text, metadata, vector, embedding_text FROM chunks"):
             rows.setdefault(vid, []).append((cid, text, md, bytes(vec)))
+            crows.setdefault(vid, []).append((cid, text, md, et or text))
     finally:
         con.close()
-    return {v: {"sha256": source_hash(r), "chunks": len(r)} for v, r in rows.items()}
+    return {v: {"sha256": source_hash(r), "content_sha256": content_hash(crows[v]), "chunks": len(r)}
+            for v, r in rows.items()}
 
 
 def file_sha256(path: str) -> str:
@@ -205,8 +224,11 @@ class BuildResult:
     bundle: Optional[str] = None  # .tar path when requested
 
 
-async def collect(store, index_id: str, policy: Policy) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Every chunk of the index this school may have, with its vector."""
+async def collect(store, index_id: str, policy: Policy, embedding_text_of=None
+                  ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Every chunk of the index this school may have, with its vector and the
+    exact text the core embedded (embedding_text_of(chunk_id), from the
+    ingestion registry), so a school server can re-embed identically."""
     ids = sorted(await store.chunk_ids(index_id))
     items, skipped = [], {}
     for i in range(0, len(ids), 500):
@@ -220,21 +242,27 @@ async def collect(store, index_id: str, policy: Policy) -> tuple[list[dict[str, 
             if not ok:
                 skipped[why] = skipped.get(why, 0) + 1
                 continue
+            text = it.get("text") or ""
+            et = (embedding_text_of(cid) if embedding_text_of else None) or text
             items.append({"chunk_id": cid, "version_id": it.get("version_id") or md.get("version_id") or cid,
-                          "text": it.get("text") or "", "metadata": md, "vector": it["vector"]})
+                          "text": text, "metadata": md, "vector": it["vector"], "embedding_text": et})
     return items, skipped
 
 
 def _sources_of(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     rows: dict[str, list] = {}
+    crows: dict[str, list] = {}
     meta: dict[str, dict[str, Any]] = {}
     for it in items:
         rows.setdefault(it["version_id"], []).append(
             (it["chunk_id"], it["text"], _canon(it["metadata"]), vec_bytes(it["vector"])))
+        crows.setdefault(it["version_id"], []).append(
+            (it["chunk_id"], it["text"], _canon(it["metadata"]), it.get("embedding_text") or it["text"]))
         md = it["metadata"]
         meta.setdefault(it["version_id"], {"title": md.get("title"), "source_type": md.get("source_type"),
                                            "scope": md.get("scope"), "subject": md.get("subject")})
-    return {v: {"sha256": source_hash(r), "chunks": len(r), **meta[v]} for v, r in rows.items()}
+    return {v: {"sha256": source_hash(r), "content_sha256": content_hash(crows[v]), "chunks": len(r), **meta[v]}
+            for v, r in rows.items()}
 
 
 def build(items: list[dict[str, Any]], *, policy: Policy, index: dict[str, Any], version: int, out_root: str,
