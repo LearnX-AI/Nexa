@@ -364,3 +364,13 @@ def test_core_accepts_delegation_only_for_its_school_and_safe_roles(tmp_path, mo
     with open(os.path.join(str(tmp_path), "reports.jsonl")) as fh:
         rec = json.loads(fh.readlines()[-1])
     assert "questions" not in rec and "user" not in rec and rec["school_id"] == "pomnsoe"
+
+
+def test_probe_calls_the_gateway_with_its_real_signature(monkeypatch):
+    seen = []
+
+    async def strict(texts, model, trace_id):          # the real _gateway takes trace_id positionally
+        seen.append((model, trace_id))
+        return [bow_vector(t, DIM) for t in texts], {}
+    monkeypatch.setattr(embeddings, "_gateway", strict)
+    assert len(asyncio.run(edge_web.embed_probe(list(pkg.PROBE_TEXTS)))) == 3 and seen[0][1] is None
