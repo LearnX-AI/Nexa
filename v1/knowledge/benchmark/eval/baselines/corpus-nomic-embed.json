@@ -1,28 +1,31 @@
 {
   "suite": "corpus",
-  "dataset_version": "1.1.0",
-  "generated_at": "2026-11-11T13:00:58+00:00",
-  "commit": "0f43e0e72a462e74321b294e3f48b749533f6d61",
-  "gate_key": "7e5a35deae7c1454",
-  "source": "DGX run, report /home/admin/nexa-evidence/nexa-eval-corpus-nomic-embed-20261111-1302.md (values transcribed from it)",
+  "dataset_version": "1.2.0",
+  "generated_at": "2026-11-15T06:47:41+00:00",
+  "commit": "9b6c06c0f8c6a27e9bfcd74398b3ae6673189902",
+  "gate_key": "a394165cff58f30f",
   "index": {
     "fingerprint": "nexa-embed-default|nomic-embed-text|ollama|768|nomic-embed",
-    "prefix_scheme": "nomic-embed"
+    "prefix_scheme": "nomic-embed",
+    "validation_passed": true,
+    "build_s": 32.6
   },
   "corpus": {
     "sources": 72,
-    "chunks": 1811
+    "chunks": 1811,
+    "missing_files": []
   },
   "metrics": {
     "retrieval": {
       "gating": {
         "n": 48,
-        "recall@1": 54.2,
+        "recall@1": 58.3,
         "recall@5": 95.8,
         "recall@10": 97.9,
-        "mrr@10": 0.706,
-        "ndcg@10": 0.774,
-        "precision@5": 0.633
+        "mrr@10": 0.727,
+        "ndcg@10": 0.79,
+        "precision@5": 0.633,
+        "source_recall@5": 93.8
       },
       "by_type": {
         "exact_fact": {
@@ -32,16 +35,18 @@
           "recall@10": 100.0,
           "mrr@10": 0.695,
           "ndcg@10": 0.769,
-          "precision@5": 0.6
+          "precision@5": 0.6,
+          "source_recall@5": 95.0
         },
         "conceptual": {
           "n": 20,
-          "recall@1": 45.0,
+          "recall@1": 55.0,
           "recall@5": 100.0,
           "recall@10": 100.0,
-          "mrr@10": 0.675,
-          "ndcg@10": 0.757,
-          "precision@5": 0.64
+          "mrr@10": 0.725,
+          "ndcg@10": 0.794,
+          "precision@5": 0.64,
+          "source_recall@5": 95.0
         },
         "ambiguous": {
           "n": 8,
@@ -50,16 +55,213 @@
           "recall@10": 87.5,
           "mrr@10": 0.812,
           "ndcg@10": 0.829,
-          "precision@5": 0.7
+          "precision@5": 0.7,
+          "source_recall@5": 87.5
+        },
+        "multilingual": {
+          "n": 0
+        },
+        "spelling": {
+          "n": 10,
+          "recall@1": 50.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.695,
+          "ndcg@10": 0.771,
+          "precision@5": 0.64,
+          "source_recall@5": 100.0
         },
         "multilingual_unapproved": {
           "n": 16,
           "recall@1": 37.5,
           "recall@5": 81.2,
           "recall@10": 87.5,
-          "mrr@10": 0.495,
-          "ndcg@10": 0.585,
-          "precision@5": 0.588
+          "mrr@10": 0.522,
+          "ndcg@10": 0.606,
+          "precision@5": 0.613,
+          "source_recall@5": 81.2
+        }
+      },
+      "slices": {
+        "subject=Biology": {
+          "n": 29,
+          "recall@1": 48.3,
+          "recall@5": 93.1,
+          "recall@10": 96.6,
+          "mrr@10": 0.662,
+          "ndcg@10": 0.738,
+          "precision@5": 0.669,
+          "source_recall@5": 93.1
+        },
+        "subject=Chemistry": {
+          "n": 12,
+          "recall@1": 58.3,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.75,
+          "ndcg@10": 0.813,
+          "precision@5": 0.65,
+          "source_recall@5": 100.0
+        },
+        "subject=Physics": {
+          "n": 17,
+          "recall@1": 70.6,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.803,
+          "ndcg@10": 0.851,
+          "precision@5": 0.565,
+          "source_recall@5": 94.1
+        },
+        "grade=11": {
+          "n": 4,
+          "recall@1": 50.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.75,
+          "ndcg@10": 0.815,
+          "precision@5": 0.7,
+          "source_recall@5": 100.0
+        },
+        "grade=12": {
+          "n": 54,
+          "recall@1": 57.4,
+          "recall@5": 96.3,
+          "recall@10": 98.1,
+          "mrr@10": 0.719,
+          "ndcg@10": 0.784,
+          "precision@5": 0.63,
+          "source_recall@5": 94.4
+        },
+        "term=1": {
+          "n": 12,
+          "recall@1": 50.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.7,
+          "ndcg@10": 0.775,
+          "precision@5": 0.583,
+          "source_recall@5": 100.0
+        },
+        "term=2": {
+          "n": 11,
+          "recall@1": 81.8,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.909,
+          "ndcg@10": 0.933,
+          "precision@5": 0.709,
+          "source_recall@5": 100.0
+        },
+        "term=3": {
+          "n": 11,
+          "recall@1": 63.6,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.75,
+          "ndcg@10": 0.811,
+          "precision@5": 0.509,
+          "source_recall@5": 90.9
+        },
+        "term=None": {
+          "n": 24,
+          "recall@1": 45.8,
+          "recall@5": 91.7,
+          "recall@10": 95.8,
+          "mrr@10": 0.633,
+          "ndcg@10": 0.714,
+          "precision@5": 0.683,
+          "source_recall@5": 91.7
+        },
+        "language=en": {
+          "n": 58,
+          "recall@1": 56.9,
+          "recall@5": 96.6,
+          "recall@10": 98.3,
+          "mrr@10": 0.722,
+          "ndcg@10": 0.786,
+          "precision@5": 0.634,
+          "source_recall@5": 94.8
+        },
+        "format=docx": {
+          "n": 23,
+          "recall@1": 47.8,
+          "recall@5": 91.3,
+          "recall@10": 95.7,
+          "mrr@10": 0.639,
+          "ndcg@10": 0.717,
+          "precision@5": 0.687,
+          "source_recall@5": 91.3
+        },
+        "format=pdf": {
+          "n": 34,
+          "recall@1": 64.7,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.784,
+          "ndcg@10": 0.838,
+          "precision@5": 0.6,
+          "source_recall@5": 97.1
+        },
+        "format=pptx": {
+          "n": 1,
+          "recall@1": 0.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.631,
+          "precision@5": 0.6,
+          "source_recall@5": 100.0
+        },
+        "source_type=lms_content": {
+          "n": 23,
+          "recall@1": 47.8,
+          "recall@5": 91.3,
+          "recall@10": 95.7,
+          "mrr@10": 0.639,
+          "ndcg@10": 0.717,
+          "precision@5": 0.687,
+          "source_recall@5": 91.3
+        },
+        "source_type=official_syllabus": {
+          "n": 10,
+          "recall@1": 100.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 1.0,
+          "ndcg@10": 1.0,
+          "precision@5": 0.62,
+          "source_recall@5": 100.0
+        },
+        "source_type=student_guide": {
+          "n": 19,
+          "recall@1": 47.4,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.666,
+          "ndcg@10": 0.748,
+          "precision@5": 0.6,
+          "source_recall@5": 100.0
+        },
+        "source_type=teacher_guide": {
+          "n": 5,
+          "recall@1": 60.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.8,
+          "ndcg@10": 0.852,
+          "precision@5": 0.56,
+          "source_recall@5": 80.0
+        },
+        "source_type=teacher_material": {
+          "n": 1,
+          "recall@1": 0.0,
+          "recall@5": 100.0,
+          "recall@10": 100.0,
+          "mrr@10": 0.5,
+          "ndcg@10": 0.631,
+          "precision@5": 0.6,
+          "source_recall@5": 100.0
         }
       }
     },
@@ -67,30 +269,298 @@
       "n": 6,
       "syllabus_first_rate": 1.0
     },
+    "latency": {
+      "p50_ms": 74.2,
+      "p95_ms": 101.1,
+      "n": 90
+    },
     "no_answer": {
       "n_unanswerable": 16,
-      "n_answerable": 48,
+      "n_answerable": 58,
       "correct_refusal_rate": 0.5,
-      "false_refusal_rate": 0.0
+      "false_refusal_rate": 0.0,
+      "n_answered_e2e": 14,
+      "curriculum_answer_rate": 0.0,
+      "end_to_end_refusal_rate": 1.0
     },
-    "latency": {
-      "p50_ms": 78.1,
-      "p95_ms": 104.5
+    "answers": {
+      "n": 48,
+      "accuracy": 0.875,
+      "answered_rate": 1.0,
+      "cites_relevant_rate": 0.896,
+      "mean_key_coverage": 0.923,
+      "fabricated_citations": 0,
+      "citation_valid_rate": 1.0,
+      "ungrounded_rate": 0.0,
+      "statuses": {
+        "grounded": 46,
+        "grounded_weak": 2
+      }
     }
   },
   "v0_baseline": {
+    "fingerprint": "nexa-embed-default|nomic-embed-text|ollama|768|nomic-embed",
     "metrics": {
       "retrieval": {
         "gating": {
           "n": 48,
-          "recall@1": 27.1,
+          "recall@1": 29.2,
           "recall@5": 56.2,
           "recall@10": 58.3,
-          "mrr@10": 0.373,
-          "ndcg@10": 0.424,
-          "precision@5": 0.583
+          "mrr@10": 0.391,
+          "ndcg@10": 0.438,
+          "precision@5": 0.583,
+          "source_recall@5": 56.2
+        },
+        "by_type": {
+          "exact_fact": {
+            "n": 20,
+            "recall@1": 25.0,
+            "recall@5": 55.0,
+            "recall@10": 60.0,
+            "mrr@10": 0.357,
+            "ndcg@10": 0.415,
+            "precision@5": 0.55,
+            "source_recall@5": 55.0
+          },
+          "conceptual": {
+            "n": 20,
+            "recall@1": 35.0,
+            "recall@5": 65.0,
+            "recall@10": 65.0,
+            "mrr@10": 0.468,
+            "ndcg@10": 0.514,
+            "precision@5": 0.67,
+            "source_recall@5": 65.0
+          },
+          "ambiguous": {
+            "n": 8,
+            "recall@1": 25.0,
+            "recall@5": 37.5,
+            "recall@10": 37.5,
+            "mrr@10": 0.281,
+            "ndcg@10": 0.304,
+            "precision@5": 0.45,
+            "source_recall@5": 37.5
+          },
+          "multilingual": {
+            "n": 0
+          },
+          "spelling": {
+            "n": 10,
+            "recall@1": 50.0,
+            "recall@5": 70.0,
+            "recall@10": 100.0,
+            "mrr@10": 0.62,
+            "ndcg@10": 0.707,
+            "precision@5": 0.78,
+            "source_recall@5": 70.0
+          },
+          "multilingual_unapproved": {
+            "n": 16,
+            "recall@1": 25.0,
+            "recall@5": 37.5,
+            "recall@10": 43.8,
+            "mrr@10": 0.295,
+            "ndcg@10": 0.329,
+            "precision@5": 0.575,
+            "source_recall@5": 37.5
+          }
+        },
+        "slices": {
+          "subject=Biology": {
+            "n": 29,
+            "recall@1": 24.1,
+            "recall@5": 37.9,
+            "recall@10": 37.9,
+            "mrr@10": 0.291,
+            "ndcg@10": 0.313,
+            "precision@5": 0.621,
+            "source_recall@5": 37.9
+          },
+          "subject=Chemistry": {
+            "n": 12,
+            "recall@1": 33.3,
+            "recall@5": 91.7,
+            "recall@10": 91.7,
+            "mrr@10": 0.562,
+            "ndcg@10": 0.652,
+            "precision@5": 0.683,
+            "source_recall@5": 91.7
+          },
+          "subject=Physics": {
+            "n": 17,
+            "recall@1": 47.1,
+            "recall@5": 70.6,
+            "recall@10": 94.1,
+            "mrr@10": 0.573,
+            "ndcg@10": 0.657,
+            "precision@5": 0.565,
+            "source_recall@5": 70.6
+          },
+          "grade=11": {
+            "n": 4,
+            "recall@1": 75.0,
+            "recall@5": 100.0,
+            "recall@10": 100.0,
+            "mrr@10": 0.875,
+            "ndcg@10": 0.908,
+            "precision@5": 0.75,
+            "source_recall@5": 100.0
+          },
+          "grade=12": {
+            "n": 54,
+            "recall@1": 29.6,
+            "recall@5": 55.6,
+            "recall@10": 63.0,
+            "mrr@10": 0.397,
+            "ndcg@10": 0.453,
+            "precision@5": 0.607,
+            "source_recall@5": 55.6
+          },
+          "term=1": {
+            "n": 12,
+            "recall@1": 8.3,
+            "recall@5": 58.3,
+            "recall@10": 83.3,
+            "mrr@10": 0.303,
+            "ndcg@10": 0.428,
+            "precision@5": 0.467,
+            "source_recall@5": 58.3
+          },
+          "term=2": {
+            "n": 11,
+            "recall@1": 72.7,
+            "recall@5": 100.0,
+            "recall@10": 100.0,
+            "mrr@10": 0.833,
+            "ndcg@10": 0.876,
+            "precision@5": 0.636,
+            "source_recall@5": 100.0
+          },
+          "term=3": {
+            "n": 11,
+            "recall@1": 63.6,
+            "recall@5": 90.9,
+            "recall@10": 100.0,
+            "mrr@10": 0.745,
+            "ndcg@10": 0.806,
+            "precision@5": 0.764,
+            "source_recall@5": 90.9
+          },
+          "term=None": {
+            "n": 24,
+            "recall@1": 12.5,
+            "recall@5": 25.0,
+            "recall@10": 25.0,
+            "mrr@10": 0.165,
+            "ndcg@10": 0.185,
+            "precision@5": 0.617,
+            "source_recall@5": 25.0
+          },
+          "language=en": {
+            "n": 58,
+            "recall@1": 32.8,
+            "recall@5": 58.6,
+            "recall@10": 65.5,
+            "mrr@10": 0.43,
+            "ndcg@10": 0.484,
+            "precision@5": 0.617,
+            "source_recall@5": 58.6
+          },
+          "format=docx": {
+            "n": 23,
+            "recall@1": 13.0,
+            "recall@5": 26.1,
+            "recall@10": 26.1,
+            "mrr@10": 0.172,
+            "ndcg@10": 0.193,
+            "precision@5": 0.635,
+            "source_recall@5": 26.1
+          },
+          "format=pdf": {
+            "n": 34,
+            "recall@1": 47.1,
+            "recall@5": 82.4,
+            "recall@10": 94.1,
+            "mrr@10": 0.618,
+            "ndcg@10": 0.695,
+            "precision@5": 0.618,
+            "source_recall@5": 82.4
+          },
+          "format=pptx": {
+            "n": 1,
+            "recall@1": 0.0,
+            "recall@5": 0.0,
+            "recall@10": 0.0,
+            "mrr@10": 0.0,
+            "ndcg@10": 0.0,
+            "precision@5": 0.2,
+            "source_recall@5": 0.0
+          },
+          "source_type=lms_content": {
+            "n": 23,
+            "recall@1": 13.0,
+            "recall@5": 26.1,
+            "recall@10": 26.1,
+            "mrr@10": 0.172,
+            "ndcg@10": 0.193,
+            "precision@5": 0.635,
+            "source_recall@5": 26.1
+          },
+          "source_type=official_syllabus": {
+            "n": 10,
+            "recall@1": 50.0,
+            "recall@5": 80.0,
+            "recall@10": 80.0,
+            "mrr@10": 0.608,
+            "ndcg@10": 0.656,
+            "precision@5": 0.3,
+            "source_recall@5": 80.0
+          },
+          "source_type=student_guide": {
+            "n": 19,
+            "recall@1": 42.1,
+            "recall@5": 78.9,
+            "recall@10": 100.0,
+            "mrr@10": 0.583,
+            "ndcg@10": 0.681,
+            "precision@5": 0.779,
+            "source_recall@5": 78.9
+          },
+          "source_type=teacher_guide": {
+            "n": 5,
+            "recall@1": 60.0,
+            "recall@5": 100.0,
+            "recall@10": 100.0,
+            "mrr@10": 0.767,
+            "ndcg@10": 0.826,
+            "precision@5": 0.64,
+            "source_recall@5": 100.0
+          },
+          "source_type=teacher_material": {
+            "n": 1,
+            "recall@1": 0.0,
+            "recall@5": 0.0,
+            "recall@10": 0.0,
+            "mrr@10": 0.0,
+            "ndcg@10": 0.0,
+            "precision@5": 0.2,
+            "source_recall@5": 0.0
+          }
         }
+      },
+      "authority": {
+        "n": 6,
+        "syllabus_first_rate": 0.333
+      },
+      "latency": {
+        "p50_ms": 64.5,
+        "p95_ms": 85.7,
+        "n": 90
       }
-    }
-  }
+    },
+    "note": "v0 had no evidence grading, so no-answer behaviour is not measured"
+  },
+  "source": "DGX corpus run 2026-11-15 (commit 9b6c06c, gate key a394165cff58f30f): /home/admin/nexa-evidence/nexa-eval-corpus-nomic-embed-20261115-0651.md"
 }
