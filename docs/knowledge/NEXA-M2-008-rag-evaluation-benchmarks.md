@@ -274,7 +274,7 @@ Pisin items are today) but do not gate until a speaker of the language approves 
 behaviour. Approval sets `approved: true` in a new dataset version, and a language slice floor is added.
 
 Scaling: the gating set is 48 questions today. With each subject and grade adding about 25 items, the corpus
-suite's run time grows linearly (it is about 15 minutes on the DGX today). Above a few hundred items, the
+suite's run time grows in proportion to the number of items. Above a few hundred items, the
 corpus suite can run a fixed, stratified gating subset on every deploy and the full set nightly.
 
 ## 11. Enforcement across environments

@@ -44,7 +44,7 @@ python v1/tools/nexa_eval.py fixture --out eval-out
 Expected: `Gate: PASS`, 25/25. This is the same command CI runs on every pull request ("RAG evaluation
 gate" step in `.github/workflows/ci.yml`).
 
-## 3. Corpus suite (real models; about 15 minutes with a GPU, longer on CPU)
+## 3. Corpus suite (real models; fastest with a GPU)
 
 **PostgreSQL with pgvector**, the same image CI uses:
 
