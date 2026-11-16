@@ -20,12 +20,14 @@ One request runs these stages, each timed and explained:
 5. Authority. authority.arbitrate() applies the M2-001 rules to the top
    passages: an official passage covering the same curriculum point as a
    lower-authority one is placed above it, never silently replaced.
-6. Cut to top_k. Every result keeps its stage scores and the reasons it was
-   selected, and the response carries the stage timings and what was applied.
 6. Diversity. diversify() drops near copies of a higher-ranked passage (the
-   same lesson synced from several Moodle courses), and, if
+   same lesson synced from several Moodle courses; by shingle Jaccard, or by
+   containment when one copy is split differently), keeps reference lists
+   (bibliographies) out unless the question asks for sources, and, if
    NEXA_MAX_PER_SOURCE is set, caps passages per source (off by default);
    dropped passages fill in only when too few remain.
+7. Cut to top_k. Every result keeps its stage scores and the reasons it was
+   selected, and the response carries the stage timings and what was applied.
 
 `score` on a result is its semantic similarity to the query (cosine), the same
 meaning it had in M1, so it can be compared across queries and used to judge
@@ -139,15 +141,45 @@ def _source_key(it: dict[str, Any]) -> str:
     return str(md.get("version_id") or md.get("source_id") or md.get("title") or it.get("chunk_id"))
 
 
-def diversify(items: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Keep rank order, but at most MAX_PER_SOURCE passages per source and no
-    near copy of a passage already kept. Dropped passages fill in only when
-    too few remain."""
+_REF_MARK = re.compile(r"retrieved\s+(?:from|on)|\(n\.\s?d\.\)|https?://|www\.|doi\.org|"
+                       r"\(\d{4}(?:,\s*[a-z]+\s+\d{1,2})?\)", re.I)
+_ASKS_FOR_SOURCES = re.compile(r"\b(reference|references|bibliograph|citation|sources?|further reading|"
+                               r"website|url|link)\b", re.I)
+
+
+def is_reference_list(text: str) -> bool:
+    """A passage that is mostly a bibliography: at least four reference marks
+    and at least one per 25 words."""
+    words = len((text or "").split())
+    marks = len(_REF_MARK.findall(text or ""))
+    return marks >= 4 and words > 0 and marks * 25 >= words
+
+
+def _near_copy(sh: set[str], seen: list[set[str]]) -> bool:
+    for o in seen:
+        if not o:
+            continue
+        inter = len(sh & o)
+        if inter / len(sh | o) >= config.DEDUP_SIMILARITY:
+            return True
+        small = min(len(sh), len(o))
+        if small >= 20 and inter / small >= config.DEDUP_CONTAINMENT:
+            return True
+    return False
+
+
+def diversify(items: list[dict[str, Any]], top_k: int, query: str = ""
+              ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Keep rank order, but at most MAX_PER_SOURCE passages per source, no
+    near copy of a passage already kept (by Jaccard or containment), and no
+    reference list unless the question asks for sources. Dropped passages
+    fill in only when too few remain."""
     kept: list[dict[str, Any]] = []
     spare: list[dict[str, Any]] = []
     per: dict[str, int] = {}
     seen: list[set[str]] = []
-    dropped = {"same_source": 0, "near_duplicate": 0}
+    dropped = {"same_source": 0, "near_duplicate": 0, "reference_list": 0}
+    refs_ok = bool(_ASKS_FOR_SOURCES.search(query or ""))
     for it in items:
         if len(kept) >= top_k:
             break
@@ -157,8 +189,12 @@ def diversify(items: list[dict[str, Any]], top_k: int) -> tuple[list[dict[str, A
             dropped["same_source"] += 1
             spare.append(it)
             continue
-        if sh and any(len(sh & o) / len(sh | o) >= config.DEDUP_SIMILARITY for o in seen if o):
+        if sh and _near_copy(sh, seen):
             dropped["near_duplicate"] += 1
+            spare.append(it)
+            continue
+        if config.DEMOTE_REFERENCE_LISTS and not refs_ok and is_reference_list(it.get("text") or ""):
+            dropped["reference_list"] += 1
             spare.append(it)
             continue
         kept.append(it)
@@ -265,7 +301,7 @@ class Retriever:
         arbitration_pool = pool[:max(3 * top_k, 15)]
         arbitrated, conflicts = arbitrate(arbitration_pool, claim)
         t = lap("authority", t)
-        final, dropped = diversify(arbitrated, top_k)
+        final, dropped = diversify(arbitrated, top_k, req.query)
         if dropped:
             explain["diversity"] = dropped
 

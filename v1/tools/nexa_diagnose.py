@@ -75,7 +75,8 @@ def run(args) -> dict[str, Any]:
     ds = ev.load_dataset(args.dataset)
     items = [i for i in ds["items"] if i["suite"] == "corpus" and i.get("approved", True)
              and i["type"] in ("exact_fact", "conceptual", "ambiguous", "spelling")]
-    tok = tokens.issue_token("eval:nexa-diagnose", ["platform_admin"], "user", 3600)
+    extra = {"school_id": args.school_id} if args.school_id else None
+    tok = tokens.issue_token("eval:nexa-diagnose", [args.as_role], "user", 3600, extra=extra)
     h = {"Authorization": f"Bearer {tok}"}
     base = args.base_url.rstrip("/")
     rows, totals = [], collections.Counter()
@@ -142,6 +143,8 @@ def main() -> int:
     ap.add_argument("--base-url", default="http://127.0.0.1:8103")
     ap.add_argument("--dataset", default=ev.DEFAULT_DATASET)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--as-role", default="platform_admin")
+    ap.add_argument("--school-id", default="")
     args = ap.parse_args()
     if not os.environ.get("NEXA_IDENTITY_SECRET"):
         print("load the service settings first (NEXA_IDENTITY_SECRET)", file=sys.stderr)

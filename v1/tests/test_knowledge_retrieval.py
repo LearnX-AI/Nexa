@@ -455,3 +455,28 @@ def test_diversify_by_default_only_drops_near_copies():
              "metadata": {"version_id": "A"}} for i in range(5)]
     kept, dropped = diversify(same, 5)
     assert [k["chunk_id"] for k in kept] == ["a0", "a1", "a2", "a3", "a4"] and not dropped
+
+
+def test_diversify_drops_a_copy_split_differently_and_keeps_reference_lists_out():
+    """DGX diagnosis 2026-11-16: a lecture note repeating a lesson note (containment
+    0.97, Jaccard lower) took a second top-5 place; a syllabus bibliography held
+    four of the top five for a SPECT/PET question."""
+    from v1.knowledge.retrieval import diversify, is_reference_list
+    lesson = ("Papua New Guinea has a rich biodiversity of birds. The country is home to more than 79 families "
+              "and about 760 species of birds, many found nowhere else, including the birds of paradise, "
+              "cassowaries, parrots, pigeons and kingfishers that live in the rainforests and mountains.")
+    copy = lesson + (" Teacher note: ask students to list three birds they have seen near their village and "
+                     "describe where each one feeds, nests and sings during the day.")
+    refs = ("(2019, June 28). Medical imaging: What is the difference between PET and SPECT? Retrieved from "
+            "https://example.org/a Nuclear Medicine. (n.d.). Retrieved from National Institute of Biomedical "
+            "Imaging https://example.org/b (n.d.). Retrieved from Bruker: https://www.bruker.com/x")
+    other = "SPECT uses gamma-emitting radioisotopes such as technetium-99m, while PET uses positron emitters."
+    items = [{"chunk_id": c, "text": t, "metadata": {"source_id": c}}
+             for c, t in (("copy", copy), ("lesson", lesson), ("refs", refs), ("other", other), ("x", "x y z"))]
+    assert is_reference_list(refs) and not is_reference_list(other) and not is_reference_list(lesson)
+    kept, dropped = diversify(items, 3, "Which radioisotopes are used for SPECT imaging compared with PET?")
+    assert [k["chunk_id"] for k in kept] == ["copy", "other", "x"]
+    assert dropped == {"near_duplicate": 1, "reference_list": 1}
+    # Asking for sources keeps the reference list.
+    kept, _ = diversify(items, 3, "What references does the syllabus list for PET and SPECT?")
+    assert "refs" in [k["chunk_id"] for k in kept]

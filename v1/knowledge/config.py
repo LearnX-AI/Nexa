@@ -136,6 +136,15 @@ ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 # relevant passage of the right document, recall@5 95.8 -> 81.2).
 MAX_PER_SOURCE = int(os.environ.get("NEXA_MAX_PER_SOURCE", "0"))
 DEDUP_SIMILARITY = float(os.environ.get("NEXA_DEDUP_SIMILARITY", "0.8"))
+# A shorter passage most of whose text is inside a higher-ranked one (shingle
+# containment at or above this) is also a near copy: copies of a lesson split
+# at different places (lesson note vs lecture note vs slides) have a low
+# Jaccard but a containment of 0.9+. Only for passages of 20+ shingles.
+DEDUP_CONTAINMENT = float(os.environ.get("NEXA_DEDUP_CONTAINMENT", "0.85"))
+# Reference lists (bibliographies: "Retrieved from", "(n.d.)", URLs) answer no
+# learner question but match its words; they are kept out of the top results
+# unless the question asks for sources or references.
+DEMOTE_REFERENCE_LISTS = os.environ.get("NEXA_DEMOTE_REFERENCE_LISTS", "true").lower() == "true"
 
 # School edge (NEXA-M2-009). Core NEXA: where per-school packages are built and
 # served from. School server: NEXA_EDGE_MODE=true with NEXA_KNOWLEDGE_STORE=edge.
