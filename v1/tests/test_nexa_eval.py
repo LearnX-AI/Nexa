@@ -289,3 +289,45 @@ def test_end_to_end_refusal_counts_only_curriculum_answers_as_failures():
     na = ev.score_corpus(obs)["metrics"]["no_answer"]
     assert na["correct_refusal_rate"] == 0.0  # the evidence grade alone let all four through
     assert na["curriculum_answer_rate"] == 0.25 and na["end_to_end_refusal_rate"] == 0.75
+
+
+def test_answer_quality_reports_citation_precision_and_unsupported_content():
+    """Answer quality is measured on separate axes: accuracy, citation
+    correctness, unsupported content (hallucination indicator) and no-answer
+    handling, not only retrieval."""
+    from v1.knowledge.benchmark import evalsuite as ev
+    item = {"id": "q", "type": "exact_fact", "files": ["a.pdf"], "evidence": ["mitochondria release energy"],
+            "expect": {"answer_keys": ["mitochondria", "energy"]}}
+
+    def ans(files, weak=0, moved=0):
+        return {"status": "grounded", "answer": "Mitochondria release energy [S1].",
+                "citations": [{"used": True, "provenance": {"source_uri": f"repo://{f}"}} for f in files],
+                "integrity": {"valid_markers": ["S1"], "fabricated_markers": [],
+                              "weakly_supported_sentences": weak, "general_paragraphs": moved}}
+    a = ev.answer_correct(ans(["a.pdf", "b.pdf"], weak=1), item)
+    assert a["citations_used"] == 2 and a["citations_expected"] == 1 and a["weak_sentences"] == 1
+    b = ev.answer_correct(ans(["a.pdf"]), item)
+    assert b["unsupported_paragraphs"] == 0 and b["correct"]
+    # Aggregated: citation precision 2/3, one of two answers has unsupported content.
+    obs = [{"item": item, "results": [{"provenance": {"source_uri": "repo://a.pdf"}, "text": "mitochondria release energy"}],
+            "evidence": "strong", "ms": 5, "answer": x} for x in (ans(["a.pdf", "b.pdf"], weak=1), ans(["a.pdf"]))]
+    m = ev.score_corpus(obs)["metrics"]["answers"]
+    assert m["citation_precision"] == 0.667 and m["unsupported_answer_rate"] == 0.5
+
+
+def test_thresholds_can_gate_a_single_subject_grade_or_language():
+    """Curriculum expansion: a new subject, grade or approved language gets its
+    own floor in the thresholds file (no code change), and a slice with no
+    items fails rather than passing silently."""
+    from v1.knowledge.benchmark import evalsuite as ev
+    report = {"suite": "live", "metrics": {"retrieval": {"slices": {
+        "subject=Biology": {"n": 29, "recall@5": 96.6}, "subject=Chemistry": {"n": 12, "recall@5": 91.7}}}}}
+    thr = {"version": "t", "live": {"min": {"retrieval.slices.subject=Biology.recall@5": 85.0,
+                                            "retrieval.slices.subject=Chemistry.recall@5": 95.0,
+                                            "retrieval.slices.language=tpi.recall@5": 70.0}}}
+    g = ev.evaluate_gate(report, thr)
+    res = {c["metric"]: c["passed"] for c in g["checks"]}
+    assert res["retrieval.slices.subject=Biology.recall@5"] is True
+    assert res["retrieval.slices.subject=Chemistry.recall@5"] is False
+    assert res["retrieval.slices.language=tpi.recall@5"] is False      # not measured -> fails
+    assert g["passed"] is False

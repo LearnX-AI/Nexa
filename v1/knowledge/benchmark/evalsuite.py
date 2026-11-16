@@ -184,10 +184,22 @@ def answer_correct(ans: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
     cov = (sum(norm(k) in text for k in keys) / len(keys)) if keys else 1.0
     answered = ans.get("status") in ("grounded", "grounded_weak")
     cites_relevant = bool(files & set(item.get("files", [])))
+    integ = ans.get("integrity") or {}
+    used_files = [file_of_result({"provenance": c.get("provenance")}) for c in used]
     return {"answered": answered, "cites_relevant": cites_relevant, "key_coverage": round(cov, 2),
             "correct": answered and cites_relevant and cov >= 0.5,
-            "fabricated": len((ans.get("integrity") or {}).get("fabricated_markers", [])),
-            "valid_citations": len((ans.get("integrity") or {}).get("valid_markers", []))}
+            "fabricated": len(integ.get("fabricated_markers", [])),
+            "valid_citations": len(integ.get("valid_markers", [])),
+            # Citation correctness: of the citations the answer uses, how many
+            # point to an expected source (a cited passage may be relevant
+            # without being the expected one, so this is a lower bound).
+            "citations_used": len(used_files),
+            "citations_expected": sum(f in set(item.get("files", [])) for f in used_files),
+            # Unsupported content (hallucination indicator): sentences whose
+            # word overlap with the cited passage is weak, and paragraphs the
+            # passages do not support (moved under the general-information label).
+            "weak_sentences": int(integ.get("weakly_supported_sentences") or 0),
+            "unsupported_paragraphs": int(integ.get("general_paragraphs") or 0)}
 
 
 # ---------------------------------------------------------------- scoring
@@ -289,6 +301,17 @@ def score_corpus(observations: list[dict[str, Any]]) -> dict[str, Any]:
             "ungrounded_rate": round(sum(a["status"] == "ungrounded" for a in answers) / n, 3),
             "statuses": dict(sorted(_count(a["status"] for a in answers).items())),
         }
+        answered = [a for a in answers if a["answered"]]
+        used = sum(a.get("citations_used", 0) for a in answered)
+        m["answers"].update({
+            # Reported, not gated, until a baseline run sets thresholds for them.
+            "citation_precision": round(sum(a.get("citations_expected", 0) for a in answered) / used, 3)
+            if used else None,
+            "unsupported_answer_rate": round(sum(1 for a in answered if a.get("weak_sentences", 0)
+                                                 or a.get("unsupported_paragraphs", 0)) / len(answered), 3)
+            if answered else None,
+            "weak_sentences_total": sum(a.get("weak_sentences", 0) for a in answered),
+        })
     return {"metrics": m, "items": per_item}
 
 

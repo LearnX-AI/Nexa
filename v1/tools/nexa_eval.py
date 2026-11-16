@@ -415,6 +415,10 @@ def markdown(r: dict) -> str:
               f"{an['mean_key_coverage']}",
               f"- Fabricated citation markers: {an['fabricated_citations']}; answered with a valid citation: "
               f"{an['citation_valid_rate']}; ungrounded: {an['ungrounded_rate']}",
+              f"- Citation precision (cited passages from an expected source): {an.get('citation_precision')}",
+              f"- Unsupported content (answers with a weakly supported sentence or an unsupported paragraph): "
+              f"{an.get('unsupported_answer_rate')}; weakly supported sentences in total: "
+              f"{an.get('weak_sentences_total')}",
               f"- Statuses: {an['statuses']}"]
     misses = [i for i in r.get("items", []) if i["type"] != "no_answer" and not i.get("rank")]
     wrong_ref = [i for i in r.get("items", []) if i["type"] == "no_answer" and i.get("refused") is False]
