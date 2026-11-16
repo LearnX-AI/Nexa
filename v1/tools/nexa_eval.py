@@ -306,7 +306,8 @@ def run_live(args) -> int:
         print("NEXA_IDENTITY_SECRET is not set: load it first with\n"
               "  set -a; source <(sudo cat /etc/nexa/identity.env); set +a", file=sys.stderr)
         return 2
-    tok = tokens.issue_token("eval:nexa-eval-live", ["platform_admin"], "user", 3600)
+    extra = {"school_id": args.school_id} if args.school_id else None
+    tok = tokens.issue_token("eval:nexa-eval-live", [args.as_role], "user", 3600, extra=extra)
     h = {"Authorization": f"Bearer {tok}"}
     base = args.base_url.rstrip("/")
     obs = []
@@ -337,6 +338,7 @@ def run_live(args) -> int:
                 print(f"  live: {n}/{len(items)}", flush=True)
     scored = ev.score_corpus(obs)
     rep = {"suite": "live", "dataset_version": ds["version"], "generated_at": now(), "base_url": base,
+           "principal": {"role": args.as_role, "school_id": args.school_id or None},
            "service": {"version": health.get("version"), "index": (health.get("index") or {})},
            "metrics": scored["metrics"], "items": scored["items"]}
     rep["gate"] = ev.evaluate_gate(rep, load_thresholds(args.thresholds))
@@ -357,7 +359,10 @@ def markdown(r: dict) -> str:
     L = [f"# NEXA-M2-008 evaluation: {r['suite']} suite", "",
          f"Dataset {r.get('dataset_version')}, thresholds {g.get('thresholds_version')}. Run {r.get('generated_at')}"
          + (f", commit `{(r.get('commit') or '')[:12]}`" if r.get("commit") else "")
-         + (f", gate key `{r['gate_key']}`" if r.get("gate_key") else "") + ".", ""]
+         + (f", gate key `{r['gate_key']}`" if r.get("gate_key") else "") + "."
+         + (f" Evaluated as {r['principal']['role']}"
+            + (f" of school {r['principal']['school_id']}" if r["principal"].get("school_id") else "") + "."
+            if r.get("principal") else ""), ""]
     if r.get("index"):
         L += [f"Index {r['index']['fingerprint']}, built in {r['index'].get('build_s')} s "
               f"({r['corpus']['sources']} sources, {r['corpus']['chunks']} chunks). Store {r.get('store')}.", ""]
@@ -455,6 +460,10 @@ def main() -> int:
     lv.add_argument("--base-url", default="http://127.0.0.1:8103")
     lv.add_argument("--out", required=True)
     lv.add_argument("--no-answers", action="store_true")
+    lv.add_argument("--as-role", default="platform_admin",
+                    help="role of the evaluating user: platform_admin (default) sees all content; "
+                         "student with --school-id sees what a learner at that school sees")
+    lv.add_argument("--school-id", default="", help="school claim for --as-role student/teacher")
     args = ap.parse_args()
     try:
         return {"fixture": run_fixture, "corpus": run_corpus, "live": run_live}[args.suite](args)
