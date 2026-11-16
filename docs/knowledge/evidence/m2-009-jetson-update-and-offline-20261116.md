@@ -70,7 +70,8 @@ Two copies of the suite ran at the same time by accident; this affects only timi
 
 ## Observations for follow-up
 
-- Every chunk has `grade = None` in the package metadata although the source titles name the grade.
-  Grade filters will not work until grade is set at ingestion on the core.
+- Correction (2026-11-16): an earlier version of this note said grade was missing from the package. It is
+  not: grade is stored as `grade_levels` (for example `"12"`), and the check that printed `None` read a
+  field called `grade`, which does not exist.
 - The general-answer prompt forced PNG comparisons and invented people and Tok Pisin; fixed in the
   closing PR (explain first, PNG examples only where they fit).

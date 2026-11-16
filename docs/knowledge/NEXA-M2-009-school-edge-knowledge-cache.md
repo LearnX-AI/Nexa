@@ -214,8 +214,7 @@ moment exceeds what one Jetson can write in 10 minutes (about 5–7 answers a mi
 | No dependency on continuous DGX/cloud connectivity for normal local retrieval | **Met** | The Jetson has no network path to the DGX; it served all of the above, the live suite and the classroom load tests (section 9.1). |
 | Data minimisation and access policies align with NEXA-GOV-001 | Met against the controls in the repository; **follow-up**: confirm against the GOV-001 document | Sections 2 and 6; the v2 build excluded 4,576 chunks belonging to another school; `test_package_holds_only_what_this_school_may_have`, `test_core_first_sends_role_and_question_only`, `test_core_accepts_delegation_only_for_its_school_and_safe_roles` |
 
-**Status: complete** (2026-11-16). Follow-ups, outside M2-009: confirm against NEXA-GOV-001; set grade
-metadata at ingestion; share answer generation with core NEXA when a school's queue is long (needs the
+**Status: complete** (2026-11-16). Follow-ups, outside M2-009: confirm against NEXA-GOV-001; share answer generation with core NEXA when a school's queue is long (needs the
 network path in decision 1).
 
 ## 11. Open decisions
