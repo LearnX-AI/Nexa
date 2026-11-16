@@ -232,3 +232,69 @@ v1 recall@5 by slice: exact fact 95.0, conceptual 100, ambiguous 87.5, misspelt 
 - **Answer accuracy is a proxy.** Key-term coverage plus citing the right source catches wrong and unsupported answers, but not every subtle error. A teacher review sample of live answers per release would complete it.
 - **Gate records live on the deploy host.** `--record-gate` writes to `~/.nexa/eval-gates` on the host that deploys. If the CI runner deploys as a different user, set `NEXA_EVAL_GATE_DIR` for both.
 - **LMS content in the corpus suite.** The corpus suite uses the M2-002 corpus, which includes 23 EduNex LMS lessons as files. Content synced later through M2-007 is covered by the live suite.
+
+## 9. Answer quality: what is measured, separately
+
+Each axis is a separate number in every corpus (`--answers`) and live report.
+
+| Axis | Metric | Gated |
+|---|---|---|
+| Factual accuracy | `answers.accuracy`: answered, cites an expected source, covers at least half the evidence's key terms; `mean_key_coverage` | Yes, ≥ 0.70 |
+| Citation correctness | `citation_valid_rate` (answered with a citation that points to a passage the model was given); `cites_relevant_rate` (cites an expected source); `citation_precision` (share of the cited passages that come from an expected source; a lower bound, since another passage can also be correct) | Valid rate ≥ 0.95 (corpus); precision reported |
+| Hallucination | `fabricated_citations` (citation markers to passages that were not given); `ungrounded_rate` (answers whose only citations were invented, withheld); `unsupported_answer_rate` and `weak_sentences_total` (sentences weakly supported by the passage they cite, and paragraphs no passage supports) | Fabricated = 0, ungrounded ≤ 0.05; unsupported content reported until a baseline sets its limit |
+| No-answer handling | `correct_refusal_rate` (evidence grade), `end_to_end_refusal_rate` / `curriculum_answer_rate` (an unanswerable question never gets a curriculum answer), `false_refusal_rate` (answerable questions refused) | Yes (section 6) |
+| Retrieval | recall@k, MRR, nDCG, precision@5, source recall, syllabus-first | Yes |
+
+Limits: accuracy and the unsupported-content measures are automatic proxies based on word overlap. They catch
+wrong-source, missing-content and invented-citation answers, but not every subtle factual error. A teacher
+review of a sample of live answers per release (for example 30 answers, rated correct / partly correct /
+wrong, and supported / not supported by the cited passage) is the planned complement (section 8).
+
+## 10. Extending the evaluation to more grades, subjects and languages
+
+Nothing in the framework is specific to Grades 11–12 or to the three sciences:
+- every item carries `subject`, `grade`, `term`, `language`, `format` and `source_type`, and every report is
+  sliced by all of them automatically;
+- the thresholds file can set a floor for any slice, without code changes, for example
+  `"retrieval.slices.subject=Mathematics.recall@5": 85.0` or `"retrieval.slices.language=tpi.recall@5": 70.0`;
+  a slice with no measured items fails rather than passing silently
+  (`test_thresholds_can_gate_a_single_subject_grade_or_language`).
+
+Adding a subject or grade:
+1. Ingest its approved sources on core NEXA (NEXA-M2-002), with `subject` and `grade` set in the source metadata.
+2. Subject teachers write the items: at least 20 answerable questions per subject and grade (exact,
+   conceptual, ambiguous, misspelt), and at least 5 unanswerable ones, each with its expected source and
+   evidence phrases. A second teacher reviews them.
+3. Release them as a new dataset version (1.x.0 for additions).
+4. The first run reports the new slice. After review of that run, a new thresholds version adds its floor
+   and the baseline is re-recorded on the DGX.
+
+Adding a language: items are added with `approved: false`. They are measured and reported (as the 16 Tok
+Pisin items are today) but do not gate until a speaker of the language approves the wording and the expected
+behaviour. Approval sets `approved: true` in a new dataset version, and a language slice floor is added.
+
+Scaling: the gating set is 48 questions today. With each subject and grade adding about 25 items, the corpus
+suite's run time grows linearly (it is about 15 minutes on the DGX today). Above a few hundred items, the
+corpus suite can run a fixed, stratified gating subset on every deploy and the full set nightly.
+
+## 11. Enforcement across environments
+
+| Stage | What is enforced | Where |
+|---|---|---|
+| Pull request to `main` | Unit and integration tests and the fixture evaluation (25 checks) | CI `build-test` |
+| Deploy to DEV (DGX) | Corpus evaluation for exactly the retrieval code being deployed, recorded on the host, or the deploy stops | `deploy.sh` step 2a |
+| Promote to QA | The same `deploy.sh` and gate, on the QA host, with its own recorded evaluation; QA approval in the `qa` GitHub environment | CI `promote-qa` |
+| School servers | M2-008 live suite against the school server before it is put in service | Manual, `NEXA-M2-008-reproduce.md` section 4 |
+
+Open items, as of 2026-11-16:
+- `main` has no branch protection, so a pull request with a failing evaluation can still be merged by hand.
+  Required status check `build-test` on `main` closes this (repository setting).
+- The CI deploy jobs run on pushes to `nexa-v1-core`, while work is now merged to `main`; DEV deploys are run
+  with `deploy.sh` on the DGX, where the gate applies. Pointing the deploy jobs at `main` (with
+  `NEXA_DEPLOY_ENABLED`) makes DEV and QA deploys automatic and gated on every merge.
+- A separate QA host and its `nexa-qa` runner are not yet in use.
+- The live suite runs after a deploy by hand; it is not yet part of `deploy.sh`.
+
+## 12. Reproducing the results
+
+Step by step, for a developer who has not run it before: [NEXA-M2-008-reproduce.md](NEXA-M2-008-reproduce.md).
