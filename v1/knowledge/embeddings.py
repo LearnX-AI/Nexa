@@ -20,9 +20,11 @@ direct embedding SDK. On top of the gateway call this module adds:
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import struct
+import time
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
@@ -172,7 +174,15 @@ async def _gateway(texts: list[str], model: str, trace_id: Optional[str]) -> tup
         headers["X-NEXA-Trace-Id"] = trace_id
     url = f"{config.GATEWAY_URL}/v1/embeddings"
     last: Optional[Exception] = None
-    for _ in range(2):  # the gateway already retries its backend; one retry here covers the hop to it
+    # The gateway already retries its backend; one retry here covers the hop
+    # to it. On a school server (NEXA_GENERATION_OUTAGE_WAIT_S > 0) a question
+    # also rides out a short model-server restart instead of failing.
+    deadline = time.monotonic() + config.GENERATION_OUTAGE_WAIT_S
+    attempt = 0
+    while attempt < 2 or time.monotonic() + config.GENERATION_OUTAGE_RETRY_S <= deadline:
+        if attempt >= 2:
+            await asyncio.sleep(config.GENERATION_OUTAGE_RETRY_S)
+        attempt += 1
         try:
             async with httpx.AsyncClient(timeout=config.GATEWAY_TIMEOUT) as client:
                 resp = await client.post(url, json={"model": model, "input": texts}, headers=headers)

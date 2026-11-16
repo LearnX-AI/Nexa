@@ -121,6 +121,11 @@ ANSWER_TIMEOUT = float(os.environ.get("NEXA_ANSWER_TIMEOUT", "120"))
 # OLLAMA_NUM_PARALLEL); 0 = no limit. A question waits at most the timeout.
 GENERATION_CONCURRENCY = int(os.environ.get("NEXA_GENERATION_CONCURRENCY", "0"))
 GENERATION_QUEUE_TIMEOUT_S = float(os.environ.get("NEXA_GENERATION_QUEUE_TIMEOUT_S", "600"))
+# When the model server drops out mid-queue (for example Ollama restarted after
+# running out of memory), a queued answer keeps its turn and retries for up to
+# this many seconds instead of failing at once; 0 = fail at once (core default).
+GENERATION_OUTAGE_WAIT_S = float(os.environ.get("NEXA_GENERATION_OUTAGE_WAIT_S", "0"))
+GENERATION_OUTAGE_RETRY_S = float(os.environ.get("NEXA_GENERATION_OUTAGE_RETRY_S", "5"))
 ANSWER_CONTEXT_CHARS = int(os.environ.get("NEXA_ANSWER_CONTEXT_CHARS", "7000"))
 
 # Result diversity (retrieval.py): a passage whose text is a near copy (shingle
