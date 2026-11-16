@@ -331,3 +331,22 @@ def test_thresholds_can_gate_a_single_subject_grade_or_language():
     assert res["retrieval.slices.subject=Chemistry.recall@5"] is False
     assert res["retrieval.slices.language=tpi.recall@5"] is False      # not measured -> fails
     assert g["passed"] is False
+
+
+def test_diagnose_tool_reads_grade_levels_and_flags_near_copies():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("nexa_diagnose", "v1/tools/nexa_diagnose.py")
+    nd = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(nd)
+    assert nd.grades_of({"grade_levels": "11,12"}) == {11, 12} and nd.grades_of({}) == set()
+    a = nd._shingles("the cell cycle has four phases g1 s g2 and m in that order")
+    b = nd._shingles("Lesson 3. The cell cycle has four phases g1 s g2 and m in that order. Copy.")
+    assert nd.containment(a, b) == 1.0
+    rep = {"generated_at": "t", "base_url": "u", "service": {"index": "i"},
+           "totals": {"questions": 2, "misses": 1, "miss_deep": 1, "top5": 5, "top5_lms": 3},
+           "misses": [{"id": "c1", "type": "exact_fact", "subject": "Biology", "grade": 12, "question": "q",
+                       "expected": ["a.pdf"], "answer_rank": 7, "diversity": None,
+                       "top5": [nd.describe({"text": "x y z", "metadata": {"grade_levels": "11",
+                                                                         "source_type": "lms_content"}}, 1, [])]}]}
+    md = nd.markdown(rep)
+    assert "LMS content | 60%" in md and "| 1 |" in md and "[11]" in md
