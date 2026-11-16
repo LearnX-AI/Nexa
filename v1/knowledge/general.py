@@ -25,6 +25,7 @@ the roles in NEXA_GENERAL_ROLES get them.
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Optional
 
 import httpx
@@ -147,8 +148,11 @@ async def _general_chat(messages: list[dict[str, str]], trace_id: Optional[str])
     headers = {"Authorization": f"Bearer {config.GATEWAY_TOKEN}"}
     if trace_id:
         headers["X-NEXA-Trace-Id"] = trace_id
+    from .limiter import FAST_FAILURE_S, ModelUnavailable
     last: Optional[Exception] = None
+    outage = False
     for model in dict.fromkeys([config.GENERAL_MODEL, config.ANSWER_MODEL]):
+        t0 = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=config.ANSWER_TIMEOUT) as client:
                 resp = await client.post(f"{config.GATEWAY_URL}/v1/chat/completions", headers=headers, json={
@@ -158,8 +162,15 @@ async def _general_chat(messages: list[dict[str, str]], trace_id: Optional[str])
                 data = resp.json()
                 return data["choices"][0]["message"]["content"], data.get("model") or model
             last = RuntimeError(f"gateway {resp.status_code} for {model}")
+            outage = resp.status_code in (502, 503) and time.monotonic() - t0 < FAST_FAILURE_S
+        except httpx.ConnectError as exc:
+            last, outage = exc, True
         except httpx.HTTPError as exc:
-            last = exc
+            last, outage = exc, False
+    # Only the last model tried decides: the general model may be an external
+    # one that is simply not configured here, while the local one is down.
+    if outage:
+        raise ModelUnavailable(str(last))
     raise RuntimeError(str(last))
 
 

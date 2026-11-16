@@ -23,6 +23,15 @@ class QueueTimeout(Exception):
     pass
 
 
+class ModelUnavailable(RuntimeError):
+    """The model server could not be reached or refused at once (connection
+    error, gateway 502/503 returned quickly). Distinct from a slow answer that
+    timed out, which is never retried: that would only add load."""
+
+
+FAST_FAILURE_S = 15.0
+
+
 class Limiter:
     def __init__(self) -> None:
         self._sem: Optional[asyncio.Semaphore] = None
@@ -34,6 +43,7 @@ class Limiter:
         self.timed_out = 0
         self.total_wait_s = 0.0
         self.max_wait_s = 0.0
+        self.outage_retries = 0
 
     def _semaphore(self) -> Optional[asyncio.Semaphore]:
         n = config.GENERATION_CONCURRENCY
@@ -62,17 +72,30 @@ class Limiter:
         self.total_wait_s += waited
         self.max_wait_s = max(self.max_wait_s, waited)
         try:
-            return await fn(*args)
+            return await self._call(fn, args)
         finally:
             self.running -= 1
             self.completed += 1
             sem.release()
 
+    async def _call(self, fn: Callable[..., Awaitable[Any]], args: tuple) -> Any:
+        """Keeps the turn through a short model-server outage: retries every
+        GENERATION_OUTAGE_RETRY_S for up to GENERATION_OUTAGE_WAIT_S."""
+        deadline = time.monotonic() + config.GENERATION_OUTAGE_WAIT_S
+        while True:
+            try:
+                return await fn(*args)
+            except ModelUnavailable:
+                if time.monotonic() + config.GENERATION_OUTAGE_RETRY_S > deadline:
+                    raise
+                self.outage_retries += 1
+                await asyncio.sleep(config.GENERATION_OUTAGE_RETRY_S)
+
     def stats(self) -> dict[str, Any]:
         return {"concurrency": config.GENERATION_CONCURRENCY, "running": self.running, "waiting": self.waiting,
                 "max_waiting": self.max_waiting, "completed": self.completed, "timed_out": self.timed_out,
                 "mean_wait_s": round(self.total_wait_s / self.completed, 2) if self.completed else 0.0,
-                "max_wait_s": round(self.max_wait_s, 2)}
+                "max_wait_s": round(self.max_wait_s, 2), "outage_retries": self.outage_retries}
 
 
 GENERATION = Limiter()

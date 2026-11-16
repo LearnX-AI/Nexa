@@ -22,6 +22,8 @@ PY=/opt/nexa-edge/venv/bin/python
 KD=/etc/systemd/system/nexa-edge-knowledge.service.d
 GD=/etc/systemd/system/nexa-edge-gateway.service.d
 OD=/etc/systemd/system/ollama.service.d
+exec 9>/run/nexa-loadtest.lock
+flock -n 9 || { echo "another load test is already running on this server; wait for it or stop it first"; exit 2; }
 mkdir -p "$OUT" "$KD" "$GD" "$OD"; chown "$RUN_AS": "$OUT"
 if grep -qE '^(NEXA_GENERATION_CONCURRENCY|NEXA_GATEWAY_TIMEOUT|NEXA_ANSWER_TIMEOUT)=' /etc/nexa-edge/edge.env; then
   echo "edge.env sets the queue/timeouts itself (it overrides this test's settings)."
@@ -41,9 +43,15 @@ wait_health() {
 configure() {  # $1 = before | after
   rm -f "$KD/zz-loadtest.conf" "$GD/zz-loadtest.conf" "$OD/zz-loadtest.conf"
   if [ "$1" = after ]; then
-    printf '[Service]\nEnvironment=NEXA_GENERATION_CONCURRENCY=%s\nEnvironment=NEXA_GENERATION_QUEUE_TIMEOUT_S=600\nEnvironment=NEXA_ANSWER_TIMEOUT=300\n' "$PARALLEL" > "$KD/zz-loadtest.conf"
+    printf '[Service]\nEnvironment=NEXA_GENERATION_CONCURRENCY=%s\nEnvironment=NEXA_GENERATION_QUEUE_TIMEOUT_S=600\nEnvironment=NEXA_ANSWER_TIMEOUT=300\nEnvironment=NEXA_GENERATION_OUTAGE_WAIT_S=120\nEnvironment=NEXA_GENERAL_MODEL=nexa-chat-precise\n' "$PARALLEL" > "$KD/zz-loadtest.conf"
     printf '[Service]\nEnvironment=NEXA_GATEWAY_TIMEOUT=300\n' > "$GD/zz-loadtest.conf"
     printf '[Service]\nEnvironment=OLLAMA_NUM_PARALLEL=%s\n' "$PARALLEL" > "$OD/zz-loadtest.conf"
+    # Memory: compressed attention cache, a context that fits NEXA's prompts
+    # (about 1,600 tokens plus a 700-token answer), and only the chat and
+    # embedding models loaded. The Jetson shares 16 GB between CPU and GPU.
+    if [ "${OLLAMA_LEAN:-1}" = 1 ]; then
+      printf 'Environment=OLLAMA_FLASH_ATTENTION=1\nEnvironment=OLLAMA_KV_CACHE_TYPE=q8_0\nEnvironment=OLLAMA_CONTEXT_LENGTH=4096\nEnvironment=OLLAMA_MAX_LOADED_MODELS=2\n' >> "$OD/zz-loadtest.conf"
+    fi
   fi
   systemctl daemon-reload
   systemctl restart ollama; sleep 5
@@ -59,10 +67,13 @@ one_run() {  # $1 config, $2 students, $3 extra args, $4 label
     _ "$APP" "$PY" "$2" "$3" "$4" "$OUT" \
     | grep -E 'Students who got|unavailable|HTTP errors|Wait, median|Whole class|Answers correct|Answer queue' \
     || log "RUN FAILED (no report): $4"
+  log "memory after run: $(free -m | awk '/Mem/{print "used "$3" MB, available "$7" MB"} /Swap/{print "swap used "$3" MB"}' | paste -sd, -)"
+  log "out-of-memory kills since boot: $(journalctl -k -b --no-pager | grep -c 'Out of memory: Killed')"
 }
 
 log "system: $(cat /proc/device-tree/model 2>/dev/null | tr -d '\0'), $(nproc) cores, $(free -g | awk '/Mem/{print $2}') GB"
 log "ollama $(ollama --version 2>/dev/null | awk '{print $NF}'), environment: $(systemctl show ollama -p Environment --value)"
+log "power mode: $(nvpmodel -q 2>/dev/null | head -1), desktop: $(systemctl is-active gdm3 2>/dev/null), v0 nexa.service: $(systemctl is-active nexa.service 2>/dev/null)"
 log "package: $(curl -s http://127.0.0.1:8103/health | $PY -c 'import sys,json;print(json.load(sys.stdin).get("edge"))')"
 
 configure before

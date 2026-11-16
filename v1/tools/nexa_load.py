@@ -181,7 +181,8 @@ def markdown(rep: dict[str, Any]) -> str:
          f"| Answers correct (expected source + key terms; refusal for off-curriculum) | {cr} of {m['scored']} scored |",
          f"| Routes | {m['routes']} |", f"| Statuses | {m['statuses']} |",
          f"| Answer queue (service) | concurrency {g.get('concurrency')}, max waiting {g.get('max_waiting')}, "
-         f"mean wait {g.get('mean_wait_s')} s, max wait {g.get('max_wait_s')} s, queue timeouts {g.get('timed_out')} |",
+         f"mean wait {g.get('mean_wait_s')} s, max wait {g.get('max_wait_s')} s, queue timeouts {g.get('timed_out')}, "
+         f"model-outage retries {g.get('outage_retries', 0)} |",
          f"| Warm-up (not counted) | {m['warmup_s']} s |", ""]
     return "\n".join(L) + "\n"
 

@@ -514,3 +514,69 @@ def test_load_tool_reports_wait_answers_and_correctness(slow_school, tmp_path, m
     assert m["latency_s"]["max"] >= m["latency_s"]["p50"] > 0 and m["answers_per_minute"] > 0
     assert rep["service"]["generation_after"]["concurrency"] == 2
     assert "Students who got an answer | 6/6" in nexa_load.markdown(rep)
+
+
+# ---------------------------------------------------------------- model-server outage
+
+def test_queued_answer_rides_out_a_short_model_restart(monkeypatch):
+    """Ollama killed and restarted mid-queue: the queued answer keeps its turn
+    and retries instead of failing (the 100-student run lost 51 answers this way)."""
+    import asyncio
+    from v1.knowledge import config, limiter
+    monkeypatch.setattr(config, "GENERATION_CONCURRENCY", 1)
+    monkeypatch.setattr(config, "GENERATION_OUTAGE_WAIT_S", 1.0)
+    monkeypatch.setattr(config, "GENERATION_OUTAGE_RETRY_S", 0.05)
+    lim = limiter.Limiter()
+    calls = {"n": 0}
+
+    async def flaky():
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise limiter.ModelUnavailable("gateway 503")
+        return "answer"
+    assert asyncio.run(lim.run(flaky)) == "answer"
+    assert calls["n"] == 4 and lim.stats()["outage_retries"] == 3
+
+
+def test_outage_retry_gives_up_and_slow_failures_are_not_retried(monkeypatch):
+    import asyncio
+    from v1.knowledge import config, limiter
+    monkeypatch.setattr(config, "GENERATION_CONCURRENCY", 1)
+    monkeypatch.setattr(config, "GENERATION_OUTAGE_WAIT_S", 0.2)
+    monkeypatch.setattr(config, "GENERATION_OUTAGE_RETRY_S", 0.05)
+    lim = limiter.Limiter()
+
+    async def down():
+        raise limiter.ModelUnavailable("gateway unreachable")
+    with pytest.raises(limiter.ModelUnavailable):
+        asyncio.run(lim.run(down))
+    n = {"n": 0}
+
+    async def slow_fail():   # a timeout after a long generation: retrying would only add load
+        n["n"] += 1
+        raise RuntimeError("gateway 502")
+    with pytest.raises(RuntimeError):
+        asyncio.run(lim.run(slow_fail))
+    assert n["n"] == 1
+
+
+def test_chat_classifies_fast_gateway_503_as_outage(monkeypatch):
+    import asyncio
+    import httpx
+    from v1.knowledge import config, grounding, limiter
+    monkeypatch.setattr(config, "GATEWAY_TOKEN", "t")
+
+    def handler(request):
+        return httpx.Response(503, json={"detail": "Model runtime temporarily unavailable"})
+    real = httpx.AsyncClient
+    monkeypatch.setattr(grounding.httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    with pytest.raises(limiter.ModelUnavailable):
+        asyncio.run(grounding._chat([{"role": "user", "content": "q"}], None))
+
+    def refuse(request):
+        raise httpx.ConnectError("refused", request=request)
+    monkeypatch.setattr(grounding.httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(refuse), **kw))
+    with pytest.raises(limiter.ModelUnavailable):
+        asyncio.run(grounding._chat([{"role": "user", "content": "q"}], None))

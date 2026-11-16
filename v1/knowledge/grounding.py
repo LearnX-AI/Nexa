@@ -33,6 +33,7 @@ docs/knowledge/NEXA-M2-006-provenance-citations-grounding.md:
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Literal, Optional
 
 import httpx
@@ -358,11 +359,18 @@ async def _chat(messages: list[dict[str, str]], trace_id: Optional[str]) -> tupl
     headers = {"Authorization": f"Bearer {config.GATEWAY_TOKEN}"}
     if trace_id:
         headers["X-NEXA-Trace-Id"] = trace_id
-    async with httpx.AsyncClient(timeout=config.ANSWER_TIMEOUT) as client:
-        resp = await client.post(f"{config.GATEWAY_URL}/v1/chat/completions", headers=headers, json={
-            "model": config.ANSWER_MODEL, "messages": messages, "temperature": config.ANSWER_TEMPERATURE,
-            "max_tokens": config.ANSWER_MAX_TOKENS})
+    from .limiter import FAST_FAILURE_S, ModelUnavailable
+    t0 = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=config.ANSWER_TIMEOUT) as client:
+            resp = await client.post(f"{config.GATEWAY_URL}/v1/chat/completions", headers=headers, json={
+                "model": config.ANSWER_MODEL, "messages": messages, "temperature": config.ANSWER_TEMPERATURE,
+                "max_tokens": config.ANSWER_MAX_TOKENS})
+    except httpx.ConnectError as exc:
+        raise ModelUnavailable(f"gateway unreachable: {exc}") from exc
     if resp.status_code != 200:
+        if resp.status_code in (502, 503) and time.monotonic() - t0 < FAST_FAILURE_S:
+            raise ModelUnavailable(f"gateway {resp.status_code}")
         raise RuntimeError(f"gateway {resp.status_code}")
     data = resp.json()
     return data["choices"][0]["message"]["content"], data.get("model") or config.ANSWER_MODEL

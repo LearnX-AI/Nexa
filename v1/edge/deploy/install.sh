@@ -42,6 +42,10 @@ NEXA_GENERATION_CONCURRENCY=2
 NEXA_GENERATION_QUEUE_TIMEOUT_S=600
 NEXA_ANSWER_TIMEOUT=300
 NEXA_GATEWAY_TIMEOUT=300
+# Ride out a short Ollama restart instead of failing the queued questions
+NEXA_GENERATION_OUTAGE_WAIT_S=120
+# General answers from the local model (no external model on a school server)
+NEXA_GENERAL_MODEL=nexa-chat-precise
 NEXA_GENERAL_ANSWERS=llm
 NEXA_KNOWLEDGE_REGISTRY=sqlite:///$HOME_DIR/registry.db
 NEXA_GATEWAY_URL=http://127.0.0.1:8100
