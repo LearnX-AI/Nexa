@@ -192,6 +192,18 @@ python -m v1.edge.cli status | pull | rollback
 
 The installer leaves other software alone. The school's v0 `nexa.service` on port 8000 keeps running until the school is switched to the edge service on port 8103.
 
+### 9.1 Classroom load
+
+Answer generation is the slow step on a school server. A fair queue (`NEXA_GENERATION_CONCURRENCY`,
+matched to Ollama's `OLLAMA_NUM_PARALLEL`) makes students wait their turn instead of all timing out;
+identical questions asked together are generated once; repeats come from the answer cache; a queued
+answer rides out a short Ollama restart (`NEXA_GENERATION_OUTAGE_WAIT_S`). On the Jetson, Ollama also needs
+the lean memory settings, or a burst of 100 questions runs it out of memory. Measured on the Pomnsoe
+Jetson: a class of 30 at once, or 100 students over a lesson, are all answered; a burst of 100 at the same
+moment exceeds what one Jetson can write in 10 minutes (about 5–7 answers a minute). Evidence:
+[m2-009-load-jetson-20261116.md](evidence/m2-009-load-jetson-20261116.md). Load test:
+`sudo bash v1/edge/deploy/loadtest.sh` (refuses to run while edge.env holds the queue settings itself).
+
 ## 10. Acceptance criteria (NEXA-M2-009)
 
 | Criterion | Status | Evidence |
