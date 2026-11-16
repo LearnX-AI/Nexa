@@ -192,15 +192,31 @@ python -m v1.edge.cli status | pull | rollback
 
 The installer leaves other software alone. The school's v0 `nexa.service` on port 8000 keeps running until the school is switched to the edge service on port 8103.
 
+### 9.1 Classroom load
+
+Answer generation is the slow step on a school server. A fair queue (`NEXA_GENERATION_CONCURRENCY`,
+matched to Ollama's `OLLAMA_NUM_PARALLEL`) makes students wait their turn instead of all timing out;
+identical questions asked together are generated once; repeats come from the answer cache; a queued
+answer rides out a short Ollama restart (`NEXA_GENERATION_OUTAGE_WAIT_S`). On the Jetson, Ollama also needs
+the lean memory settings, or a burst of 100 questions runs it out of memory. Measured on the Pomnsoe
+Jetson: a class of 30 at once, or 100 students over a lesson, are all answered; a burst of 100 at the same
+moment exceeds what one Jetson can write in 10 minutes (about 5–7 answers a minute). Evidence:
+[m2-009-load-jetson-20261116.md](evidence/m2-009-load-jetson-20261116.md). Load test:
+`sudo bash v1/edge/deploy/loadtest.sh` (refuses to run while edge.env holds the queue settings itself).
+
 ## 10. Acceptance criteria (NEXA-M2-009)
 
 | Criterion | Status | Evidence |
 |---|---|---|
 | Edge knowledge package and sync model documented | **Met** | Sections 2–4 and 7 |
-| Offline retrieval demonstrated with a representative curriculum subset | Tests: met (`test_offline_retrieval_matches_core`: identical rankings to the core; `test_school_node_answers_offline_and_caches_repeated_questions`). Jetson: pending | The Pomnsoe Jetson cannot reach the DGX at all, so any answer it gives is offline by construction. Evidence: the M2-008 live suite run against the Jetson. |
-| Reconnect/update scenario tested | Tests: met (`test_pull_from_core_up_to_date_update_and_offline`, `test_delta_update_applies_changes_and_withdrawals`, `test_a_school_offline_for_several_releases_gets_a_full_package`, `test_tampered_wrong_school_old_or_wrong_model_packages_are_refused`). Jetson: pending | v1, then v2 delta with an added subject, then v3 delta with a withdrawal, installed on the Jetson; then rollback |
-| No dependency on continuous DGX/cloud connectivity for normal local retrieval | **Met** by design and test; Jetson pending | Section 5; core URL unreachable in the tests |
-| Data minimisation and access policies align with NEXA-GOV-001 | Met against the controls in the repository; to be confirmed against GOV-001 itself | Sections 2 and 6; `test_package_holds_only_what_this_school_may_have`, `test_core_first_sends_role_and_question_only`, `test_core_accepts_delegation_only_for_its_school_and_safe_roles` |
+| Offline retrieval demonstrated with a representative curriculum subset | **Met** | Pomnsoe Jetson, no path to core NEXA, package v2 (Biology, Chemistry, Physics; 71 sources, 1,801 chunks): M2-008 live suite **PASS**, recall@5 95.8, answer accuracy 0.879, no fabricated citations. Tests: `test_offline_retrieval_matches_core`, `test_school_node_answers_offline_and_caches_repeated_questions`. [m2-009-jetson-update-and-offline-20261116.md](evidence/m2-009-jetson-update-and-offline-20261116.md) |
+| Reconnect/update scenario tested | **Met** | On the Jetson: v1 → v2 by delta (12 new sources, 666 chunks re-embedded locally) → rollback to v1 → v2 by full package; answers followed the served version. Withdrawal and long-offline cases in tests: `test_delta_update_applies_changes_and_withdrawals`, `test_a_school_offline_for_several_releases_gets_a_full_package`, `test_pull_from_core_up_to_date_update_and_offline`, `test_tampered_wrong_school_old_or_wrong_model_packages_are_refused`. [m2-009-jetson-update-and-offline-20261116.md](evidence/m2-009-jetson-update-and-offline-20261116.md) |
+| No dependency on continuous DGX/cloud connectivity for normal local retrieval | **Met** | The Jetson has no network path to the DGX; it served all of the above, the live suite and the classroom load tests (section 9.1). |
+| Data minimisation and access policies align with NEXA-GOV-001 | Met against the controls in the repository; **follow-up**: confirm against the GOV-001 document | Sections 2 and 6; the v2 build excluded 4,576 chunks belonging to another school; `test_package_holds_only_what_this_school_may_have`, `test_core_first_sends_role_and_question_only`, `test_core_accepts_delegation_only_for_its_school_and_safe_roles` |
+
+**Status: complete** (2026-11-16). Follow-ups, outside M2-009: confirm against NEXA-GOV-001; set grade
+metadata at ingestion; share answer generation with core NEXA when a school's queue is long (needs the
+network path in decision 1).
 
 ## 11. Open decisions
 
