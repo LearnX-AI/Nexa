@@ -161,17 +161,23 @@ def read_chroma(chroma_dir: str, collection: str = "curriculum_db") -> dict[str,
     ids = [r["id"] for r in con.execute(f"SELECT id FROM embeddings WHERE segment_id IN ({qm})", seg)]
     rep["chunks"] = len(ids)
     meta: dict[int, dict[str, Any]] = collections.defaultdict(dict)
+    text: dict[int, str] = {}
     for r in con.execute(f"SELECT m.id, m.key, m.string_value, m.int_value FROM embedding_metadata m "
-                         f"JOIN embeddings e ON e.id = m.id WHERE e.segment_id IN ({qm}) "
-                         f"AND m.key != 'chroma:document'", seg):
-        meta[r["id"]][r["key"]] = r["string_value"] if r["string_value"] is not None else r["int_value"]
+                         f"JOIN embeddings e ON e.id = m.id WHERE e.segment_id IN ({qm})", seg):
+        if r["key"] == "chroma:document":
+            text[r["id"]] = r["string_value"] or ""
+        else:
+            meta[r["id"]][r["key"]] = r["string_value"] if r["string_value"] is not None else r["int_value"]
     docs: dict[str, dict[str, Any]] = {}
-    for m in meta.values():
+    for cid, m in meta.items():
         name = os.path.basename(str(m.get("file") or m.get("source") or "(no file)"))
         d = docs.setdefault(name, {"name": name, "chunks": 0, "v0_doctype": m.get("doctype"),
                                    "subject": m.get("subject"), "grade": m.get("grade"),
                                    "course": m.get("course") or None})
         d["chunks"] += 1
+        d.setdefault("_texts", []).append(text.get(cid, ""))
+    for d in docs.values():   # two longest chunks: enough to recognise the document in v1
+        d["samples"] = sorted({t for t in d.pop("_texts") if t}, key=len, reverse=True)[:2]
     rep["documents"] = sorted(docs.values(), key=lambda d: d["name"])
     con.close()
     return rep
@@ -196,8 +202,51 @@ def v1_sources(url: str) -> dict[str, dict[str, Any]]:
     return out
 
 
-def decide(files: list[dict[str, Any]], chroma: dict[str, Any], v1: dict[str, dict[str, Any]] | None
-           ) -> list[dict[str, Any]]:
+def _shingles(t: str, n: int = 5) -> set[str]:
+    w = re.findall(r"[a-z0-9]+", (t or "").lower())
+    return {" ".join(w[i:i + n]) for i in range(max(1, len(w) - n + 1))} if w else set()
+
+
+def overlap(a: str, b: str) -> float:
+    """Share of the shorter text's 5-word shingles found in the other: v0 and
+    v1 split documents at different places, so containment, not Jaccard."""
+    x, y = _shingles(a), _shingles(b)
+    return len(x & y) / min(len(x), len(y)) if x and y else 0.0
+
+
+MATCH = 0.6
+
+
+def match_in_v1(url: str, chroma: dict[str, Any], on_disk: set[str]) -> dict[str, dict[str, Any]]:
+    """For each document that exists only inside the v0 index: does v1 already
+    hold the same text? Asks v1 with the document's own text and compares the
+    top passages word for word."""
+    import httpx
+
+    from v1.identity import tokens
+    h = {"Authorization": "Bearer " + tokens.issue_token("eval:v0-inventory", ["platform_admin"], "user", 3600)}
+    out: dict[str, dict[str, Any]] = {}
+    with httpx.Client(timeout=120) as c:
+        for d in chroma.get("documents", []):
+            if d["name"] in on_disk or not d.get("samples"):
+                continue
+            best = {"overlap": 0.0}
+            for sample in d["samples"]:
+                q = " ".join(sample.split()[:120])
+                res = c.post(url.rstrip("/") + "/v1/knowledge/query", headers=h,
+                             json={"query": q, "top_k": 5}).json().get("results", [])
+                for r in res:
+                    o = overlap(sample, r.get("text") or "")
+                    if o > best["overlap"]:
+                        md = r.get("metadata") or {}
+                        best = {"overlap": round(o, 2), "title": md.get("title"), "source_id": md.get("source_id"),
+                                "source_type": md.get("source_type"), "lms_course": md.get("lms_course_id")}
+            out[d["name"]] = best
+    return out
+
+
+def decide(files: list[dict[str, Any]], chroma: dict[str, Any], v1: dict[str, dict[str, Any]] | None,
+           matches: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: dict[str, str] = {}
     on_disk = {f["name"] for f in files}
@@ -235,9 +284,20 @@ def decide(files: list[dict[str, Any]], chroma: dict[str, Any], v1: dict[str, di
             if d["name"] in on_disk:
                 continue   # covered by the file row
             lms = (d.get("v0_doctype") == "LMS Material") or d.get("course")
+            m = (matches or {}).get(d["name"])
+            if m and m["overlap"] >= MATCH:
+                rows.append({"item": f"chroma:{d['name']}", "kind": "index_only_document", "chunks": d["chunks"],
+                             "v0": {k: d.get(k) for k in ("v0_doctype", "subject", "grade", "course")},
+                             "decision": "retained", "v1_match": m,
+                             "reason": f"already in v1 with the same text ({m['overlap']:.0%} of its words match): "
+                                       f"{m['title']} ({m['source_id']}); v1 holds it from its own source"})
+                continue
             rows.append({"item": f"chroma:{d['name']}", "kind": "index_only_document", "chunks": d["chunks"],
                          "v0": {k: d.get(k) for k in ("v0_doctype", "subject", "grade", "course")},
+                         **({"v1_match": m} if m else {}),
                          "decision": "resync" if lms else "review",
+                         "closest_in_v1": (f"{m['overlap']:.0%} word match with {m.get('title')}" if m and m.get("title")
+                                           else None),
                          "reason": ("LMS material held only as v0 chunks: bring it in from the LMS, its "
                                     "authoritative source; if the LMS no longer has it, recover the text for "
                                     "review (not for direct indexing)") if lms else
@@ -264,7 +324,8 @@ def markdown(rep: dict[str, Any]) -> str:
         mp = (f"{m['source_type']} (tier {m['authority_tier']}, {m['access_classification']}), "
               f"{m['subject']} {m['grade_levels']} T{m['term'] or '-'}") if m else ""
         size = f", {r['chunks']} chunks" if r.get("chunks") else ""
-        L.append(f"| {r['item']} | {r['kind']}{size} | {r['decision']} | {mp} | {r['reason']} |")
+        why = r["reason"] + (f" Closest in v1: {r['closest_in_v1']}." if r.get("closest_in_v1") else "")
+        L.append(f"| {r['item']} | {r['kind']}{size} | {r['decision']} | {mp} | {why} |")
     return "\n".join(L) + "\n"
 
 
@@ -299,9 +360,11 @@ def main() -> int:
             chroma = {"present": True, "found": False, "path": chroma_dir, "collection": args.collection,
                       "error": f"could not read the Chroma database: {exc}"}
     v1 = v1_sources(args.v1_url) if args.v1_url else None
+    matches = (match_in_v1(args.v1_url, chroma, {f["name"] for f in files})
+               if args.v1_url and chroma.get("found") else None)
     rep = {"tool": "v0_inventory", "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
            "v0_dir": v0, "v1_url": args.v1_url or None, "files": files,
-           "chroma": {k: v for k, v in chroma.items()}, "items": decide(files, chroma, v1)}
+           "chroma": {k: v for k, v in chroma.items()}, "items": decide(files, chroma, v1, matches)}
     os.makedirs(args.out, exist_ok=True)
     stem = os.path.join(args.out, f"nexa-v0-inventory-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d-%H%M%S')}")
     with open(stem + ".json", "w") as fh:
