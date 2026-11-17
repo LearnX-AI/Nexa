@@ -480,3 +480,61 @@ def test_diversify_drops_a_copy_split_differently_and_keeps_reference_lists_out(
     # Asking for sources keeps the reference list.
     kept, _ = diversify(items, 3, "What references does the syllabus list for PET and SPECT?")
     assert "refs" in [k["chunk_id"] for k in kept]
+
+
+def test_course_context_prefers_the_learners_grade_and_subject_without_excluding():
+    """DGX diagnosis 2026-11-16: Grade 11 Moodle lessons outranked the Grade 12
+    answer (q22, q28, q33) and Physics material a Chemistry one (q14). Course
+    context is a preference: it reorders similar passages, it does not filter."""
+    from v1.knowledge import config
+    from v1.knowledge.retrieval import _context, _context_bonus
+    ctx = _context({"grades": [12], "subjects": ["Biology"]})
+    g12 = {"grade_levels": "12", "subject": "Biology"}
+    g11 = {"grade_levels": "11", "subject": "Biology"}
+    phys = {"grade_levels": "11,12", "subject": "Physics"}
+    none = {}
+    assert _context_bonus(g12, ctx) == 2 * config.CONTEXT_BONUS
+    assert _context_bonus(g11, ctx) == config.CONTEXT_BONUS
+    assert _context_bonus(phys, ctx) == config.CONTEXT_BONUS
+    assert _context_bonus(none, ctx) == 0.0
+    assert _context(None) == {} and _context({"grades": []}) == {}
+
+
+@pytest.mark.parametrize("backend", ["memory"])
+def test_course_context_moves_a_matching_passage_up_but_keeps_the_other(backend, monkeypatch):
+    import asyncio
+    from v1.knowledge.retrieval import RetrievalRequest, Retriever
+
+    class Store:
+        def lexical_available(self, i): return False
+        async def query(self, i, v, n, where=None):
+            return [{"chunk_id": "g11", "text": "light-dependent reactions grade 11", "score": 0.85,
+                     "metadata": {"grade_levels": "11", "subject": "Biology", "source_type": "lms_content"}},
+                    {"chunk_id": "g12", "text": "light-dependent reactions grade 12", "score": 0.84,
+                     "metadata": {"grade_levels": "12", "subject": "Biology", "source_type": "lms_content"}}]
+        async def get_items(self, i, ids): return {}
+
+    class Rec:
+        index_id, logical, fingerprint, prefix_scheme = "i", "l", "f", "nomic-embed"
+
+    class Emb:
+        async def embed_query(self, q, t, expect=None): return [1.0], None
+
+    class Index:
+        store = Store()
+        async def active(self): return Rec()
+        def embedder(self, logical): return Emb()
+
+    from v1.knowledge import retrieval as rt
+    monkeypatch.setattr(rt, "info_of", lambda rec: None)
+
+    class Where:
+        def narrow(self, **k): return self
+        def describe(self): return {}
+    r = Retriever(Index())
+    plain = asyncio.run(r.retrieve(RetrievalRequest(query="light reactions", top_k=2, mode="vector"), Where()))
+    assert [x["chunk_id"] for x in plain.results] == ["g11", "g12"]
+    ctx = asyncio.run(r.retrieve(RetrievalRequest(query="light reactions", top_k=2, mode="vector",
+                                                  context={"grades": [12]}), Where()))
+    assert [x["chunk_id"] for x in ctx.results] == ["g12", "g11"]          # preferred, nothing excluded
+    assert ctx.explain["context"] == {"grades": [12]}

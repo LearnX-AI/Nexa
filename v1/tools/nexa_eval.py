@@ -317,6 +317,9 @@ def run_live(args) -> int:
             body = {"query": it["question"], "top_k": 10, "explain": True}
             if it.get("context_filters"):
                 body["filters"] = it["context_filters"]
+            ctx = course_context(it) if args.course_context else None
+            if ctx:
+                body["context"] = ctx
             t = time.time()
             r = c.post(base + "/v1/knowledge/query", headers=h, json=body)
             ms = (time.time() - t) * 1000
@@ -330,6 +333,8 @@ def run_live(args) -> int:
                 ab = {"question": it["question"]}
                 if it.get("context_filters"):
                     ab["filters"] = it["context_filters"]
+                if ctx:
+                    ab["context"] = ctx
                 a = c.post(base + "/v1/knowledge/answer", headers=h, json=ab).json()
                 o["evidence"] = (a.get("evidence") or {}).get("level")
                 o["answer"] = a
@@ -339,6 +344,7 @@ def run_live(args) -> int:
     scored = ev.score_corpus(obs)
     rep = {"suite": "live", "dataset_version": ds["version"], "generated_at": now(), "base_url": base,
            "principal": {"role": args.as_role, "school_id": args.school_id or None},
+           "course_context": bool(args.course_context),
            "service": {"version": health.get("version"), "index": (health.get("index") or {})},
            "metrics": scored["metrics"], "items": scored["items"]}
     rep["gate"] = ev.evaluate_gate(rep, load_thresholds(args.thresholds))
@@ -354,6 +360,18 @@ def _fmt(v):
     return "-" if v is None else v
 
 
+def course_context(item: dict) -> "dict | None":
+    """The context an LMS course page would send: the course's grade and
+    subject (never the expected source). Unanswerable items have a subject
+    and grade too, so they are asked from a course like the rest."""
+    ctx = {}
+    if item.get("grade"):
+        ctx["grades"] = [int(item["grade"])]
+    if item.get("subject"):
+        ctx["subjects"] = [item["subject"]]
+    return ctx or None
+
+
 def markdown(r: dict) -> str:
     g = r.get("gate", {})
     L = [f"# NEXA-M2-008 evaluation: {r['suite']} suite", "",
@@ -361,8 +379,9 @@ def markdown(r: dict) -> str:
          + (f", commit `{(r.get('commit') or '')[:12]}`" if r.get("commit") else "")
          + (f", gate key `{r['gate_key']}`" if r.get("gate_key") else "") + "."
          + (f" Evaluated as {r['principal']['role']}"
-            + (f" of school {r['principal']['school_id']}" if r["principal"].get("school_id") else "") + "."
-            if r.get("principal") else ""), ""]
+            + (f" of school {r['principal']['school_id']}" if r["principal"].get("school_id") else "")
+            + (", with each question's course grade and subject as context" if r.get("course_context") else "")
+            + "." if r.get("principal") else ""), ""]
     if r.get("index"):
         L += [f"Index {r['index']['fingerprint']}, built in {r['index'].get('build_s')} s "
               f"({r['corpus']['sources']} sources, {r['corpus']['chunks']} chunks). Store {r.get('store')}.", ""]
@@ -464,6 +483,8 @@ def main() -> int:
                     help="role of the evaluating user: platform_admin (default) sees all content; "
                          "student with --school-id sees what a learner at that school sees")
     lv.add_argument("--school-id", default="", help="school claim for --as-role student/teacher")
+    lv.add_argument("--course-context", action="store_true",
+                    help="send each question's subject and grade as course context, as an LMS course page would")
     args = ap.parse_args()
     try:
         return {"fixture": run_fixture, "corpus": run_corpus, "live": run_live}[args.suite](args)

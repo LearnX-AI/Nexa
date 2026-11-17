@@ -86,6 +86,11 @@ def run(args) -> dict[str, Any]:
             body = {"query": it["question"], "top_k": DEEP, "explain": True}
             if it.get("context_filters"):
                 body["filters"] = it["context_filters"]
+            if args.course_context:
+                ctx = {k: v for k, v in (("grades", [int(it["grade"])] if it.get("grade") else None),
+                                         ("subjects", [it["subject"]] if it.get("subject") else None)) if v}
+                if ctx:
+                    body["context"] = ctx
             q = c.post(base + "/v1/knowledge/query", headers=h, json=body)
             q.raise_for_status()
             q = q.json()
@@ -145,6 +150,8 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--as-role", default="platform_admin")
     ap.add_argument("--school-id", default="")
+    ap.add_argument("--course-context", action="store_true",
+                    help="send each question's subject and grade as course context")
     args = ap.parse_args()
     if not os.environ.get("NEXA_IDENTITY_SECRET"):
         print("load the service settings first (NEXA_IDENTITY_SECRET)", file=sys.stderr)

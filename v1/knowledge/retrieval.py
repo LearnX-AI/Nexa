@@ -60,6 +60,7 @@ class RetrievalRequest:
     mode: Optional[str] = None          # default config.RETRIEVAL_MODE
     rerank: Optional[bool] = None       # default config.RERANK
     profile: Optional[str] = None       # default config.RETRIEVAL_PROFILE
+    context: Optional[dict[str, Any]] = None   # {"grades": [...], "subjects": [...]}: a preference
 
 
 @dataclass
@@ -168,6 +169,31 @@ def _near_copy(sh: set[str], seen: list[set[str]]) -> bool:
     return False
 
 
+def _context(raw: Optional[dict[str, Any]]) -> dict[str, set]:
+    raw = raw or {}
+    out: dict[str, set] = {}
+    if raw.get("grades"):
+        out["grades"] = {int(g) for g in raw["grades"]}
+    if raw.get("subjects"):
+        out["subjects"] = {str(x).strip().lower() for x in raw["subjects"]}
+    return out
+
+
+def _context_bonus(md: dict[str, Any], ctx: dict[str, set]) -> float:
+    """CONTEXT_BONUS for a matching grade, and again for a matching subject.
+    Passages with no grade (or subject) recorded get nothing and lose nothing."""
+    bonus = 0.0
+    if "grades" in ctx:
+        raw = md.get("grade_levels")
+        parts = raw if isinstance(raw, list) else str(raw or "").split(",")
+        grades = {int(p) for p in (str(x).strip() for x in parts) if p.isdigit()}
+        if grades & ctx["grades"]:
+            bonus += config.CONTEXT_BONUS
+    if "subjects" in ctx and str(md.get("subject") or "").strip().lower() in ctx["subjects"]:
+        bonus += config.CONTEXT_BONUS
+    return bonus
+
+
 def diversify(items: list[dict[str, Any]], top_k: int, query: str = ""
               ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Keep rank order, but at most MAX_PER_SOURCE passages per source, no
@@ -271,6 +297,15 @@ class Retriever:
                 it["scores"][f"{name}_rank"] = rank
                 it["scores"][name] = round(float(r["score"]), 6)
                 it["scores"]["rrf"] += weight / (config.RRF_K + rank)
+        ctx = _context(req.context)
+        if ctx:
+            for it in fused.values():
+                bonus = _context_bonus(it.get("metadata") or {}, ctx)
+                if bonus:
+                    it["scores"]["context"] = round(bonus, 6)
+                    it["scores"]["rrf"] += bonus
+                    it["reasons"].append("matches the learner's course")
+            explain["context"] = {k: sorted(v) for k, v in ctx.items()}
         ordered = sorted(fused.values(), key=lambda r: (-r["scores"]["rrf"], r["chunk_id"]))
         for i, it in enumerate(ordered, 1):
             it["scores"]["rrf"] = round(it["scores"]["rrf"], 6)

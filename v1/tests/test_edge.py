@@ -580,3 +580,19 @@ def test_chat_classifies_fast_gateway_503_as_outage(monkeypatch):
                         lambda **kw: real(transport=httpx.MockTransport(refuse), **kw))
     with pytest.raises(limiter.ModelUnavailable):
         asyncio.run(grounding._chat([{"role": "user", "content": "q"}], None))
+
+
+def test_answer_cache_key_separates_courses():
+    """A Grade 11 course's cached answer is never served to a Grade 12 course."""
+    from v1.edge.web import AnswerCache
+    from v1.knowledge.schemas import AnswerRequest
+
+    class P:
+        roles, school_id = ("student",), "pomnsoe"
+    def scope(**kw):
+        return json.dumps(AnswerRequest(question="q", **kw).model_dump(
+            include={"filters", "context", "audience", "top_k"}, exclude_none=True), sort_keys=True)
+    k11 = AnswerCache.key(1, P(), "What is photosynthesis?", None, scope(context={"grades": [11]}))
+    k12 = AnswerCache.key(1, P(), "What is photosynthesis?", None, scope(context={"grades": [12]}))
+    k12b = AnswerCache.key(1, P(), "what is photosynthesis", None, scope(context={"grades": [12]}))
+    assert k11 != k12 and k12 == k12b

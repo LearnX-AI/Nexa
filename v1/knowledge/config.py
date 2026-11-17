@@ -145,6 +145,12 @@ DEDUP_CONTAINMENT = float(os.environ.get("NEXA_DEDUP_CONTAINMENT", "0.85"))
 # learner question but match its words; they are kept out of the top results
 # unless the question asks for sources or references.
 DEMOTE_REFERENCE_LISTS = os.environ.get("NEXA_DEMOTE_REFERENCE_LISTS", "true").lower() == "true"
+# Course context (request "context": grades, subjects): a passage matching the
+# learner's grade, and one matching the subject, each gain this much fused
+# score. For scale: one place in a single ranked list is worth about 0.0003
+# near the top (1/(60+r)), so 0.002 moves a matching passage up a few places
+# among similar ones without lifting a weak match over a strong one.
+CONTEXT_BONUS = float(os.environ.get("NEXA_CONTEXT_BONUS", "0.002"))
 
 # School edge (NEXA-M2-009). Core NEXA: where per-school packages are built and
 # served from. School server: NEXA_EDGE_MODE=true with NEXA_KNOWLEDGE_STORE=edge.
