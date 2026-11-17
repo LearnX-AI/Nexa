@@ -13,8 +13,9 @@ Read-only: it only queries. Checks, each pass or fail:
     that school's users, and to nobody else; students never see teacher-only
     content.
  5. Grounded answers (/v1/knowledge/answer): curriculum questions are answered
-    with valid citations; an off-curriculum question gets the controlled
-    "not found" fallback with no model call.
+    with valid citations; an off-curriculum question never gets a curriculum
+    answer: the controlled "not found" fallback, or (with general answers on)
+    a general answer labelled as such, with no curriculum citation.
  6. Latency of retrieval.
 
 Writes nexa-live-check-<time>.json and .md to --out and prints the summary.
@@ -182,8 +183,18 @@ def main() -> int:
                                for u in used], fabricated=j["integrity"]["fabricated_markers"], ms=int(ms),
                     answer=(j.get("answer") or "")[:300])
         r = c.post(f"{KNOWLEDGE}/v1/knowledge/answer", headers=admin, json={"question": OFF_TOPIC}).json()
-        rep.add("answers", "off-curriculum question gets the 'not found' fallback", r.get("status") == "no_evidence",
-                status=r.get("status"), answer=(r.get("answer") or "")[:120])
+        # Never a curriculum answer: either the strict refusal (general answers
+        # off) or a general answer that is labelled as such and cites no
+        # curriculum passage (general answers on, NEXA_GENERAL_ANSWERS).
+        g = r.get("general") or {}
+        curriculum_cited = [ci for ci in (r.get("citations") or []) if ci.get("used")]
+        ok = (r.get("status") == "no_evidence" or
+              (r.get("status") == "general" and bool(g.get("label")) and
+               g.get("source_kind") in ("general_knowledge", "web") and not curriculum_cited))
+        rep.add("answers", "off-curriculum question gets no curriculum answer (refusal, or a labelled general "
+                "answer with no curriculum citation)", ok, status=r.get("status"),
+                source_kind=g.get("source_kind"), curriculum_citations=len(curriculum_cited),
+                answer=(r.get("answer") or "")[:120])
 
     # 6. latency (all queries in section 3)
     p50 = statistics.median(lat)

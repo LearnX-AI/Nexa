@@ -129,3 +129,25 @@ def test_provenance_check_follows_a_citation_to_the_original_file():
     assert not bad["quote_matches"] and not bad["original_hash"] and bad["version_matches"]
     gone = pc.check_citation(cit, lambda cid: None, lambda vid: data, {})
     assert gone["detail"] == "chunk not found" and not any(gone[k] for k in pc.CHECKS)
+
+
+def test_a_document_only_in_the_v0_index_is_retained_when_v1_holds_the_same_text(v0):
+    """DGX, 2026-11-17: 527 documents exist only inside the v0 Chroma store (LMS
+    uploads). Those v1 already holds through the LMS sync are retained; only the
+    rest need to come from the LMS again."""
+    files = inv.scan_files(str(v0))
+    chroma = inv.read_chroma(str(v0 / "chroma_store"))
+    birds = [d for d in chroma["documents"] if d["name"].startswith("Birds")][0]
+    assert birds["samples"] == ["chunk text"]
+    v0_text = ("Papua New Guinea has a rich biodiversity of birds. The country is home to more than 79 families "
+               "and about 760 species of birds, many found nowhere else.")
+    v1_text = "Lesson 2. " + v0_text + " Teacher note: ask students which birds live near their village."
+    assert inv.overlap(v0_text, v1_text) == 1.0 and inv.overlap(v0_text, "an unrelated passage on DNA") == 0.0
+    matches = {"Birds of Paradise_Lesson_Note.docx": {"overlap": 1.0, "title": "Birds of Paradise_Lesson_Note",
+                                                      "source_id": "lms:edunex:cm1", "source_type": "lms_content"},
+               "mystery.pdf": {"overlap": 0.2, "title": "Something else", "source_id": "x"}}
+    rows = {r["item"]: r for r in inv.decide(files, chroma, None, matches)}
+    assert rows["chroma:Birds of Paradise_Lesson_Note.docx"]["decision"] == "retained"
+    assert "lms:edunex:cm1" in rows["chroma:Birds of Paradise_Lesson_Note.docx"]["reason"]
+    assert rows["chroma:mystery.pdf"]["decision"] == "review"
+    assert rows["chroma:mystery.pdf"]["closest_in_v1"].startswith("20% word match")
