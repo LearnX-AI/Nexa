@@ -341,8 +341,15 @@ def run_live(args) -> int:
             obs.append(o)
             if n % 10 == 0:
                 print(f"  live: {n}/{len(items)}", flush=True)
+        hidden = not_visible_to_role(c, base, h, obs, args) if args.as_role != "platform_admin" else []
+    if hidden:
+        # A question whose every expected source this role may not see (a
+        # teacher-only guide, for a student) is not a retrieval miss for it:
+        # it is reported, and left out of this role's scores.
+        obs = [o for o in obs if o["item"]["id"] not in hidden]
     scored = ev.score_corpus(obs)
     rep = {"suite": "live", "dataset_version": ds["version"], "generated_at": now(), "base_url": base,
+           "not_visible_to_role": hidden,
            "principal": {"role": args.as_role, "school_id": args.school_id or None},
            "course_context": bool(args.course_context),
            "service": {"version": health.get("version"), "index": (health.get("index") or {})},
@@ -358,6 +365,31 @@ def run_live(args) -> int:
 
 def _fmt(v):
     return "-" if v is None else v
+
+
+def not_visible_to_role(c, base: str, h: dict, obs: list, args) -> list:
+    """Items this role cannot answer from their expected sources: none of
+    those sources is among the role's top 50 passages, while a platform admin
+    on the same service finds the answering passage there. Decided by
+    asking the service, never from file names."""
+    from v1.identity import tokens
+    admin = {"Authorization": "Bearer " + tokens.issue_token("eval:nexa-eval-visibility", ["platform_admin"],
+                                                               "user", 600)}
+    out = []
+    for o in obs:
+        it = o["item"]
+        if it["type"] in ("no_answer", "multilingual") or ev.hit_rank(o["results"], it) is not None:
+            continue
+        body = {"query": it["question"], "top_k": 50}
+        if it.get("context_filters"):
+            body["filters"] = it["context_filters"]
+        mine = c.post(base + "/v1/knowledge/query", headers=h, json=body).json().get("results", [])
+        if any(ev.file_of_result(r) in it["files"] for r in mine):
+            continue
+        theirs = c.post(base + "/v1/knowledge/query", headers=admin, json=body).json().get("results", [])
+        if ev.hit_rank(theirs, it, strict=True) is not None:
+            out.append(it["id"])
+    return out
 
 
 def course_context(item: dict) -> "dict | None":
@@ -382,6 +414,9 @@ def markdown(r: dict) -> str:
             + (f" of school {r['principal']['school_id']}" if r["principal"].get("school_id") else "")
             + (", with each question's course grade and subject as context" if r.get("course_context") else "")
             + "." if r.get("principal") else ""), ""]
+    if r.get("not_visible_to_role"):
+        L += [f"Not scored for this role (every expected source is one it may not see, e.g. a teacher-only "
+              f"guide): {', '.join(r['not_visible_to_role'])}.", ""]
     if r.get("index"):
         L += [f"Index {r['index']['fingerprint']}, built in {r['index'].get('build_s')} s "
               f"({r['corpus']['sources']} sources, {r['corpus']['chunks']} chunks). Store {r.get('store')}.", ""]

@@ -350,3 +350,33 @@ def test_diagnose_tool_reads_grade_levels_and_flags_near_copies():
                                                                          "source_type": "lms_content"}}, 1, [])]}]}
     md = nd.markdown(rep)
     assert "LMS content | 60%" in md and "| 1 |" in md and "[11]" in md
+
+
+def test_student_view_leaves_out_questions_only_a_teacher_guide_answers(monkeypatch):
+    """On the DGX (2026-11-17), 4 of a student's 6 misses were questions whose only
+    expected source is a teacher-only guide. Decided by asking the service as the
+    role and as an admin, not from file names."""
+    import importlib.util
+    import types
+    spec = importlib.util.spec_from_file_location("nexa_eval_tool", "v1/tools/nexa_eval.py")
+    ne = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ne)
+    monkeypatch.setenv("NEXA_IDENTITY_SECRET", "x" * 32)
+    guide = {"text": "PNG has 79 families and 760 species of birds",
+             "provenance": {"source_uri": "repo://TeacherGuide.pdf"}}
+    other = {"text": "birds of paradise", "provenance": {"source_uri": "repo://Lesson.docx"}}
+
+    class Client:
+        def post(self, url, headers, json):
+            admin = "platform_admin" in str(headers) or headers.get("Authorization", "").endswith("ADMIN")
+            return types.SimpleNamespace(json=lambda: {"results": [other, guide] if admin else [other]})
+    monkeypatch.setattr(ne, "tokens", None, raising=False)
+    from v1.identity import tokens
+    monkeypatch.setattr(tokens, "issue_token", lambda sub, roles, *a, **k: "ADMIN" if "platform_admin" in roles else "S")
+    it_hidden = {"id": "q10", "type": "exact_fact", "files": ["TeacherGuide.pdf"], "evidence": ["79 families"],
+                 "question": "q"}
+    it_found = {"id": "q1", "type": "exact_fact", "files": ["Lesson.docx"], "evidence": ["birds of paradise"],
+                "question": "q"}
+    obs = [{"item": it_hidden, "results": [other]}, {"item": it_found, "results": [other]}]
+    args = types.SimpleNamespace(as_role="student")
+    assert ne.not_visible_to_role(Client(), "http://x", {"Authorization": "Bearer S"}, obs, args) == ["q10"]
