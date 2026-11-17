@@ -151,3 +151,38 @@ def test_a_document_only_in_the_v0_index_is_retained_when_v1_holds_the_same_text
     assert "lms:edunex:cm1" in rows["chroma:Birds of Paradise_Lesson_Note.docx"]["reason"]
     assert rows["chroma:mystery.pdf"]["decision"] == "review"
     assert rows["chroma:mystery.pdf"]["closest_in_v1"].startswith("20% word match")
+
+
+@pytest.mark.parametrize("v0_name,v1_title,same", [
+    ("04_DNA_Transistor.docx", "DNA Transistor_Lesson Note", True),
+    ("11.6_Ornithology_2_Birds_Behaviour.pptx", "Birds Behaviour_PPT", True),
+    ("Topic1_Common_Acids_and_Bases.pptx", "Common Acids and Bases", True),
+    ("Properties_and_Structure_of_Matter.pptx", "Chemical Bonding", False),
+    ("12.5_Battery Technology_2_Paper Batteries.pptx", "PPT", False),     # v1 title says nothing: not assumed
+])
+def test_title_match_for_older_revisions(v0_name, v1_title, same):
+    assert inv.same_title(v0_name, v1_title) is same
+
+
+def test_older_revisions_tests_and_generated_files_are_not_sent_for_resync(v0):
+    """DGX, 2026-11-17: of 78 v0-only documents v1 did not hold verbatim, most
+    were older revisions of lessons v1 holds from the LMS, plus test uploads and
+    files v0 generated itself."""
+    files = inv.scan_files(str(v0))
+    chroma = {"found": True, "path": "p", "collection": "curriculum_db", "chunks": 9, "documents": [
+        {"name": "04_DNA_Transistor.docx", "chunks": 10, "v0_doctype": "LMS Material", "course": "Physics"},
+        {"name": "Test_PPT.pptx", "chunks": 8, "v0_doctype": "LMS Material", "course": "Biology"},
+        {"name": "lesson_20260724_092800.pdf", "chunks": 5, "v0_doctype": "LMS Material", "course": "Biology"},
+        {"name": "Ocean Currents.pdf", "chunks": 16, "v0_doctype": "LMS Material", "course": "Geography"},
+        {"name": "12.5_Battery Technology_2_Paper Batteries.pptx", "chunks": 10, "v0_doctype": "LMS Material",
+         "course": "Biology"}]}
+    matches = {"04_DNA_Transistor.docx": {"overlap": 0.59, "title": "DNA Transistor_Lesson Note", "source_id": "lms:a"},
+               "Ocean Currents.pdf": {"overlap": 0.0},
+               "12.5_Battery Technology_2_Paper Batteries.pptx": {"overlap": 0.54, "title": "PPT", "source_id": "lms:b"}}
+    rows = {r["item"]: r for r in inv.decide(files, chroma, None, matches)}
+    assert rows["chroma:04_DNA_Transistor.docx"]["decision"] == "deprecated"
+    assert "superseded" in rows["chroma:04_DNA_Transistor.docx"]["reason"]
+    assert rows["chroma:Test_PPT.pptx"]["decision"] == "deprecated"
+    assert rows["chroma:lesson_20260724_092800.pdf"]["decision"] == "excluded"
+    assert rows["chroma:Ocean Currents.pdf"]["decision"] == "resync"
+    assert rows["chroma:12.5_Battery Technology_2_Paper Batteries.pptx"]["decision"] == "resync"
