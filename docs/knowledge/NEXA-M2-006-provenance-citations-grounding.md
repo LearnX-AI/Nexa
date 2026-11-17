@@ -27,7 +27,13 @@ Every retrieved passage carries a `provenance` object. It is built from the pass
 
 ## 2. Citation payload: schema 1.0.0
 
-`POST /v1/knowledge/answer` takes a `question`, plus optional `top_k`, `filters`, `audience` and `explain`. It returns a `GroundedAnswer`; its JSON Schema is at `GET /v1/knowledge/schema/grounded-answer`.
+`POST /v1/knowledge/answer` takes a `question`, plus optional `top_k`, `filters`, `context`, `audience` and `explain`.
+
+`context` is the learner's course: `{"grades": [12], "subjects": ["Biology"]}`. Unlike `filters`, it excludes
+nothing: passages of that grade and subject gain `NEXA_CONTEXT_BONUS` (0.002) of fused score each, so they rank ahead of
+similar passages from another grade or subject, while a question answered only in another grade's material still
+finds it. An LMS course page should always send it (`/v1/knowledge/query` takes it too). Reason: on the DGX,
+Grade 11 Moodle lessons outranked the Grade 12 answer for the same topic (diagnosis of 2026-11-16). It returns a `GroundedAnswer`; its JSON Schema is at `GET /v1/knowledge/schema/grounded-answer`.
 
 ```json
 {

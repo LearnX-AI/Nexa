@@ -138,11 +138,14 @@ class AnswerCache:
         self.hits = self.misses = 0
 
     @staticmethod
-    def key(version: Optional[int], principal: Principal, question: str, general: Optional[bool]) -> str:
+    def key(version: Optional[int], principal: Principal, question: str, general: Optional[bool],
+            scope: str = "") -> str:
+        """scope: the request's filters, course context and audience (JSON), so
+        a Grade 11 answer is never served to a Grade 12 course."""
         q = " ".join(re.findall(r"[a-z0-9]+", question.lower()))
         role = "teacher" if {"teacher", "school_admin"} & set(principal.roles) else (
             "admin" if {"admin", "platform_admin"} & set(principal.roles) else "student")
-        return hashlib.sha256(f"{version}|{role}|{principal.school_id}|{general}|{q}".encode()).hexdigest()
+        return hashlib.sha256(f"{version}|{role}|{principal.school_id}|{general}|{scope}|{q}".encode()).hexdigest()
 
     def get(self, k: str) -> Optional[dict]:
         hit = self._d.get(k)

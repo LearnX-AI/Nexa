@@ -228,7 +228,8 @@ async def query(
     except Exception:  # noqa: BLE001 - search the query as typed
         spell = spelling.Check()
     rr = await _retrieve(spell.corrected or req.query, req.top_k, req.filters, principal, trace_id,
-                         mode=req.mode, rerank=req.rerank, profile=req.profile)
+                         mode=req.mode, rerank=req.rerank, profile=req.profile,
+                         context=req.context.model_dump(exclude_none=True) if req.context else None)
     idx = rr.index.index_id if rr.index else None
     fp = rr.index.fingerprint if rr.index else None
     results = [
@@ -295,7 +296,9 @@ async def answer(req: AnswerRequest, request: Request, principal: Principal = De
     trace_id = _trace(request)
     manifest = INDEX.store.manifest() if hasattr(INDEX.store, "manifest") else None
     version = (manifest or {}).get("version")
-    key = edge_web.CACHE.key(version, principal, req.question, req.general)
+    scope = json.dumps(req.model_dump(include={"filters", "context", "audience", "top_k"}, exclude_none=True),
+                       sort_keys=True)
+    key = edge_web.CACHE.key(version, principal, req.question, req.general, scope)
     hit = edge_web.CACHE.get(key)
     if hit is not None:
         body = json.loads(json.dumps(hit))
@@ -362,7 +365,8 @@ async def _answer(req: AnswerRequest, request: Request, principal: Principal):
     if built:
         rr, question, outline_notes = built
     else:
-        rr = await _retrieve(asked, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal, trace_id)
+        rr = await _retrieve(asked, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal, trace_id,
+                             context=req.context.model_dump(exclude_none=True) if req.context else None)
         question, outline_notes = asked, []
     audience = req.audience or ("teacher" if set(principal.roles) & _STAFF_ROLES else "student")
     if audience == "teacher" and not set(principal.roles) & _STAFF_ROLES:

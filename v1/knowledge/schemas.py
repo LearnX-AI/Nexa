@@ -33,6 +33,17 @@ class QueryFilters(BaseModel):
     max_tier: Optional[int] = Field(None, ge=1, le=6)
 
 
+class CourseContext(BaseModel):
+    """Where the learner is asking from (the LMS course): a preference, not a
+    filter. Passages of this grade and subject are ranked ahead of equally
+    good passages of another grade or subject; nothing is excluded, so a
+    question answered only in another grade's material still finds it."""
+    model_config = {"extra": "forbid"}
+
+    grades: Optional[list[int]] = None
+    subjects: Optional[list[str]] = None
+
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     top_k: Optional[int] = Field(None, ge=1, le=50)
@@ -40,6 +51,7 @@ class QueryRequest(BaseModel):
     mode: Optional[Literal["hybrid", "vector", "lexical"]] = None
     rerank: Optional[bool] = None
     profile: Optional[Literal["central", "edge"]] = None
+    context: Optional[CourseContext] = None
     explain: bool = False
 
 
@@ -70,6 +82,7 @@ class AnswerRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000)
     top_k: Optional[int] = Field(None, ge=1, le=12)
     filters: Optional[QueryFilters] = None
+    context: Optional[CourseContext] = None
     audience: Optional[Literal["student", "teacher"]] = None
     explain: bool = False
     general: Optional[bool] = Field(None, description="false: never answer from general knowledge. "
