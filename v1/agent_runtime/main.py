@@ -16,6 +16,8 @@ from v1.shared.config import preflight
 
 from . import manifest, presence, registry
 from .registry_api import router as registry_router
+from .orchestration import engine as orchestration
+from .orchestration.api import router as orchestration_router
 from .auth import require_principal
 from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
@@ -24,12 +26,18 @@ app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
 app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 app.include_router(registry_router)
+app.include_router(orchestration_router)
+# Workflows are validated against the registry at start, like manifests (NEXA-M3-003).
+orchestration.load_workflows()
 _tasks: list[asyncio.Task] = []
 
 
 @app.on_event("startup")
 async def _startup():
     preflight("nexa-agent-runtime", ["NEXA_IDENTITY_SECRET", "NEXA_AGENT_GATEWAY_TOKEN"])
+    interrupted = orchestration.mark_interrupted()
+    if interrupted:
+        presence.log.warning("orchestration: %d workflow runs were interrupted by the restart", interrupted)
     # Record this instance's deployments in the registry (NEXA-M3-002).
     try:
         await presence.beat()
@@ -53,6 +61,8 @@ async def health():
         "agents": list(registry.AGENTS),
         "agent_states": {a.name: a.state for a in registry.AGENTS.values()},
         "manifest_version": manifest.MANIFEST_VERSION,
+        "workflows": {w.id: {"version": w.version, "state": w.state, "pattern": w.pattern}
+                      for w in orchestration.WORKFLOWS.values()},
         "registry": {"location": presence.location(), "instance": presence.instance(),
                      "disabled": sorted(a.name for a in registry.AGENTS.values() if not a.enabled)},
     }

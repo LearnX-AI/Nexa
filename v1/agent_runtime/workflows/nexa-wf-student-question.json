@@ -1,0 +1,50 @@
+{
+  "workflow_version": "nexa.workflow/1.0",
+  "id": "nexa-wf-student-question",
+  "name": "Student question",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "Deterministic: answer a student's question from the approved curriculum when the evidence supports it; otherwise route by rule to a worked calculation or a labelled general explanation. The same question always takes the same path for the same evidence.",
+  "pattern": "deterministic",
+  "state": "active",
+  "allowed_roles": ["student", "teacher", "school_admin", "ai_engineer", "admin", "platform_admin"],
+  "run_permission": "model.invoke",
+  "input": {"question": "text"},
+  "budget": {"max_steps": 6, "max_agent_calls": 3, "max_wall_s": 240},
+  "start": "curriculum",
+  "steps": [
+    {
+      "id": "curriculum", "type": "knowledge", "title": "Grounded answer from the approved curriculum",
+      "question": "{{input.question}}", "general": false,
+      "policy": {"timeout_s": 120, "max_attempts": 2, "backoff_s": 2, "on_error": "route"},
+      "next": "route"
+    },
+    {
+      "id": "route", "type": "route", "title": "Choose the path by rule",
+      "rules": [
+        {"when": [{"field": "steps.curriculum.status", "in": ["grounded", "grounded_weak"]}],
+         "goto": "curriculum_answer", "reason": "the curriculum evidence supports an answer"},
+        {"when": [{"field": "input.question", "matches": "\\b(calculate|solve|work out|how (many|much)|percent(age)?|area|volume|average)\\b|\\d+\\s*[-+*/x×÷^]\\s*\\d+"}],
+         "goto": "calculate", "reason": "not answered by the curriculum and the question asks for a calculation"}
+      ],
+      "default": "explain"
+    },
+    {
+      "id": "curriculum_answer", "type": "respond", "title": "Return the cited curriculum answer",
+      "output": "{{steps.curriculum.answer}}"
+    },
+    {
+      "id": "calculate", "type": "agent", "title": "Worked calculation",
+      "agent": "nexa-precise", "fallback_agents": ["nexa-tutor"],
+      "prompt": "A Grade 11-12 student in Papua New Guinea asks the question below. The approved curriculum passages did not answer it. Work it out step by step, state the final answer clearly, and say at the start that this is a general worked answer, not from the curriculum.\n\nQuestion: {{input.question}}",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "explain", "type": "agent", "title": "Labelled general explanation",
+      "capability": "explanation", "fallback_agents": ["nexa-precise"],
+      "prompt": "A Grade 11-12 student in Papua New Guinea asks the question below. The approved curriculum passages did not answer it. Give a short, clear explanation and say at the start that it is general knowledge, not from the curriculum, and that their teacher can confirm it.\n\nQuestion: {{input.question}}",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    }
+  ],
+  "output": "{{last.output}}"
+}

@@ -16,6 +16,8 @@ Tables
   deployments     where a version runs: location (core:dgx, school:pomnsoe),
                   endpoint, runtime instance, last heartbeat, health.
   events          append-only audit trail of every change: who, what, when.
+  workflow_runs   orchestration runs (NEXA-M3-003): status, initiator, context.
+  workflow_trace  append-only trace of every run: each step, decision, call.
 """
 from __future__ import annotations
 
@@ -63,6 +65,25 @@ CREATE TABLE IF NOT EXISTS events (
   agent_id TEXT, version TEXT, detail TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS events_by_agent ON events (agent_id, id);
+-- Orchestration (NEXA-M3-003): one row per workflow run, and its trace.
+CREATE TABLE IF NOT EXISTS workflow_runs (
+  run_id TEXT PRIMARY KEY,
+  workflow_id TEXT NOT NULL, workflow_version TEXT NOT NULL, workflow_fingerprint TEXT NOT NULL,
+  status TEXT NOT NULL,
+  initiator TEXT NOT NULL, initiator_roles TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  input TEXT NOT NULL, context TEXT NOT NULL DEFAULT '{}',
+  current_step TEXT, output TEXT, error TEXT,
+  counters TEXT NOT NULL DEFAULT '{}',
+  waiting_until REAL,
+  created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workflow_runs_by_status ON workflow_runs (status, workflow_id);
+CREATE TABLE IF NOT EXISTS workflow_trace (
+  run_id TEXT NOT NULL, seq INTEGER NOT NULL,
+  ts REAL NOT NULL, step TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (run_id, seq)
+);
 """
 
 

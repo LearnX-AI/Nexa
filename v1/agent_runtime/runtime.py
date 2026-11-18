@@ -13,6 +13,7 @@ from v1.identity.rbac import can
 from v1.observability import new_trace_id, audit_event
 
 import asyncio
+import contextvars
 
 from . import registry, gateway_client
 from .schemas import RunResponse
@@ -25,6 +26,17 @@ class AgentRuntimeError(Exception):
         super().__init__(detail)
 
 
+# The agent run in progress in this task, if any. An agent never calls another
+# agent: anything running inside an agent run (a tool, a callback) that tries
+# to start one is refused. Agents are composed only by the orchestration
+# engine, which runs them one after another, never nested (NEXA-M3-003).
+_ACTIVE_RUN: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("nexa_active_agent_run", default=None)
+
+
+def active_run() -> Optional[str]:
+    return _ACTIVE_RUN.get()
+
+
 async def run_agent(
     name: str,
     principal: Principal,
@@ -32,8 +44,25 @@ async def run_agent(
     temperature: Optional[float] = None,
     max_tokens: Optional[int] = None,
     trace_id: Optional[str] = None,
+    caller: Optional[dict[str, Any]] = None,
 ) -> RunResponse:
+    """Run one agent. caller: who is running it, recorded in the trace (the
+    orchestration engine passes the workflow, run and step)."""
     trace_id = trace_id or new_trace_id()
+    outer = _ACTIVE_RUN.get()
+    if outer is not None:
+        audit_event(action=f"agent.run:{name}", decision="deny", principal=principal.subject,
+                    reason=f"agent-to-agent call from {outer}", trace_id=trace_id)
+        raise AgentRuntimeError(409, f"Agent {name} cannot be called from inside agent {outer}: agents are "
+                                     f"composed only by the orchestration engine")
+    token = _ACTIVE_RUN.set(name)
+    try:
+        return await _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller)
+    finally:
+        _ACTIVE_RUN.reset(token)
+
+
+async def _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller) -> RunResponse:
     agent = registry.get_agent(name)
     if agent is None:
         raise AgentRuntimeError(404, f"Unknown agent: {name}")
@@ -59,6 +88,7 @@ async def run_agent(
     audit_event(
         action=f"agent.run:{name}", decision="allow", principal=principal.subject,
         permission=agent.required_permission, trace_id=trace_id,
+        **({"caller": caller} if caller else {}),
     )
 
     started = time.time()
@@ -84,6 +114,8 @@ async def run_agent(
     x_nexa["latency_ms"] = int((time.time() - started) * 1000)
     x_nexa["principal"] = principal.subject
     x_nexa["attempts"] = attempts
+    if caller:
+        x_nexa["caller"] = caller
     if agent.fingerprint:
         x_nexa["manifest"] = agent.fingerprint
     if agent.state == "deprecated" or agent.deprecated:
