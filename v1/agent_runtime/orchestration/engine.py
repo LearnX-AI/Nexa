@@ -42,9 +42,13 @@ from v1.identity.rbac import ROLE_PERMISSIONS, can
 from v1.observability import audit_event, new_trace_id
 
 from .. import presence, registry, runtime, tools
+from ..messaging import bus, contract as mc
 from . import workflow as wfm
 
 log = logging.getLogger("nexa.agent_runtime.orchestration")
+
+# The orchestrator's identity in every message it sends (NEXA-M3-005).
+ORCHESTRATOR = mc.Party(kind="orchestrator", id="nexa-orchestrator", version="1.0.0")
 
 TERMINAL = {"succeeded", "rejected", "failed", "budget_exceeded", "expired", "interrupted"}
 OVERSIGHT_ROLES = {"admin", "platform_admin", "auditor", "ai_engineer"}
@@ -148,6 +152,19 @@ class Run:
         self.waiting_until: Optional[float] = row["waiting_until"]
         self.created_at: float = row["created_at"]
         self.auth: Optional[str] = None    # the initiator's bearer token: memory only, never stored
+        self.attempts: dict[str, int] = {}  # idempotency key -> attempts made (NEXA-M3-005)
+
+    @property
+    def last_message(self) -> Optional[str]:
+        return self.ctx.get("_last_message")
+
+    @last_message.setter
+    def last_message(self, message_id: str) -> None:
+        self.ctx["_last_message"] = message_id
+
+    @property
+    def on_behalf_of(self) -> mc.OnBehalfOf:
+        return mc.OnBehalfOf(subject=self.principal.subject, roles=list(self.principal.roles))
 
     @property
     def template_ctx(self) -> dict[str, Any]:
@@ -167,6 +184,12 @@ class Run:
             db.execute("INSERT INTO workflow_trace (run_id, seq, ts, step, kind, detail) VALUES (?,?,?,?,?,?)",
                        (self.run_id, seq, time.time(), step, kind,
                         json.dumps(detail, ensure_ascii=False, default=str)))
+        # The same entry as a nexa.message/1.0 event in the run's conversation.
+        ev = bus.emit(kind, correlation_id=self.run_id, trace_id=self.trace_id, sender=ORCHESTRATOR,
+                      causation_id=self.last_message, principal=self.on_behalf_of,
+                      payload=mc.RunEvent(workflow=self.workflow_id, run_id=self.run_id, step=step, seq=seq,
+                                          detail=json.loads(json.dumps(detail, default=str))).model_dump())
+        self.last_message = ev.message_id
 
 
 def load_run(run_id: str) -> Optional[Run]:
@@ -239,7 +262,8 @@ _TASKS: set[asyncio.Task] = set()
 
 
 async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], *, auth: Optional[str] = None,
-                wait: bool = True, trace_id: Optional[str] = None) -> dict[str, Any]:
+                wait: bool = True, trace_id: Optional[str] = None,
+                idempotency_key: Optional[str] = None) -> dict[str, Any]:
     if runtime.active_run() is not None:
         raise OrchestrationError(409, "a workflow cannot be started from inside an agent run")
     wf = WORKFLOWS.get(workflow_id)
@@ -259,6 +283,18 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
             problems.append(f"input {k!r} is longer than {MAX_TEXT[kind]} characters")
     if problems:
         raise OrchestrationError(422, problems)
+    # Idempotent start (NEXA-M3-005): the same key from the same user with the
+    # same input returns the run already started; with other input it is refused.
+    ikey = f"run-start/{principal.subject}/{idempotency_key}" if idempotency_key else None
+    if ikey:
+        dig = mc.digest({"workflow": workflow_id, "input": inputs})
+        prior = _store().query("SELECT * FROM message_idempotency WHERE idempotency_key = ?", (ikey,))
+        if prior:
+            if prior[0]["payload_digest"] != dig:
+                raise OrchestrationError(409, "Idempotency-Key was already used for a different run")
+            existing = load_run(prior[0]["request_id"])
+            if existing is not None:
+                return view(existing) | {"duplicate": True}
     run_id, now = "wfr_" + uuid.uuid4().hex[:20], time.time()
     trace_id = trace_id or new_trace_id()
     with _store().tx() as db:
@@ -268,6 +304,10 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
                    (run_id, wf.id, wf.version, wf.fingerprint(), principal.subject, json.dumps(list(principal.roles)),
                     trace_id, json.dumps(inputs, ensure_ascii=False), json.dumps({"steps": {}}), wf.start,
                     json.dumps({"steps": 0, "agent_calls": 0, "running_s": 0.0}), now, now))
+    if ikey:
+        with _store().tx() as db:
+            db.execute("INSERT INTO message_idempotency (idempotency_key, payload_digest, request_id, completed_at) "
+                       "VALUES (?,?,?,?)", (ikey, dig, run_id, now))
     run = load_run(run_id)
     run.auth = auth
     run.trace("run.started", None, workflow=wf.id, version=wf.version, fingerprint=wf.fingerprint(),
@@ -479,33 +519,69 @@ def _resolve(run: Run, step: wfm.AgentStep) -> list[str]:
     return first + [a for a in step.fallback_agents if a not in first]
 
 
+_AGENT_ERRORS = {403: "refused", 409: "refused", 410: "refused", 423: "refused", 404: "invalid", 422: "invalid",
+                 429: "budget", 502: "unavailable", 503: "unavailable", 504: "timeout"}
+
+
+def _error(code: str, reason: str, status: Optional[int] = None) -> mc.ErrorInfo:
+    return mc.ErrorInfo(code=code, retryable=code in mc.RETRYABLE, reason=reason[:1000], status=status)
+
+
+def _deadline(timeout: float) -> float:
+    # A little inside the step's own timeout, so the bus answers first.
+    return max(0.05, timeout * 0.98 - 0.05)
+
+
 async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temperature=None, max_tokens=None,
-                      timeout: float, role: str = "agent") -> dict[str, Any]:
+                      timeout: float, role: str = "agent", key: Optional[str] = None, max_attempts: int = 1,
+                      cause: Optional[str] = None) -> dict[str, Any]:
+    """One agent call, as a nexa.message/1.0 request from the orchestrator to the
+    agent and its result or error back (NEXA-M3-005)."""
     if run.counters["agent_calls"] + 1 > run.wf.budget.max_agent_calls:
         raise BudgetExceeded(f"max_agent_calls {run.wf.budget.max_agent_calls}")
     run.counters["agent_calls"] += 1
+    key = key or f"{run.run_id}/{step_id}/{role}/{agent}"
+    run.attempts[key] = attempt = run.attempts.get(key, 0) + 1
+    spec = registry.AGENTS.get(agent)
+    span = _deadline(timeout)
+    req = mc.make("request", "agent.task", correlation_id=run.run_id, trace_id=run.trace_id, sender=ORCHESTRATOR,
+                  receiver=mc.Party(kind="agent", id=agent, version=spec.version if spec else None),
+                  payload=mc.AgentTask(role=role, workflow=run.workflow_id, step=step_id, prompt=prompt,
+                                       temperature=temperature, max_tokens=max_tokens).model_dump(exclude_none=True),
+                  causation_id=cause or run.last_message, principal=run.on_behalf_of,
+                  permission=spec.required_permission if spec else "model.invoke",
+                  deadline=time.time() + span, timeout_s=span, attempt=min(attempt, 10),
+                  max_attempts=max(min(attempt, 10), max_attempts), idempotency_key=key)
     caller = {"workflow": run.workflow_id, "workflow_version": run.workflow_version, "run_id": run.run_id,
-              "step": step_id, "as": role}
+              "step": step_id, "as": role, "message_id": req.message_id}
     t0 = time.monotonic()
-    try:
-        resp = await asyncio.wait_for(
-            runtime.run_agent(agent, run.principal, [{"role": "user", "content": prompt}], temperature, max_tokens,
-                              run.trace_id, caller=caller),
-            timeout=timeout)
-    except asyncio.TimeoutError:
-        run.trace("agent.call", step_id, agent=agent, role=role, ok=False, error=f"timeout {timeout:.0f}s")
-        raise StepError(f"{agent} timed out", retry=True)
-    except runtime.AgentRuntimeError as exc:
-        run.trace("agent.call", step_id, agent=agent, role=role, ok=False, status=exc.status_code,
-                  error=str(exc.detail))
-        # Unavailable or timing out may pass; refused (403, disabled, not active) will not.
-        raise StepError(f"{agent}: {exc.detail}", retry=exc.status_code in (502, 503, 504), status=exc.status_code)
-    x = resp.x_nexa or {}
-    rec = {"agent": agent, "version": x.get("agent_version"), "manifest": x.get("manifest"),
-           "model": x.get("model"), "attempts": x.get("attempts"), "fallback_model": x.get("fallback_model"),
-           "latency_ms": int((time.monotonic() - t0) * 1000), "trace_id": run.trace_id}
-    run.trace("agent.call", step_id, role=role, ok=True, output_chars=len(resp.output or ""), **rec)
-    return {"output": resp.output or "", **rec}
+
+    async def deliver(msg: mc.Message, left: float) -> bus.Delivered:
+        try:
+            resp = await runtime.run_agent(agent, run.principal, [{"role": "user", "content": prompt}], temperature,
+                                           max_tokens, run.trace_id, caller=caller)
+        except runtime.AgentRuntimeError as exc:
+            return bus.Delivered(error=_error(_AGENT_ERRORS.get(exc.status_code, "internal"), str(exc.detail),
+                                              exc.status_code))
+        x = resp.x_nexa or {}
+        return bus.Delivered(sender_version=x.get("agent_version"), payload=mc.AgentResult(
+            output=resp.output or "", agent_version=x.get("agent_version"), manifest=x.get("manifest"),
+            model=x.get("model"), attempts=x.get("attempts"),
+            latency_ms=int((time.monotonic() - t0) * 1000)).model_dump(exclude_none=True))
+
+    reply = await bus.request(req, deliver)
+    run.last_message = reply.message_id
+    if reply.kind == "error":
+        e = reply.error
+        run.trace("agent.call", step_id, agent=agent, role=role, ok=False, status=e.status, error=e.reason,
+                  code=e.code, request=req.message_id, reply=reply.message_id)
+        raise StepError(f"{agent}: {e.reason}", retry=e.retryable, status=e.status)
+    p = reply.payload
+    rec = {"agent": agent, "version": p.get("agent_version"), "manifest": p.get("manifest"), "model": p.get("model"),
+           "attempts": p.get("attempts"), "latency_ms": int((time.monotonic() - t0) * 1000),
+           "trace_id": run.trace_id, "request": req.message_id, "reply": reply.message_id}
+    run.trace("agent.call", step_id, role=role, ok=True, output_chars=len(p.get("output", "")), **rec)
+    return {"output": p.get("output", ""), **rec}
 
 
 async def _agent_step(run: Run, step: wfm.AgentStep, ctx, remaining) -> dict[str, Any]:
@@ -517,7 +593,8 @@ async def _agent_step(run: Run, step: wfm.AgentStep, ctx, remaining) -> dict[str
             run.trace("agent.fallback", step.id, to=agent, after=candidates[i - 1], reason=errors[-1])
         try:
             res = await _with_policy(run, step, remaining, lambda t, a=agent: _call_agent(
-                run, step.id, a, prompt, temperature=step.temperature, max_tokens=step.max_tokens, timeout=t))
+                run, step.id, a, prompt, temperature=step.temperature, max_tokens=step.max_tokens, timeout=t,
+                max_attempts=step.policy.max_attempts))
             return res | {"fallback_used": i > 0}
         except StepError as exc:
             errors.append(str(exc))
@@ -568,12 +645,24 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
                   f'or {{"action": "done"}}.')
         choice = await _with_policy(run, step, remaining, lambda t: _call_agent(
             run, step.id, step.coordinator, prompt, temperature=step.temperature, max_tokens=300, timeout=t,
-            role="coordinator"))
+            role="coordinator", key=f"{run.run_id}/{step.id}/coordinator/{decisions + 1}",
+            max_attempts=step.policy.max_attempts))
         decisions += 1
         action, task, problem = parse_choice(choice["output"], allowed)
         run.trace("delegate.choice", step.id, decision=decisions, coordinator=step.coordinator,
                   raw=_short(choice["output"], 600), accepted=action is not None, action=action, task=_short(task),
                   problem=problem or None)
+        # The orchestrator's decision on the coordinator's proposal, as a typed
+        # event caused by the coordinator's result: the delegate's request is
+        # caused by this decision, never by the coordinator (NEXA-M3-005).
+        decided = bus.emit("delegation.choice", correlation_id=run.run_id, trace_id=run.trace_id,
+                           sender=ORCHESTRATOR, causation_id=choice["reply"], principal=run.on_behalf_of,
+                           payload=mc.DelegationChoice(
+                               step=step.id, decision=decisions, proposed=_short(choice["output"], 300),
+                               accepted=action is not None, action=action,
+                               delegate=step.delegates.get(action) if action else None,
+                               problem=problem or None).model_dump(exclude_none=True))
+        run.last_message = decided.message_id
         if action is None:
             stop_reason = f"invalid choice: {problem}"
             break
@@ -583,7 +672,8 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
         agent = step.delegates[action]
         res = await _with_policy(run, step, remaining, lambda t: _call_agent(
             run, step.id, agent, render(step.delegate_prompt, {**ctx, "task": task}), timeout=t,
-            role="delegate"))
+            role="delegate", key=f"{run.run_id}/{step.id}/delegate/{len(done) + 1}",
+            max_attempts=step.policy.max_attempts, cause=decided.message_id))
         done.append({"action": action, "agent": agent, "task": task, "output": res["output"],
                      "version": res["version"]})
     run.trace("delegate.finished", step.id, delegations=len(done), decisions=decisions, reason=stop_reason)
@@ -596,27 +686,54 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
 
 # ---------------------------------------------------------------- tools (NEXA-M3-004)
 
+_TOOL_ERRORS = {401: "refused", 403: "refused", 409: "refused", 410: "refused", 423: "refused", 404: "invalid",
+                422: "invalid", 429: "budget", 502: "unavailable", 503: "unavailable", 504: "timeout"}
+
+
 async def _tool(run: Run, step: wfm.ToolStep, ctx, timeout: float) -> dict[str, Any]:
     """One tool call through the Tool & Connector Gateway, for the step's agent,
-    as the calling user."""
+    as the calling user: a nexa.message/1.0 tool.task request and its result."""
     if not run.auth:
         raise StepError("a tool step needs the user's own session", retry=False)
     args = {k: render(v, ctx).strip() for k, v in step.arguments.items()}
+    key = f"{run.run_id}/{step.id}/tool/{step.tool}"
+    run.attempts[key] = attempt = run.attempts.get(key, 0) + 1
+    spec = tools.TOOLS.get(step.tool)
+    span = _deadline(timeout)
+    req = mc.make("request", "tool.task", correlation_id=run.run_id, trace_id=run.trace_id, sender=ORCHESTRATOR,
+                  receiver=mc.Party(kind="tool", id=step.tool, version=spec.version if spec else None),
+                  payload=mc.ToolTask(tool=step.tool, for_agent=step.agent, step=step.id, arguments=args,
+                                      scopes=step.scopes).model_dump(exclude_none=True),
+                  causation_id=run.last_message, principal=run.on_behalf_of,
+                  permission=spec.required_permission if spec else "model.invoke",
+                  deadline=time.time() + span, timeout_s=span, attempt=min(attempt, 10),
+                  max_attempts=max(min(attempt, 10), step.policy.max_attempts), idempotency_key=key)
     t0 = time.monotonic()
-    try:
-        out = await tools.invoke_tool(step.agent, step.tool, run.principal, args, user_token=run.auth,
-                                      scopes=step.scopes, run_id=run.run_id, step=step.id, trace_id=run.trace_id)
-    except tools.ToolError as exc:
-        run.trace("tool.call", step.id, agent=step.agent, tool=step.tool, ok=False, status=exc.status_code,
-                  error=exc.detail, call_id=exc.call_id, arguments=_short(json.dumps(args, ensure_ascii=False)))
-        raise StepError(f"{step.tool}: {exc.detail}", retry=exc.status_code in (502, 503, 504),
-                        status=exc.status_code)
-    result = out.get("result") or {}
-    rec = {"tool": step.tool, "version": out.get("version"), "call_id": out.get("call_id"),
-           "scopes": out.get("scopes"), "agent": step.agent,
-           "latency_ms": int((time.monotonic() - t0) * 1000)}
-    run.trace("tool.call", step.id, ok=True, arguments=_short(json.dumps(args, ensure_ascii=False)),
-              implementation=(out.get("x_nexa") or {}).get("implementation"), **rec)
+
+    async def deliver(msg: mc.Message, left: float) -> bus.Delivered:
+        try:
+            out = await tools.invoke_tool(step.agent, step.tool, run.principal, args, user_token=run.auth,
+                                          scopes=step.scopes, run_id=run.run_id, step=step.id, trace_id=run.trace_id)
+        except tools.ToolError as exc:
+            reason = exc.detail + (f" (call {exc.call_id})" if exc.call_id else "")
+            return bus.Delivered(error=_error(_TOOL_ERRORS.get(exc.status_code, "internal"), reason, exc.status_code))
+        return bus.Delivered(sender_version=out.get("version"), payload=mc.ToolResult(
+            call_id=out.get("call_id"), tool_version=out.get("version"), scopes=out.get("scopes") or [],
+            result=out.get("result") or {}, latency_ms=int((time.monotonic() - t0) * 1000)).model_dump())
+
+    reply = await bus.request(req, deliver)
+    run.last_message = reply.message_id
+    if reply.kind == "error":
+        e = reply.error
+        run.trace("tool.call", step.id, agent=step.agent, tool=step.tool, ok=False, status=e.status, error=e.reason,
+                  code=e.code, arguments=_short(json.dumps(args, ensure_ascii=False)), request=req.message_id)
+        raise StepError(f"{step.tool}: {e.reason}", retry=e.retryable, status=e.status)
+    p = reply.payload
+    result = p.get("result") or {}
+    rec = {"tool": step.tool, "version": p.get("tool_version"), "call_id": p.get("call_id"),
+           "scopes": p.get("scopes"), "agent": step.agent, "latency_ms": int((time.monotonic() - t0) * 1000),
+           "request": req.message_id, "reply": reply.message_id}
+    run.trace("tool.call", step.id, ok=True, arguments=_short(json.dumps(args, ensure_ascii=False)), **rec)
     return {"output": result.get("text", ""), "result": result, **rec}
 
 
