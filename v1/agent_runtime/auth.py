@@ -25,8 +25,21 @@ async def require_principal(
         claims = verify_token(token)
     except TokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    if claims.get("typ") == "delegated":
+        # Delegated tokens (NEXA-M3-007) are for the Tool Gateway only: one an
+        # agent's tool call carried can never be replayed as the user here.
+        raise HTTPException(status_code=401, detail="A delegated token cannot be used here")
+    return principal_from_claims(claims)
+
+
+def principal_from_claims(claims: dict) -> Principal:
+    """The tenant context travels with the principal (NEXA-M3-007): the user's
+    school and classes, for decisions and for the tokens the runtime mints."""
     return Principal(
         subject=claims["sub"],
         roles=tuple(claims.get("roles", ())),
         token_type=claims.get("typ", "service"),
+        school_id=claims.get("school_id"),
+        attrs={k: claims[k] for k in ("class_ids", "lms_site", "lms_national", "act", "scope", "nexa_aud", "run_id")
+               if k in claims},
     )

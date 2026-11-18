@@ -104,6 +104,14 @@ jobs:
         run: |
           python -c "import json; from v1.agent_runtime.state import contract as sc; print(json.dumps(sc.json_schema(), indent=2))" | diff - v1/agent_runtime/schema/nexa-state-1.0.schema.json
 
+      - name: Agent policies (NEXA-M3-007)
+        # Least privilege: every agent has a policy, no policy exceeds its
+        # manifest or the tool contracts, and the published schema matches.
+        run: |
+          python -m v1.agent_runtime.policy validate
+          python -m v1.agent_runtime.policy schema | diff - v1/agent_runtime/schema/nexa-agent-policy-1.0.schema.json
+          python -m pytest -q v1/tests/test_agent_security.py -p no:warnings
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published

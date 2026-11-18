@@ -270,3 +270,14 @@ async def state_proxy(request: Request, principal: Principal = Depends(require_p
     query = f"?{request.url.query}" if request.url.query else ""
     return await _forward(request.method, f"{path}{query}", authorization, getattr(request.state, "trace_id", None),
                           body)
+
+
+# Agent policies and the decision log (NEXA-M3-007): read-only, and the Agent
+# Runtime decides who may read the decision log.
+@app.get("/v1/policy/{rest:path}", responses=_ERRORS)
+async def policy_proxy(request: Request, rest: str = Path(..., pattern=r"^[A-Za-z0-9._/-]{1,120}$"),
+                       principal: Principal = Depends(require_principal), authorization: str = Header(...)):
+    if ".." in rest:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward("GET", f"/v1/policy/{rest}{query}", authorization, getattr(request.state, "trace_id", None))

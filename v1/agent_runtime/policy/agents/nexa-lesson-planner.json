@@ -1,0 +1,29 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-lesson-planner",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Teacher-facing lesson planning: learner and teacher-only material (teacher guides) through knowledge_answer and course_outline; the gateway and this policy refuse teacher-only scopes for students. No delegation. Draft: inactive until approved.",
+  "read": {
+    "knowledge_classes": [
+      "learner",
+      "teacher_only"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "knowledge_answer": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
+    "course_outline": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": false
+  }
+}

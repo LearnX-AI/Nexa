@@ -54,6 +54,7 @@ class Caller:
     run_id: Optional[str]
     step: Optional[str]
     trace_id: Optional[str]
+    delegation: Optional[dict] = None   # the verified claims of the delegated token (NEXA-M3-007)
 
 
 class GatewayError(Exception):
@@ -86,6 +87,23 @@ async def invoke(tool_id: str, caller: Caller, arguments: Any, scopes: Optional[
     # 1. caller
     if not can(caller.service, "tools.invoke"):
         raise refuse(403, "caller", "only the Agent Runtime may call tools")
+    # 1b. delegation (NEXA-M3-007): the user's authority reaches the gateway
+    # only as a delegated token naming this agent, for this gateway, with the
+    # scopes the agent's policy granted; never the user's own token.
+    d = caller.delegation or {}
+    act = f"agent:{caller.agent}@{caller.agent_version or '?'}"
+    if d.get("typ") != "delegated":
+        raise refuse(403, "delegation", "a delegated token is required, not the user's own")
+    if d.get("act") != act:
+        raise refuse(403, "delegation", f"the token was delegated to {d.get('act')}, not {act}")
+    if d.get("nexa_aud") != "nexa-tool-gateway":
+        raise refuse(403, "delegation", "the token is not for the Tool Gateway")
+    if d.get("run_id") and caller.run_id and d["run_id"] != caller.run_id:
+        raise refuse(403, "delegation", "the token belongs to another run")
+    token_scopes = list(d.get("scope") or [])
+    scopes = scopes or token_scopes
+    if set(scopes) - set(token_scopes):
+        raise refuse(403, "delegation", f"scopes {sorted(set(scopes) - set(token_scopes))} were not delegated")
     # 2. tool
     if tool is None:
         raise refuse(404, "tool", f"unknown tool {tool_id}")

@@ -21,6 +21,8 @@ from . import manifest, presence, registry, tools
 from .registry_api import router as registry_router
 from .orchestration import engine as orchestration
 from .orchestration.api import router as orchestration_router
+from .policy import pdp
+from .policy.api import router as policy_router
 from .state import purge as state_purge
 from .state.api import router as state_router
 from .auth import require_principal
@@ -33,7 +35,10 @@ app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 app.include_router(registry_router)
 app.include_router(orchestration_router)
 app.include_router(state_router)
-# Workflows are validated against the registry at start, like manifests (NEXA-M3-003).
+app.include_router(policy_router)
+# Agent policies (NEXA-M3-007), validated against the manifests and tool
+# contracts; then workflows, validated against the registry and the policies.
+pdp.load()
 orchestration.load_workflows()
 _tasks: list[asyncio.Task] = []
 

@@ -44,6 +44,7 @@ from v1.observability import audit_event, new_trace_id
 from .. import presence, registry, runtime, tools
 from ..messaging import bus, contract as mc
 from ..state import contract as sc, store as state
+from ..policy import pdp
 from . import workflow as wfm
 
 log = logging.getLogger("nexa.agent_runtime.orchestration")
@@ -52,7 +53,7 @@ log = logging.getLogger("nexa.agent_runtime.orchestration")
 ORCHESTRATOR = mc.Party(kind="orchestrator", id="nexa-orchestrator", version="1.0.0")
 
 TERMINAL = {"succeeded", "rejected", "failed", "budget_exceeded", "expired", "interrupted"}
-OVERSIGHT_ROLES = {"admin", "platform_admin", "auditor", "ai_engineer"}
+OVERSIGHT_ROLES = {"admin", "platform_admin", "national_admin", "auditor", "ai_engineer"}   # see runs of any school
 MAX_TEXT = {"text": 4000, "short_text": 200}
 CARRY = 1500      # characters of earlier delegate results shown to the coordinator
 
@@ -83,9 +84,33 @@ def load_workflows(directory: Optional[str] = None) -> dict[str, wfm.Workflow]:
     found = wfm.load_dir(directory or os.environ.get("NEXA_WORKFLOW_DIR") or wfm.WORKFLOWS_DIR,
                          agent_ids=set(registry.AGENTS), roles=ROLE_PERMISSIONS,
                          grants={a: set(s.tools) for a, s in registry.AGENTS.items()})
+    # A workflow may not ask of an agent what its policy does not allow
+    # (NEXA-M3-007): checked when workflows load, and again at each call.
+    if pdp.POLICIES:
+        for wf in found.values():
+            problems = policy_problems(wf)
+            if problems:
+                raise ValueError(f"workflow {wf.id}: " + "; ".join(problems))
     WORKFLOWS.clear()
     WORKFLOWS.update(found)
     return found
+
+
+def policy_problems(wf: wfm.Workflow) -> list[str]:
+    out = []
+    for s in wf.steps:
+        if isinstance(s, wfm.DelegateStep):
+            p = pdp.POLICIES.get(s.coordinator)
+            for name, a in s.delegates.items():
+                if p is None or a not in p.delegate:
+                    out.append(f"step {s.id}: {s.coordinator}'s policy does not let it delegate to {a}")
+                elif not (pdp.POLICIES.get(a) and pdp.POLICIES[a].accept_delegation):
+                    out.append(f"step {s.id}: {a} does not accept delegated work")
+        if isinstance(s, wfm.ToolStep):
+            p = pdp.POLICIES.get(s.agent)
+            if p is None or s.tool not in p.invoke:
+                out.append(f"step {s.id}: {s.agent}'s policy does not let it invoke {s.tool}")
+    return out
 
 
 # ---------------------------------------------------------------- templates
@@ -138,7 +163,12 @@ class Run:
         self.workflow_id: str = row["workflow_id"]
         self.workflow_version: str = row["workflow_version"]
         self.status: str = row["status"]
-        self.principal = Principal(row["initiator"], tuple(json.loads(row["initiator_roles"])), "user")
+        _ctx = json.loads(row["context"] or "{}")
+        _tenant = _ctx.get("_tenant") or {}
+        # The initiator with their tenant context (NEXA-M3-007): school and classes.
+        self.principal = Principal(row["initiator"], tuple(json.loads(row["initiator_roles"])), "user",
+                                   school_id=_tenant.get("school_id"),
+                                   attrs={"class_ids": _tenant["class_ids"]} if _tenant.get("class_ids") else {})
         self.trace_id: str = row["trace_id"]
         self.input: dict[str, Any] = json.loads(row["input"])
         self.ctx: dict[str, Any] = json.loads(row["context"] or "{}")
@@ -238,7 +268,9 @@ def may_view(run: Run, principal: Principal) -> bool:
     if principal.subject == run.principal.subject or set(principal.roles) & OVERSIGHT_ROLES:
         return True
     if run.status == "waiting_approval" and run.wf is not None:
-        return bool(set(principal.roles) & set(run.wf.step(run.current).approver_roles))
+        # A reviewer sees only runs of their own school (NEXA-M3-007).
+        return bool(set(principal.roles) & set(run.wf.step(run.current).approver_roles)) and \
+            pdp.same_tenant(run.principal.school_id, principal)
     return False
 
 
@@ -384,7 +416,9 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
                    "updated_at) VALUES (?,?,?,?,'running',?,?,?,?,?,?,?,?,?)",
                    (run_id, wf.id, wf.version, wf.fingerprint(), principal.subject, json.dumps(list(principal.roles)),
                     trace_id, json.dumps(inputs, ensure_ascii=False),
-                    json.dumps({"steps": {}, **({"session": snapshot, "_session": session_ref} if session_ref else {})},
+                    json.dumps({"steps": {}, **({"session": snapshot, "_session": session_ref} if session_ref else {}),
+                                "_tenant": {"school_id": principal.school_id,
+                                            "class_ids": principal.attrs.get("class_ids")}},
                                ensure_ascii=False), wf.start,
                     json.dumps({"steps": 0, "agent_calls": 0, "running_s": 0.0}), now, now))
     if ikey:
@@ -423,6 +457,12 @@ async def decide(run_id: str, principal: Principal, decision: str, comment: str 
         run.save()
         run.trace("checkpoint.expired", cp.id)
         raise OrchestrationError(409, f"Run {run_id} expired at its checkpoint")
+    tenant = pdp.authorize_tenant("decide", run.principal.school_id, principal, f"run:{run_id}",
+                                  trace_id=run.trace_id, run_id=run_id)
+    if not tenant.allow:
+        run.trace("checkpoint.refused", cp.id, by=principal.subject, reason="tenancy",
+                  decision_id=tenant.decision_id)
+        raise OrchestrationError(403, "This run belongs to another school")
     if not set(principal.roles) & set(cp.approver_roles):
         run.trace("checkpoint.refused", cp.id, by=principal.subject, reason="role")
         audit_event(action=f"workflow.decide:{run.workflow_id}", decision="deny", principal=principal.subject,
@@ -783,6 +823,15 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
             stop_reason = "coordinator chose done"
             break
         agent = step.delegates[action]
+        # The coordinator proposed; the agent policy decides (NEXA-M3-007).
+        coord = registry.AGENTS.get(step.coordinator)
+        verdict = pdp.authorize_delegate(step.coordinator, coord.version if coord else None, agent, run.principal,
+                                         trace_id=run.trace_id, run_id=run.run_id)
+        if not verdict.allow:
+            run.trace("delegate.refused", step.id, coordinator=step.coordinator, delegate=agent, rule=verdict.rule,
+                      reason=verdict.reason, decision_id=verdict.decision_id)
+            stop_reason = f"policy: {verdict.reason}"
+            break
         res = await _with_policy(run, step, remaining, lambda t: _call_agent(
             run, step.id, agent, render(step.delegate_prompt, {**ctx, "task": task}), timeout=t,
             role="delegate", key=f"{run.run_id}/{step.id}/delegate/{len(done) + 1}",

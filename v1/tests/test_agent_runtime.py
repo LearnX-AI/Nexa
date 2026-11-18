@@ -90,8 +90,10 @@ def test_denied_role_is_forbidden_and_audited(wired, make_token, auth, capsys):
     audit = [json.loads(line) for line in capsys.readouterr().out.splitlines()
              if '"event": "audit"' in line]
     deny = [a for a in audit if a["decision"] == "deny"]
-    assert deny and deny[0]["principal"] == "user:aud-1"
-    assert deny[0]["action"] == "agent.run:nexa-tutor"
+    assert deny and all(a["principal"] == "user:aud-1" for a in deny)
+    # The policy decision (NEXA-M3-007) and the runtime's own record, both denied.
+    assert {a["action"] for a in deny} >= {"policy.run:nexa-tutor", "agent.run:nexa-tutor"}
+    assert next(a for a in deny if a["action"] == "policy.run:nexa-tutor")["rule"] == "role"
 
 
 def test_allowed_run_is_audited(wired, make_token, auth, capsys):
