@@ -1,6 +1,6 @@
 # NEXA-M2-010: v0 Knowledge Migration and M2 Exit Review
 
-Status: evidence collected, review in progress (2026-11-17). Owner: Yasaru. Approver: Mr. Chandana.
+Status: complete, submitted for approval (2026-11-17). Owner: Yasaru. Approver: Mr. Chandana.
 
 ## 1. Purpose
 
@@ -77,9 +77,34 @@ only in memory until the next restart.
 The 11 files under review are new knowledge for v1 (Engineering and Technology above all). They enter v1
 through the M2-002 pipeline once a curriculum officer records their grade, term, type and approval.
 
-### 4.1 Content match of the v0-only documents (DGX)
+### 4.1 Final decisions, DGX (2026-11-17, `7be8a3a`)
 
-To be filled from `v0_inventory.py --v1-url` with text matching.
+Each of the 527 documents that existed only inside the v0 index was asked of v1 with its own text and
+compared word for word (`v0_inventory.py`, rules in section 3).
+
+| Decision | Items | What |
+|---|---|---|
+| retained | 521 | 70 curriculum files byte-identical to v1 sources; 451 v0-only documents v1 holds with the same text (60%+ of the words), from the LMS sync |
+| deprecated | 57 | 52 superseded (an older revision or another format of a lesson v1 holds: same title, 30-60% of the words; v1's copy is the current one); 4 test uploads (`Test_...`); the v0 vector index (9,774 chunks) |
+| excluded | 3 | `user_memory.json` (learner data); 2 files v0 generated and that were uploaded back (`lesson_20260724_092800.pdf`, `edunex_quiz_course11_20260725_095306.pdf`) |
+| resync | 18 | below |
+
+The 18 left for the LMS:
+
+| Document (v0 name) | v0 course label | Action |
+|---|---|---|
+| 11.2 Nutrition - Autotrophs.pdf; Activity.pdf; Biology 2012.pdf; In-class Assignment.pdf; Mendelian Genetics notes.pdf; Photosynthesis - Copy.pdf; B1RevisionPowerPointpptx.pdf | Biology (Grade 11 / Advanced) | re-send from the LMS if still published and approved; not in v1 |
+| Basics of Climate Change.pdf; ELEMENTS OF WEATHER AND THEIR INSTRUMENT.pdf; Ocean Currents.pdf | Geography - Grade 11 | Geography is outside the current STEM scope: decide whether NEXA covers it, then re-send |
+| 2D_Motion_Lecture_Note V1.docx; Topic_2_PPT_Dimensional_Analysis v1 (1).pptx; Properties_and_Structure_of_Matter.pptx | filed under Introduction To Java / General Mathematics in v0 (content is Physics and Chemistry) | re-send under the right course; not in v1 (closest match 1-2%) |
+| 12.3_Biotechnology_4_DNA Sequence Analysis (BLAST, CLUSTAL).pptx; 12.5_Battery Technology_2_Paper Batteries.pptx | Biology | probably held: 54-56% of the words match a v1 item titled only "PPT"; the LMS team confirms, nothing is assumed |
+| JavaScriptTutriol_ Variable and DataType.pdf; quiz_python.pdf; POMNSOE_LMS_Backup_Guide_English (1).docx | various | not curriculum: do not re-send |
+
+v0's course labels are unreliable (Chemistry and Physics material filed under General Mathematics, Accounting,
+Business Studies and Introduction To Java), which is one more reason the v0 index is not copied (rule 1).
+
+**Result.** No v0 curriculum knowledge is lost: every v0 source is in v1, superseded by a v1 copy, or
+listed above for the LMS team (15 items, 3 of them pending a scope decision) or for a curriculum officer
+(the 11 Pomnsoe files).
 
 ## 5. M2 exit criteria
 
@@ -91,8 +116,8 @@ To be filled from `v0_inventory.py --v1-url` with text matching.
 | Citation provenance is verified | Step 5: PASS, 109 citations used in 47 of 48 answers, every one traced to an active, approved chunk, its source version and the original file by sha256 | met |
 | EduNeX/LMS synchronisation is demonstrated | Step 2: M2-007 demonstration PASS on the DGX; step 1: 474 LMS items active, 5 withdrawn, none waiting or failing | met |
 | Edge/offline knowledge design validated | NEXA-M2-009, complete: offline live suite PASS on the Pomnsoe school server | met (2026-11-16) |
-| Security/data controls reviewed | Section 6 | review below |
-| Exit evidence submitted for approval | This document and the exit suite summary | after the runs |
+| Security/data controls reviewed | Section 6: controls in place and verified; three open items (learner data in the repository, branch protection, NEXA-GOV-001) | reviewed, open items tracked |
+| Exit evidence submitted for approval | This document, the exit suite summary (`~/nexa-evidence/m2-exit-20261117-100110/SUMMARY.md` on the DGX) and the M2 exit evidence document | submitted by Yasaru |
 
 ## 6. Security and data controls review
 
@@ -110,6 +135,14 @@ To be filled from `v0_inventory.py --v1-url` with text matching.
 
 ## 7. Known limitations and follow-up backlog
 
+- Curriculum officer: classify and approve the 11 Pomnsoe v0 files (Engineering and Technology above all)
+  for ingestion; confirm whether `STEMBIOLOGY-Syllabus.pdf` (v1: Grade 12 Term 1 Biology Student Guide) is a
+  syllabus or a guide.
+- LMS team: re-send the 15 documents of section 4.1 (after the Geography scope decision); confirm the two
+  matched only to v1 items titled "PPT".
+- Remove `user_memory.json` (5 email addresses) from the repository and purge it from git history
+  (repository owner); retire v0 on the DGX and the Pomnsoe school server, where it also writes learner data.
+
 - Exit suite step 1 expected an off-curriculum question to get the strict "not found" reply, written before
   general answers (NEXA_GENERAL_ANSWERS) existed. It now gets a labelled general answer with no curriculum
   citation, the intended behaviour; the check is updated to test that. The answer also shows a limit: the
@@ -123,9 +156,16 @@ To be filled from `v0_inventory.py --v1-url` with text matching.
 - A second developer reproduces the corpus suite with real models.
 - QA host, CI deploy jobs on `main`, live suite after each deploy.
 - Core NEXA takes the answer-writing overflow from school servers (needs the school-to-DGX link).
-- Retire v0 on the Pomnsoe school server after its knowledge is migrated.
 
-## 8. How the evidence is produced
+## 8. M2 exit recommendation
+
+All M2 exit criteria are met with recorded evidence, except that the security review has three open
+items that do not block M3 agent work but must be closed by named owners: learner data in the
+repository (repository owner), branch protection on `main` (repository admin) and the NEXA-GOV-001
+confirmation (governance). Recommendation: approve the M2 exit and begin M3, with those three items
+and the backlog in section 7 tracked to closure.
+
+## 9. How the evidence is produced
 
 On the Pomnsoe school server (read-only), then on the DGX:
 
