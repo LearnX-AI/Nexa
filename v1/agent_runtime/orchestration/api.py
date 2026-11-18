@@ -23,6 +23,7 @@ from v1.identity.principal import Principal
 from v1.identity.rbac import can
 
 from ..auth import require_principal
+from ..messaging import bus, contract as mc
 from . import engine
 
 router = APIRouter(tags=["orchestration"])
@@ -72,9 +73,12 @@ async def get_workflow(workflow_id: str, principal: Principal = Depends(require_
 @router.post("/v1/workflows/{workflow_id}/runs", status_code=201)
 async def start_run(workflow_id: str, body: StartRun, request: Request, wait: bool = True,
                     principal: Principal = Depends(require_principal),
-                    authorization: Optional[str] = Header(default=None)):
+                    authorization: Optional[str] = Header(default=None),
+                    idempotency_key: Optional[str] = Header(default=None, max_length=200)):
     out = await _do(engine.start(workflow_id, principal, body.input, auth=authorization, wait=wait,
-                                 trace_id=getattr(request.state, "trace_id", None)))
+                                 trace_id=getattr(request.state, "trace_id", None), idempotency_key=idempotency_key))
+    if out.get("duplicate"):
+        return JSONResponse(status_code=200, content=out)
     if not wait:
         return JSONResponse(status_code=202, content=out)
     return out
@@ -92,6 +96,23 @@ async def get_run(run_id: str, trace: bool = True, principal: Principal = Depend
     if run is None or not engine.may_view(run, principal):
         raise HTTPException(status_code=404, detail=f"Unknown run: {run_id}")
     return engine.view(run, with_trace=trace)
+
+
+@router.get("/v1/workflow-runs/{run_id}/messages")
+async def run_messages(run_id: str, principal: Principal = Depends(require_principal)):
+    """The run's conversation: every nexa.message/1.0 envelope in order, and
+    the result of checking it against the contract (NEXA-M3-005)."""
+    run = engine.load_run(run_id)
+    if run is None or not engine.may_view(run, principal):
+        raise HTTPException(status_code=404, detail=f"Unknown run: {run_id}")
+    return {"run_id": run_id, "check": bus.check_conversation(run_id), "messages": bus.conversation(run_id)}
+
+
+@router.get("/v1/messaging/schema")
+async def messaging_schema(principal: Principal = Depends(require_principal)):
+    if not can(principal, "agents.read"):
+        raise HTTPException(status_code=403, detail="Not permitted")
+    return mc.json_schema()
 
 
 @router.post("/v1/workflow-runs/{run_id}/decision")

@@ -1,0 +1,758 @@
+{
+  "$defs": {
+    "ErrorInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "timeout",
+            "unavailable",
+            "refused",
+            "invalid",
+            "conflict",
+            "budget",
+            "cancelled",
+            "internal"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "title": "Reason",
+          "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "code",
+        "retryable",
+        "reason"
+      ],
+      "title": "ErrorInfo",
+      "type": "object"
+    },
+    "OnBehalfOf": {
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "maxLength": 200,
+          "minLength": 2,
+          "title": "Subject",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "title": "OnBehalfOf",
+      "type": "object"
+    },
+    "Party": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "orchestrator",
+            "agent",
+            "tool",
+            "user",
+            "service"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 120,
+          "minLength": 2,
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "title": "Party",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "nexa.message/1.0",
+      "default": "nexa.message/1.0",
+      "title": "Schema",
+      "type": "string"
+    },
+    "message_id": {
+      "title": "Message Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "request",
+        "result",
+        "error",
+        "event"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "type": {
+      "pattern": "^[a-z][a-z_]*(\\.[a-z][a-z_]*)+$",
+      "title": "Type",
+      "type": "string"
+    },
+    "payload_schema": {
+      "title": "Payload Schema",
+      "type": "string"
+    },
+    "correlation_id": {
+      "maxLength": 80,
+      "minLength": 6,
+      "title": "Correlation Id",
+      "type": "string"
+    },
+    "causation_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Causation Id"
+    },
+    "in_reply_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "In Reply To"
+    },
+    "trace_id": {
+      "maxLength": 80,
+      "minLength": 6,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "sender": {
+      "$ref": "#/$defs/Party"
+    },
+    "receiver": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Party"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "principal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OnBehalfOf"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "permission": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Permission"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "number"
+    },
+    "deadline": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deadline"
+    },
+    "timeout_s": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 3600,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timeout S"
+    },
+    "attempt": {
+      "anyOf": [
+        {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Attempt"
+    },
+    "max_attempts": {
+      "anyOf": [
+        {
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Attempts"
+    },
+    "idempotency_key": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 8,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idempotency Key"
+    },
+    "payload": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Payload"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "message_id",
+    "kind",
+    "type",
+    "payload_schema",
+    "correlation_id",
+    "trace_id",
+    "sender",
+    "created_at"
+  ],
+  "title": "NEXA message envelope (nexa.message/1.0)",
+  "type": "object",
+  "x-nexa-types": {
+    "agent.task": {
+      "kind": "request",
+      "payload_schema": "nexa.payload.agent.task/1"
+    },
+    "agent.result": {
+      "kind": "result",
+      "payload_schema": "nexa.payload.agent.result/1"
+    },
+    "agent.error": {
+      "kind": "error",
+      "payload_schema": "nexa.payload.error/1"
+    },
+    "tool.task": {
+      "kind": "request",
+      "payload_schema": "nexa.payload.tool.task/1"
+    },
+    "tool.result": {
+      "kind": "result",
+      "payload_schema": "nexa.payload.tool.result/1"
+    },
+    "tool.error": {
+      "kind": "error",
+      "payload_schema": "nexa.payload.error/1"
+    },
+    "delegation.choice": {
+      "kind": "event",
+      "payload_schema": "nexa.payload.delegation.choice/1"
+    }
+  },
+  "x-nexa-event-prefixes": [
+    "run.",
+    "step.",
+    "route.",
+    "checkpoint.",
+    "delegate.",
+    "agent.",
+    "tool.",
+    "knowledge."
+  ],
+  "x-nexa-payloads": {
+    "nexa.payload.agent.task/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.agent.task/1: the orchestrator asks an agent for text.",
+      "properties": {
+        "role": {
+          "enum": [
+            "agent",
+            "coordinator",
+            "delegate"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "workflow": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workflow"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "prompt": {
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 2.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 8192,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        }
+      },
+      "required": [
+        "role",
+        "prompt"
+      ],
+      "title": "AgentTask",
+      "type": "object"
+    },
+    "nexa.payload.agent.result/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.agent.result/1: an agent's answer.",
+      "properties": {
+        "output": {
+          "maxLength": 100000,
+          "title": "Output",
+          "type": "string"
+        },
+        "agent_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Version"
+        },
+        "manifest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "attempts": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "output",
+        "latency_ms"
+      ],
+      "title": "AgentResult",
+      "type": "object"
+    },
+    "nexa.payload.tool.task/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.tool.task/1: the orchestrator asks the Tool Gateway to run a\ntool for an agent (NEXA-M3-004).",
+      "properties": {
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "for_agent": {
+          "title": "For Agent",
+          "type": "string"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        }
+      },
+      "required": [
+        "tool",
+        "for_agent"
+      ],
+      "title": "ToolTask",
+      "type": "object"
+    },
+    "nexa.payload.tool.result/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.tool.result/1",
+      "properties": {
+        "call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Call Id"
+        },
+        "tool_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Version"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        },
+        "result": {
+          "additionalProperties": true,
+          "title": "Result",
+          "type": "object"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "result",
+        "latency_ms"
+      ],
+      "title": "ToolResult",
+      "type": "object"
+    },
+    "nexa.payload.delegation.choice/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.delegation.choice/1: what the orchestrator accepted (or\nrefused) from a coordinator's result. An event: the coordinator proposes,\nonly the orchestrator decides and sends the next request.",
+      "properties": {
+        "step": {
+          "title": "Step",
+          "type": "string"
+        },
+        "decision": {
+          "minimum": 1,
+          "title": "Decision",
+          "type": "integer"
+        },
+        "proposed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proposed"
+        },
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "delegate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delegate"
+        },
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Problem"
+        }
+      },
+      "required": [
+        "step",
+        "decision",
+        "accepted"
+      ],
+      "title": "DelegationChoice",
+      "type": "object"
+    },
+    "nexa.payload.workflow.event/1": {
+      "additionalProperties": false,
+      "description": "nexa.payload.workflow.event/1: a workflow event (run, step, route,\ncheckpoint); the detail is the trace entry.",
+      "properties": {
+        "workflow": {
+          "title": "Workflow",
+          "type": "string"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "seq": {
+          "minimum": 1,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "detail": {
+          "additionalProperties": true,
+          "title": "Detail",
+          "type": "object"
+        }
+      },
+      "required": [
+        "workflow",
+        "run_id",
+        "seq"
+      ],
+      "title": "RunEvent",
+      "type": "object"
+    },
+    "nexa.payload.error/1": null
+  },
+  "x-nexa-error-codes": {
+    "codes": [
+      "timeout",
+      "unavailable",
+      "refused",
+      "invalid",
+      "conflict",
+      "budget",
+      "cancelled",
+      "internal"
+    ],
+    "retryable": [
+      "timeout",
+      "unavailable"
+    ]
+  }
+}

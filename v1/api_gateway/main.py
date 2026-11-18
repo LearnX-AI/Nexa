@@ -87,8 +87,9 @@ async def _forward(
     authorization: str,
     trace_id: Optional[str] = None,
     json_body: Optional[dict[str, Any]] = None,
+    extra_headers: Optional[dict[str, str]] = None,
 ) -> JSONResponse:
-    headers = {"Authorization": authorization}
+    headers = {"Authorization": authorization, **(extra_headers or {})}
     if trace_id:
         headers[TRACE_HEADER] = trace_id
     url = f"{config.RUNTIME_URL}{path}"
@@ -213,11 +214,14 @@ async def orchestration_proxy(
         audit_event(action=f"api.orchestration.post:{request.url.path}", decision="allow",
                     principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
     query = f"?{request.url.query}" if request.url.query else ""
-    return await _forward(request.method, f"{request.url.path}{query}", authorization, trace_id, body)
+    extra = {"Idempotency-Key": request.headers["idempotency-key"][:200]} \
+        if request.headers.get("idempotency-key") else None
+    return await _forward(request.method, f"{request.url.path}{query}", authorization, trace_id, body, extra)
 
 
 @app.get("/v1/workflows", responses=_ERRORS)
 @app.get("/v1/workflow-runs", responses=_ERRORS)
+@app.get("/v1/messaging/schema", responses=_ERRORS)
 async def orchestration_list_proxy(request: Request, principal: Principal = Depends(require_principal),
                                    authorization: str = Header(...)):
     query = f"?{request.url.query}" if request.url.query else ""

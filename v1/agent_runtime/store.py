@@ -18,6 +18,8 @@ Tables
   events          append-only audit trail of every change: who, what, when.
   workflow_runs   orchestration runs (NEXA-M3-003): status, initiator, context.
   workflow_trace  append-only trace of every run: each step, decision, call.
+  messages        every nexa.message/1.0 envelope of a run, in order (NEXA-M3-005).
+  message_idempotency  idempotency keys: payload digest and result.
 """
 from __future__ import annotations
 
@@ -83,6 +85,23 @@ CREATE TABLE IF NOT EXISTS workflow_trace (
   run_id TEXT NOT NULL, seq INTEGER NOT NULL,
   ts REAL NOT NULL, step TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '{}',
   PRIMARY KEY (run_id, seq)
+);
+-- Messaging (NEXA-M3-005): every envelope of a conversation, and idempotency keys.
+CREATE TABLE IF NOT EXISTS messages (
+  correlation_id TEXT NOT NULL, seq INTEGER NOT NULL,
+  message_id TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL, type TEXT NOT NULL,
+  sender TEXT NOT NULL, receiver TEXT,
+  in_reply_to TEXT, causation_id TEXT,
+  created_at REAL NOT NULL, status TEXT, envelope TEXT NOT NULL,
+  PRIMARY KEY (correlation_id, seq)
+);
+CREATE TABLE IF NOT EXISTS message_idempotency (
+  idempotency_key TEXT PRIMARY KEY,
+  payload_digest TEXT NOT NULL,
+  request_id TEXT NOT NULL,
+  result TEXT,
+  completed_at REAL
 );
 """
 
