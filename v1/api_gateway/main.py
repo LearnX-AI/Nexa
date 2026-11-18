@@ -11,6 +11,7 @@ Run:
     uvicorn v1.api_gateway.main:app --host 127.0.0.1 --port 8099
 """
 from __future__ import annotations
+import re
 from typing import Any, Optional
 import httpx
 from fastapi import FastAPI, Depends, Header, HTTPException, Path, Request
@@ -247,3 +248,24 @@ async def agent_tool_proxy(
     audit_event(action=f"api.agents.tool:{name}:{tool}", decision="allow", principal=principal.subject,
                 roles=list(principal.roles), trace_id=trace_id)
     return await _forward("POST", f"/v1/agents/{name}/tools/{tool}", authorization, trace_id, body)
+
+
+# Session state (NEXA-M3-006): the Agent Runtime enforces who may read and
+# write which state, and logs every access.
+@app.api_route("/v1/sessions", methods=["POST"], responses=_ERRORS)
+@app.api_route("/v1/sessions/{rest:path}", methods=["GET", "PUT", "DELETE"], responses=_ERRORS)
+@app.api_route("/v1/state/{rest:path}", methods=["GET"], responses=_ERRORS)
+async def state_proxy(request: Request, principal: Principal = Depends(require_principal),
+                      authorization: str = Header(...)):
+    path = request.url.path
+    if ".." in path or not re.match(r"^/v1/(sessions|state)(/[A-Za-z0-9_./-]*)?$", path):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    body = None
+    if request.method in ("POST", "PUT"):
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="JSON body required")
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward(request.method, f"{path}{query}", authorization, getattr(request.state, "trace_id", None),
+                          body)

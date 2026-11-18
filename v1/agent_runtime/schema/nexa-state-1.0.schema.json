@@ -1,0 +1,199 @@
+{
+  "$defs": {
+    "Owner": {
+      "additionalProperties": false,
+      "properties": {
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "subject"
+      ],
+      "title": "Owner",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "nexa.state/1.0",
+      "default": "nexa.state/1.0",
+      "title": "Schema",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "session",
+        "run_checkpoint"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "owner": {
+      "$ref": "#/$defs/Owner"
+    },
+    "scope": {
+      "additionalProperties": true,
+      "description": "session: workflows; run: workflow, version, fingerprint",
+      "title": "Scope",
+      "type": "object"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "number"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "number"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "digest": {
+      "title": "Digest",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "owner",
+    "version",
+    "created_at",
+    "updated_at",
+    "data",
+    "digest"
+  ],
+  "title": "NEXA agent state record (nexa.state/1.0)",
+  "type": "object",
+  "x-nexa-memory-ref": {
+    "additionalProperties": false,
+    "description": "A pointer to long-term memory or a learner record, never its content.",
+    "properties": {
+      "service": {
+        "enum": [
+          "nexa-memory",
+          "lms"
+        ],
+        "title": "Service",
+        "type": "string"
+      },
+      "scope": {
+        "enum": [
+          "learner_profile",
+          "class_progress",
+          "lms_record"
+        ],
+        "title": "Scope",
+        "type": "string"
+      },
+      "subject": {
+        "maxLength": 200,
+        "minLength": 2,
+        "title": "Subject",
+        "type": "string"
+      },
+      "key": {
+        "maxLength": 200,
+        "minLength": 1,
+        "title": "Key",
+        "type": "string"
+      },
+      "version": {
+        "anyOf": [
+          {
+            "maxLength": 40,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Version"
+      }
+    },
+    "required": [
+      "service",
+      "scope",
+      "subject",
+      "key"
+    ],
+    "title": "MemoryRef",
+    "type": "object"
+  },
+  "x-nexa-limits": {
+    "bytes": {
+      "session": 32768,
+      "run_checkpoint": 524288
+    },
+    "max_depth": {
+      "session": 6,
+      "run_checkpoint": 16
+    },
+    "max_string": 8000,
+    "session_ttl_default_s": 86400,
+    "session_ttl_max_s": 604800,
+    "session_max_age_s": 2592000
+  },
+  "x-nexa-learner-record-keys": [
+    "address",
+    "assessment",
+    "assessments",
+    "attendance",
+    "birthdate",
+    "date_of_birth",
+    "disability",
+    "dob",
+    "email",
+    "exam_result",
+    "exam_results",
+    "grade_result",
+    "grades",
+    "guardian",
+    "home_address",
+    "mark",
+    "marks",
+    "medical",
+    "national_id",
+    "parent_contact",
+    "phone",
+    "phone_number",
+    "report_card",
+    "score",
+    "scores",
+    "student_number"
+  ]
+}

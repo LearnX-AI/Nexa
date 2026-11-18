@@ -20,6 +20,9 @@ Tables
   workflow_trace  append-only trace of every run: each step, decision, call.
   messages        every nexa.message/1.0 envelope of a run, in order (NEXA-M3-005).
   message_idempotency  idempotency keys: payload digest and result.
+  sessions        short-lived session state one user owns (NEXA-M3-006).
+  run_checkpoints versioned checkpoints of each run's state, with digests.
+  state_access    append-only log of every state read and write.
 """
 from __future__ import annotations
 
@@ -103,6 +106,28 @@ CREATE TABLE IF NOT EXISTS message_idempotency (
   result TEXT,
   completed_at REAL
 );
+-- State (NEXA-M3-006): sessions, run checkpoints, and who accessed which state.
+CREATE TABLE IF NOT EXISTS sessions (
+  session_id TEXT PRIMARY KEY,
+  owner TEXT NOT NULL, owner_roles TEXT NOT NULL, workflows TEXT NOT NULL,
+  version INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL,
+  expires_at REAL NOT NULL, max_expires_at REAL NOT NULL, ttl_s INTEGER NOT NULL,
+  data TEXT NOT NULL, digest TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_by_owner ON sessions (owner);
+CREATE TABLE IF NOT EXISTS run_checkpoints (
+  run_id TEXT NOT NULL, version INTEGER NOT NULL,
+  step TEXT, status TEXT NOT NULL, scope TEXT NOT NULL, owner TEXT NOT NULL,
+  created_at REAL NOT NULL, data TEXT NOT NULL, digest TEXT NOT NULL,
+  PRIMARY KEY (run_id, version)
+);
+CREATE TABLE IF NOT EXISTS state_access (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts REAL NOT NULL, actor TEXT NOT NULL, roles TEXT NOT NULL,
+  action TEXT NOT NULL, kind TEXT NOT NULL, target TEXT NOT NULL,
+  version INTEGER, keys TEXT, via TEXT, decision TEXT NOT NULL, reason TEXT, trace_id TEXT
+);
+CREATE INDEX IF NOT EXISTS state_access_by_target ON state_access (target, seq);
 """
 
 

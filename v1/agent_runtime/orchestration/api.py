@@ -24,6 +24,7 @@ from v1.identity.rbac import can
 
 from ..auth import require_principal
 from ..messaging import bus, contract as mc
+from ..state import store as state
 from . import engine
 
 router = APIRouter(tags=["orchestration"])
@@ -31,6 +32,7 @@ router = APIRouter(tags=["orchestration"])
 
 class StartRun(BaseModel):
     input: dict[str, Any]
+    session_id: Optional[str] = Field(None, max_length=60, description="Session state to use (NEXA-M3-006).")
 
 
 class Decision(BaseModel):
@@ -76,7 +78,8 @@ async def start_run(workflow_id: str, body: StartRun, request: Request, wait: bo
                     authorization: Optional[str] = Header(default=None),
                     idempotency_key: Optional[str] = Header(default=None, max_length=200)):
     out = await _do(engine.start(workflow_id, principal, body.input, auth=authorization, wait=wait,
-                                 trace_id=getattr(request.state, "trace_id", None), idempotency_key=idempotency_key))
+                                 trace_id=getattr(request.state, "trace_id", None), idempotency_key=idempotency_key,
+                                 session_id=body.session_id))
     if out.get("duplicate"):
         return JSONResponse(status_code=200, content=out)
     if not wait:
@@ -106,6 +109,24 @@ async def run_messages(run_id: str, principal: Principal = Depends(require_princ
     if run is None or not engine.may_view(run, principal):
         raise HTTPException(status_code=404, detail=f"Unknown run: {run_id}")
     return {"run_id": run_id, "check": bus.check_conversation(run_id), "messages": bus.conversation(run_id)}
+
+
+@router.post("/v1/workflow-runs/{run_id}/resume")
+async def resume_run(run_id: str, wait: bool = True, principal: Principal = Depends(require_principal),
+                     authorization: Optional[str] = Header(default=None)):
+    """Resume an interrupted run from its last valid checkpoint (the person who
+    started it, with their own session)."""
+    return await _do(engine.resume(run_id, principal, auth=authorization, wait=wait))
+
+
+@router.get("/v1/workflow-runs/{run_id}/checkpoints")
+async def run_checkpoints(run_id: str, principal: Principal = Depends(require_principal)):
+    run = engine.load_run(run_id)
+    if run is None or not engine.may_view(run, principal):
+        raise HTTPException(status_code=404, detail=f"Unknown run: {run_id}")
+    state.log_access(principal, "read", "run", run_id, keys=["checkpoints"])
+    return {"run_id": run_id, "checkpoints": state.checkpoints(run_id), "resumable": engine.resumable(run) is None
+            if run.status == "interrupted" else False}
 
 
 @router.get("/v1/messaging/schema")

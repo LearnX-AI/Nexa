@@ -195,7 +195,7 @@ TYPES: dict[str, tuple[str, str]] = {
     "tool.error": ("error", "nexa.payload.error/1"),
     "delegation.choice": ("event", "nexa.payload.delegation.choice/1"),
 }
-EVENT_PREFIXES = ("run.", "step.", "route.", "checkpoint.", "delegate.", "agent.", "tool.", "knowledge.")
+EVENT_PREFIXES = ("run.", "step.", "route.", "checkpoint.", "delegate.", "agent.", "tool.", "knowledge.", "session.")
 
 
 def event_type_ok(t: str) -> bool:
