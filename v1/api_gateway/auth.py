@@ -38,6 +38,9 @@ async def require_principal(
         claims = verify_token(token)
     except TokenError:
         raise _deny(request, 401, "Invalid token")
+    if claims.get("typ") == "delegated":
+        # Delegated tokens (NEXA-M3-007) are for the Tool Gateway only.
+        raise _deny(request, 401, "A delegated token cannot be used here")
     return Principal(
         subject=claims["sub"],
         roles=tuple(claims.get("roles", ())),

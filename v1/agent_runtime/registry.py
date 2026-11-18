@@ -504,6 +504,9 @@ def reload(path: Optional[str] = None, directory: Optional[str] = None) -> Regis
     REGISTRY = Registry(Store(path))
     REGISTRY.seed(directory or os.environ.get("NEXA_AGENT_MANIFEST_DIR") or mf.AGENTS_DIR)
     _refresh()
+    # The agent policies (NEXA-M3-007) are checked against these manifests.
+    from .policy import pdp
+    pdp.load(os.environ.get("NEXA_AGENT_POLICY_DIR"))
     return REGISTRY
 
 

@@ -52,10 +52,20 @@ _SCOPE_ADMINS = {"admin", "platform_admin", "national_admin"}
 NARROWING = ("subjects", "grades", "languages", "source_types", "module_codes", "topic_codes", "scopes")
 
 
+# A delegated token (NEXA-M3-007) carries the user's roles but only the scopes
+# the agent's policy granted; it reaches no more than those scopes allow.
+DELEGATED_SCOPE_ACCESS = {"curriculum.learner": _LEARNER, "curriculum.teacher": _STAFF}
+
+
 def allowed_classes(principal: Principal) -> set[str]:
     out: set[str] = set()
     for r in principal.roles:
         out |= ROLE_ACCESS.get(r, set())
+    if principal.token_type == "delegated":
+        reach: set[str] = set()
+        for s in principal.attrs.get("scope") or ():
+            reach |= DELEGATED_SCOPE_ACCESS.get(s, set())
+        out &= reach
     return out
 
 

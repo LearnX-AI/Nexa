@@ -9,13 +9,13 @@ import time
 from typing import Any, Optional
 
 from v1.identity.principal import Principal
-from v1.identity.rbac import can
 from v1.observability import new_trace_id, audit_event
 
 import asyncio
 import contextvars
 
 from . import registry, gateway_client
+from .policy import pdp
 from .schemas import RunResponse
 
 
@@ -78,13 +78,15 @@ async def _run_agent(name, principal, messages, temperature, max_tokens, trace_i
         if agent.state == "suspended":
             raise AgentRuntimeError(423, f"Agent {name} is suspended")
         raise AgentRuntimeError(409, f"Agent {name} is not active (state: {agent.state})")
-    role_ok = not agent.allowed_roles or bool(set(principal.roles) & set(agent.allowed_roles))
-    if not role_ok or not can(principal, agent.required_permission):
+    # The agent policy decision point (NEXA-M3-007): default deny, role,
+    # permission; recorded with the rule that decided.
+    decision = pdp.authorize_run(agent, principal, trace_id=trace_id, run_id=(caller or {}).get("run_id"))
+    if not decision.allow:
         audit_event(
             action=f"agent.run:{name}", decision="deny", principal=principal.subject,
-            permission=agent.required_permission, trace_id=trace_id,
+            permission=agent.required_permission, trace_id=trace_id, rule=decision.rule,
         )
-        raise AgentRuntimeError(403, "Not permitted")
+        raise AgentRuntimeError(decision.status, "Not permitted")
     audit_event(
         action=f"agent.run:{name}", decision="allow", principal=principal.subject,
         permission=agent.required_permission, trace_id=trace_id,
@@ -103,6 +105,8 @@ async def _run_agent(name, principal, messages, temperature, max_tokens, trace_i
         output = data["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError):
         output = ""
+    output = pdp.redact(name, agent.version, output, principal, trace_id=trace_id,
+                        run_id=(caller or {}).get("run_id"))
 
     x_nexa = data.get("x_nexa") if isinstance(data, dict) else None
     if not isinstance(x_nexa, dict):

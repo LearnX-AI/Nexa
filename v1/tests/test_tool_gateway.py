@@ -28,6 +28,13 @@ def tok(p):
     return tokens.issue_token(p.subject, list(p.roles), "user", 600)
 
 
+def delegated(user, agent, version, scopes):
+    """What the Agent Runtime sends the gateway (NEXA-M3-007): a token naming
+    the agent, for the gateway, with the scopes the agent's policy granted."""
+    return tokens.issue_token(user.subject, list(user.roles), "delegated", 120, extra={
+        "act": f"agent:{agent}@{version}", "scope": scopes, "nexa_aud": "nexa-tool-gateway"})
+
+
 def hdr(p):
     return {"Authorization": f"Bearer {tok(p)}"}
 
@@ -156,8 +163,10 @@ def test_mcp_tool_with_an_isolated_service_credential(world, rt):
     # The manifest does not grant glossary: the runtime refuses before the gateway.
     assert r.status_code == 403 and audit(tool="glossary") == []
     # Called for an agent that is granted it (gateway-level), the MCP path works.
-    caller = gateway.Caller(Principal("svc:agent-runtime", ("service",)), STUDENT, tok(STUDENT),
-                            "nexa-curriculum-tutor", "0.2.0", None, None, "t-mcp")
+    dtok = delegated(STUDENT, "nexa-curriculum-tutor", "0.2.0", ["lookup"])
+    caller = gateway.Caller(Principal("svc:agent-runtime", ("service",)), STUDENT, dtok,
+                            "nexa-curriculum-tutor", "0.2.0", None, None, "t-mcp",
+                            delegation=tokens.verify_token(dtok))
     out = asyncio.run(gateway.invoke("glossary", caller, {"term": "osmosis"}))
     assert out["result"]["text"] == "osmosis: a word in the glossary" and out["result"]["server"] == "glossary-mcp"
     methods = [json.loads(x.content)["method"] for x in world.seen]
@@ -188,10 +197,16 @@ def test_only_the_runtime_may_call_the_gateway(world):
 
 
 def svc_call(agent, user, tool, args, scopes=None):
+    """As the Agent Runtime would call: a delegated token for the agent. Its
+    scopes are the ones asked for (or the tool's defaults), so the gateway's
+    own checks are what this exercises."""
     gw = TestClient(tool_app)
+    version = registry.AGENTS[agent].version if agent in registry.AGENTS else "0.0.0"
+    granted = scopes or (list(gateway.TOOLS[tool].default_scopes) if tool in gateway.TOOLS else [])
     return gw.post(f"/v1/tools/{tool}/invoke", json={"arguments": args, **({"scopes": scopes} if scopes else {})},
                    headers={"Authorization": f"Bearer {rt_config.GATEWAY_TOKEN}",
-                            "X-NEXA-On-Behalf-Of": f"Bearer {tok(user)}", "X-NEXA-Agent": agent})
+                            "X-NEXA-On-Behalf-Of": f"Bearer {delegated(user, agent, version, granted)}",
+                            "X-NEXA-Agent": agent, "X-NEXA-Agent-Version": version})
 
 
 def test_allowlist_permission_scopes_and_arguments(world):

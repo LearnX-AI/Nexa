@@ -25,10 +25,15 @@ async def require_principal(
         claims = verify_token(token)
     except TokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    # A delegated token (NEXA-M3-007) reaches the Knowledge Service only through
+    # the Tool Gateway, and only with the scopes the agent's policy granted.
+    if claims.get("typ") == "delegated" and claims.get("nexa_aud") != "nexa-tool-gateway":
+        raise HTTPException(status_code=401, detail="This delegated token is not for this service")
     return Principal(
         subject=claims["sub"],
         roles=tuple(claims.get("roles", ())),
         token_type=claims.get("typ", "service"),
         school_id=claims.get("school_id"),
-        attrs={k: claims[k] for k in ("lms_site", "lms_national", "class_ids") if k in claims},
+        attrs={k: claims[k] for k in ("lms_site", "lms_national", "class_ids", "act", "scope", "run_id")
+               if k in claims},
     )

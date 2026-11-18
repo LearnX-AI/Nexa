@@ -1,0 +1,17 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-tutor",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "General explanations for students and teachers. It reads no curriculum store and uses no tools; in the lesson explainer it receives delegated explanation work. It serves minors, so personal data is removed from its output.",
+  "read": {
+    "knowledge_classes": []
+  },
+  "write": [],
+  "invoke": {},
+  "delegate": [],
+  "accept_delegation": true,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}

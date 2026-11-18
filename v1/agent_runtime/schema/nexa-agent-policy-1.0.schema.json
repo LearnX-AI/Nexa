@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "Read": {
+      "additionalProperties": false,
+      "properties": {
+        "knowledge_classes": {
+          "items": {
+            "enum": [
+              "learner",
+              "teacher_only",
+              "restricted"
+            ],
+            "type": "string"
+          },
+          "title": "Knowledge Classes",
+          "type": "array"
+        }
+      },
+      "title": "Read",
+      "type": "object"
+    },
+    "Sensitive": {
+      "additionalProperties": false,
+      "properties": {
+        "redact_personal_data": {
+          "default": true,
+          "title": "Redact Personal Data",
+          "type": "boolean"
+        }
+      },
+      "title": "Sensitive",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "policy_version": {
+      "const": "nexa.agent-policy/1.0",
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "agent": {
+      "title": "Agent",
+      "type": "string"
+    },
+    "owner": {
+      "minLength": 2,
+      "title": "Owner",
+      "type": "string"
+    },
+    "rationale": {
+      "description": "Why the agent needs what it is granted.",
+      "maxLength": 1000,
+      "minLength": 10,
+      "title": "Rationale",
+      "type": "string"
+    },
+    "read": {
+      "$ref": "#/$defs/Read"
+    },
+    "write": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Write",
+      "type": "array"
+    },
+    "invoke": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Invoke",
+      "type": "object"
+    },
+    "delegate": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Delegate",
+      "type": "array"
+    },
+    "accept_delegation": {
+      "default": false,
+      "title": "Accept Delegation",
+      "type": "boolean"
+    },
+    "tenancy": {
+      "const": "user_school",
+      "default": "user_school",
+      "title": "Tenancy",
+      "type": "string"
+    },
+    "sensitive": {
+      "$ref": "#/$defs/Sensitive"
+    }
+  },
+  "required": [
+    "policy_version",
+    "agent",
+    "owner",
+    "rationale"
+  ],
+  "title": "NEXA agent policy (nexa.agent-policy/1.0)",
+  "type": "object",
+  "x-nexa-scope-classes": {
+    "curriculum.learner": "learner",
+    "curriculum.teacher": "teacher_only"
+  }
+}

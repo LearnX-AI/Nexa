@@ -20,7 +20,10 @@ class TokenError(Exception):
 # user to one school's local content; lms_site and lms_national bind an LMS
 # sync token to one LMS site and say whether it may publish national content
 # (NEXA-M2-007).
-EXTRA_CLAIMS = ("school_id", "class_ids", "lms_site", "lms_national")
+# act, scope, nexa_aud and run_id make a delegated token (NEXA-M3-007): the
+# Agent Runtime acting for a user as one agent, for one service, with only the
+# scopes the agent's policy grants, for a minute or two.
+EXTRA_CLAIMS = ("school_id", "class_ids", "lms_site", "lms_national", "act", "scope", "nexa_aud", "run_id")
 _RESERVED = {"sub", "roles", "typ", "iss", "aud", "iat", "exp"}
 
 

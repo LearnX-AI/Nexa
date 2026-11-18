@@ -44,12 +44,18 @@ async def _startup():
     preflight("nexa-tool-gateway", ["NEXA_IDENTITY_SECRET"])
 
 
-def _principal(token: str) -> Principal:
+def _claims(token: str) -> dict:
     try:
-        c = verify_token(token)
+        return verify_token(token)
     except TokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
-    return Principal(subject=c["sub"], roles=tuple(c.get("roles", ())), token_type=c.get("typ", "service"))
+
+
+def _principal(token: str) -> Principal:
+    c = _claims(token)
+    return Principal(subject=c["sub"], roles=tuple(c.get("roles", ())), token_type=c.get("typ", "service"),
+                     school_id=c.get("school_id"),
+                     attrs={k: c[k] for k in ("class_ids", "act", "scope", "run_id") if k in c})
 
 
 async def bearer(authorization: Optional[str] = Header(default=None)) -> Principal:
@@ -117,7 +123,8 @@ async def invoke(tool_id: str, body: Invoke, request: Request, service: Principa
     user = _principal(user_token)
     caller = gateway.Caller(service=service, user=user, user_token=user_token, agent=x_nexa_agent,
                             agent_version=x_nexa_agent_version, run_id=x_nexa_run, step=x_nexa_step,
-                            trace_id=getattr(request.state, "trace_id", None) or request.headers.get(TRACE_HEADER))
+                            trace_id=getattr(request.state, "trace_id", None) or request.headers.get(TRACE_HEADER),
+                            delegation=_claims(user_token))
     try:
         return await gateway.invoke(tool_id, caller, body.arguments, body.scopes)
     except gateway.GatewayError as exc:

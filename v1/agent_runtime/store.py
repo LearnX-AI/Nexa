@@ -23,6 +23,7 @@ Tables
   sessions        short-lived session state one user owns (NEXA-M3-006).
   run_checkpoints versioned checkpoints of each run's state, with digests.
   state_access    append-only log of every state read and write.
+  policy_decisions every agent policy decision, allowed or denied (NEXA-M3-007).
 """
 from __future__ import annotations
 
@@ -128,6 +129,16 @@ CREATE TABLE IF NOT EXISTS state_access (
   version INTEGER, keys TEXT, via TEXT, decision TEXT NOT NULL, reason TEXT, trace_id TEXT
 );
 CREATE INDEX IF NOT EXISTS state_access_by_target ON state_access (target, seq);
+-- Agent policy decisions (NEXA-M3-007): every allow and deny, with its rule.
+CREATE TABLE IF NOT EXISTS policy_decisions (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  decision_id TEXT NOT NULL, ts REAL NOT NULL,
+  agent TEXT, agent_version TEXT, actor TEXT NOT NULL, roles TEXT NOT NULL, tenant TEXT,
+  action TEXT NOT NULL, resource TEXT NOT NULL, decision TEXT NOT NULL, rule TEXT NOT NULL,
+  reason TEXT, trace_id TEXT, run_id TEXT, detail TEXT
+);
+CREATE INDEX IF NOT EXISTS policy_decisions_by_agent ON policy_decisions (agent, seq);
+CREATE INDEX IF NOT EXISTS policy_decisions_by_trace ON policy_decisions (trace_id);
 """
 
 

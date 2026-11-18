@@ -1,0 +1,20 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-precise",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Precise answers and worked examples. Coordinates the lesson explainer: it may hand explanation work to nexa-tutor and worked examples to itself, nothing else. No tools, no curriculum store; serves minors, so its output is redacted.",
+  "read": {
+    "knowledge_classes": []
+  },
+  "write": [],
+  "invoke": {},
+  "delegate": [
+    "nexa-tutor",
+    "nexa-precise"
+  ],
+  "accept_delegation": true,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}

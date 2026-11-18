@@ -28,6 +28,7 @@ import httpx
 
 from v1.identity.principal import Principal
 from v1.identity.rbac import can
+from v1.identity.tokens import issue_token
 from v1.observability import TRACE_HEADER, audit_event, span
 
 from . import config
@@ -51,6 +52,8 @@ class ToolSpec:
 
 
 TOOLS: dict[str, ToolSpec] = {}
+CONTRACTS: dict = {}            # tool id -> its nexa.tool/1.0 contract (scopes, side effects)
+DELEGATION_TTL_S = 120
 
 
 def load_catalog(directory: Optional[str] = None) -> dict[str, ToolSpec]:
@@ -59,6 +62,8 @@ def load_catalog(directory: Optional[str] = None) -> dict[str, ToolSpec]:
     tools, _ = ct.load(directory or os.environ.get("NEXA_TOOL_DIR") or ct.TOOLS_DIR,
                        os.environ.get("NEXA_CONNECTOR_DIR") or ct.CONNECTORS_DIR)
     TOOLS.clear()
+    CONTRACTS.clear()
+    CONTRACTS.update(tools)
     for t in tools.values():
         TOOLS[t.id] = ToolSpec(t.id, t.description, t.permission, t.state == "active", t.version)
     return TOOLS
@@ -120,13 +125,26 @@ async def invoke_tool(agent_name: str, tool_name: str, principal: Principal, arg
         raise deny(503, f"Tool {tool_name} is not available", reason="tool not active")
     if not user_token:
         raise deny(401, "A tool call needs the user's own session", reason="no user token")
+    # The agent's least privilege (NEXA-M3-007): its policy decides the scopes.
+    from .policy import pdp
+    decision, scopes = pdp.authorize_invoke(agent_name, agent.version, tool_name, scopes, principal,
+                                            trace_id=trace_id, run_id=run_id)
+    if not decision.allow:
+        raise deny(decision.status, decision.reason, reason=f"policy:{decision.rule}",
+                   decision_id=decision.decision_id)
     if not _count(run_id, agent_name, tool_name, grant.max_calls_per_run):
         raise deny(429, f"{agent_name} may call {tool_name} at most {grant.max_calls_per_run} times in one run",
                    reason="max_calls_per_run")
     audit_event(action=action, decision="allow", principal=principal.subject, permission=grant.permission,
                 trace_id=trace_id, run_id=run_id)
-    headers = {"Authorization": f"Bearer {config.GATEWAY_TOKEN}",
-               "X-NEXA-On-Behalf-Of": user_token if user_token.startswith("Bearer ") else f"Bearer {user_token}",
+    # Not the user's own token: a delegated one, naming this agent, with only
+    # the scopes just decided, for the Tool Gateway, for two minutes.
+    delegated = issue_token(principal.subject, list(principal.roles), "delegated", DELEGATION_TTL_S, extra={
+        **({"school_id": principal.school_id} if principal.school_id else {}),
+        **({"class_ids": principal.attrs["class_ids"]} if principal.attrs.get("class_ids") else {}),
+        "act": pdp.identity(agent_name, agent.version), "scope": scopes, "nexa_aud": "nexa-tool-gateway",
+        **({"run_id": run_id} if run_id else {})})
+    headers = {"Authorization": f"Bearer {config.GATEWAY_TOKEN}", "X-NEXA-On-Behalf-Of": f"Bearer {delegated}",
                "X-NEXA-Agent": agent_name, "X-NEXA-Agent-Version": agent.version}
     if run_id:
         headers["X-NEXA-Run"] = run_id
@@ -134,7 +152,7 @@ async def invoke_tool(agent_name: str, tool_name: str, principal: Principal, arg
         headers["X-NEXA-Step"] = step
     if trace_id:
         headers[TRACE_HEADER] = trace_id
-    body = {"arguments": args or {}, **({"scopes": scopes} if scopes else {})}
+    body = {"arguments": args or {}, "scopes": scopes}
     with span(f"tool.{tool_name}", trace_id, agent=agent_name):
         try:
             async with httpx.AsyncClient(timeout=200.0, transport=TRANSPORT) as client:
