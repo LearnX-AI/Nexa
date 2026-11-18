@@ -100,6 +100,10 @@ jobs:
         run: |
           python -c "import json; from v1.agent_runtime.messaging import contract as mc; print(json.dumps(mc.json_schema(), indent=2))" | diff - v1/agent_runtime/schema/nexa-message-1.0.schema.json
 
+      - name: State contract (NEXA-M3-006)
+        run: |
+          python -c "import json; from v1.agent_runtime.state import contract as sc; print(json.dumps(sc.json_schema(), indent=2))" | diff - v1/agent_runtime/schema/nexa-state-1.0.schema.json
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published

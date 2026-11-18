@@ -32,6 +32,12 @@ workflow's budget: steps, agent calls, wall time.
 
 Templates are plain substitution, {{input.x}} or {{steps.<step>.<field>}}:
 no expressions, nothing evaluated.
+
+Session state (NEXA-M3-006): a workflow may declare the session keys it reads
+({{session.<key>}} in templates, a snapshot taken when the run starts) and
+the keys it writes when the run succeeds (key -> template). It can use a
+session only if the session's owner named the workflow; no other keys are
+visible or writable.
 """
 from __future__ import annotations
 
@@ -195,6 +201,29 @@ Step = Annotated[Union[AgentStep, KnowledgeStep, ToolStep, RouteStep, DelegateSt
                  Field(discriminator="type")]
 
 
+class SessionUse(Strict):
+    read: list[str] = Field(default_factory=list, max_length=20)
+    write: dict[str, str] = Field(default_factory=dict, max_length=20)
+
+    @field_validator("read")
+    @classmethod
+    def _keys(cls, v: list[str]) -> list[str]:
+        for k in v:
+            if not re.match(r"^[a-z][a-z0-9_]{0,40}$", k):
+                raise ValueError(f"session key {k!r} is lower snake case")
+        return v
+
+    @field_validator("write")
+    @classmethod
+    def _wkeys(cls, v: dict[str, str]) -> dict[str, str]:
+        for k, t in v.items():
+            if not re.match(r"^[a-z][a-z0-9_]{0,40}$", k):
+                raise ValueError(f"session key {k!r} is lower snake case")
+            if len(t) > 2000:
+                raise ValueError(f"session.write.{k}: template too long")
+        return v
+
+
 class Workflow(Strict):
     workflow_version: Literal["nexa.workflow/1.0"]
     id: str
@@ -213,6 +242,7 @@ class Workflow(Strict):
     start: str
     steps: list[Step] = Field(min_length=1)
     output: str = Field("{{last.output}}", description="The run's final output (template); last = the last step.")
+    session: Optional[SessionUse] = Field(None, description="Session keys read at start and written on success.")
 
     @field_validator("id")
     @classmethod
@@ -268,7 +298,9 @@ class Workflow(Strict):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not an input field")
                     if head == "steps" and rest.split(".")[0] not in ids:
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} names an unknown step")
-                    if head not in ("input", "steps", "task", "last", "review"):
+                    if head == "session" and rest.split(".")[0] not in (self.session.read if self.session else []):
+                        raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not a session key the workflow reads")
+                    if head not in ("input", "steps", "task", "last", "review", "session"):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not a known template value")
         # Knowledge and tool steps use the user's own session, which is never
         # stored; after a checkpoint the run continues without it.
@@ -283,6 +315,13 @@ class Workflow(Strict):
         late = sorted(s.id for s in self.steps if isinstance(s, (KnowledgeStep, ToolStep)) and s.id in after)
         if late:
             raise ValueError(f"knowledge and tool steps cannot come after a checkpoint: {late}")
+        for k, t in (self.session.write.items() if self.session else []):
+            for ref in TEMPLATE.findall(t):
+                head, _, rest = ref.partition(".")
+                if head not in ("input", "steps", "last", "review", "session"):
+                    raise ValueError(f"session.write.{k}: {{{{{ref}}}}} is not a known template value")
+                if head == "steps" and rest.split(".")[0] not in ids:
+                    raise ValueError(f"session.write.{k}: {{{{{ref}}}}} names an unknown step")
         if self.pattern == "bounded_multi_agent" and not any(isinstance(s, DelegateStep) for s in self.steps):
             raise ValueError("a bounded_multi_agent workflow has a delegate step")
         return self

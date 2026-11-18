@@ -43,6 +43,7 @@ from v1.observability import audit_event, new_trace_id
 
 from .. import presence, registry, runtime, tools
 from ..messaging import bus, contract as mc
+from ..state import contract as sc, store as state
 from . import workflow as wfm
 
 log = logging.getLogger("nexa.agent_runtime.orchestration")
@@ -176,6 +177,15 @@ class Run:
                        "counters = ?, waiting_until = ?, updated_at = ? WHERE run_id = ?",
                        (self.status, json.dumps(self.ctx, ensure_ascii=False), self.current, self.output,
                         self.error, json.dumps(self.counters), self.waiting_until, time.time(), self.run_id))
+        # A versioned, digested checkpoint of the run's state (NEXA-M3-006):
+        # what a resume starts from. Never holds the user's token.
+        rec = state.write_checkpoint(
+            self.run_id, self.principal,
+            {"workflow": self.workflow_id, "workflow_version": self.workflow_version,
+             "fingerprint": self.wf.fingerprint() if self.wf else None},
+            {"ctx": self.ctx, "current": self.current, "counters": self.counters, "status": self.status,
+             "waiting_until": self.waiting_until}, self.current, self.status)
+        self.checkpoint_version = rec.version
 
     def trace(self, kind: str, step: Optional[str] = None, **detail: Any) -> None:
         with _store().tx() as db:
@@ -209,6 +219,11 @@ def view(run: Run, *, with_trace: bool = False) -> dict[str, Any]:
            "input": run.input, "current_step": run.current, "output": run.output, "error": run.error,
            "counters": run.counters, "created_at": run.created_at,
            "steps": {k: {f: v for f, v in s.items() if f != "prompt"} for k, s in run.ctx["steps"].items()}}
+    if run.status == "interrupted":
+        out["resumable"] = resumable(run) is None
+        out["not_resumable_because"] = resumable(run)
+    if run.ctx.get("_session"):
+        out["session"] = run.ctx["_session"]["id"]
     if run.status == "waiting_approval" and run.wf is not None:
         cp = run.wf.step(run.current)
         out["checkpoint"] = {"step": run.current, "title": cp.title, "approver_roles": cp.approver_roles,
@@ -245,15 +260,71 @@ def list_runs(principal: Principal, status: Optional[str] = None, limit: int = 5
 
 
 def mark_interrupted() -> int:
-    """At start: runs that were executing when the runtime stopped cannot be
-    resumed safely (an agent call may have been half done)."""
+    """At start: runs that were executing when the runtime stopped. They are
+    not continued blindly: the person who started one resumes it (resume()),
+    from its last checkpoint, with their own session (NEXA-M3-006)."""
     rows = _store().query("SELECT run_id FROM workflow_runs WHERE status = 'running'")
     for r in rows:
         run = load_run(r["run_id"])
-        run.status, run.error = "interrupted", "the Agent Runtime restarted while the run was executing"
-        run.save()
+        run.status = "interrupted"
+        run.error = "the Agent Runtime restarted while the run was executing; it can be resumed"
+        with _store().tx() as db:
+            db.execute("UPDATE workflow_runs SET status = 'interrupted', error = ?, updated_at = ? WHERE run_id = ?",
+                       (run.error, time.time(), run.run_id))
         run.trace("run.interrupted", run.current)
     return len(rows)
+
+
+def resumable(run: Run) -> Optional[str]:
+    """None if the run can resume; otherwise why not."""
+    if run.status != "interrupted":
+        return f"the run is {run.status}"
+    if run.wf is None:
+        return f"workflow {run.workflow_id} is no longer loaded"
+    cp = state.latest_valid_checkpoint(run.run_id)
+    if cp is None:
+        return "no valid checkpoint"
+    if cp[1].get("fingerprint") != run.wf.fingerprint():
+        return "the workflow changed since the run started; it cannot resume on a different definition"
+    return None
+
+
+async def resume(run_id: str, principal: Principal, *, auth: Optional[str] = None,
+                 wait: bool = True) -> dict[str, Any]:
+    """Continue an interrupted run from its newest valid checkpoint. The step
+    that was executing runs again: work it had finished is not redone, because
+    every agent and tool request repeats its idempotency key (NEXA-M3-005)."""
+    run = load_run(run_id)
+    if run is None or principal.subject != (run.principal.subject if run else None):
+        if run is not None:
+            state.log_access(principal, "resume", "run", run_id, decision="deny", reason="not the run's initiator")
+        raise OrchestrationError(404, f"Unknown run: {run_id}")
+    why = resumable(run)
+    if why:
+        state.log_access(principal, "resume", "run", run_id, decision="deny", reason=why)
+        raise OrchestrationError(409, f"Run {run_id} cannot resume: {why}")
+    version, scope, data = state.latest_valid_checkpoint(run_id)
+    with _store().tx() as db:
+        changed = db.execute("UPDATE workflow_runs SET status = 'running', updated_at = ? WHERE run_id = ? AND "
+                             "status = 'interrupted'", (time.time(), run_id)).rowcount
+    if not changed:
+        raise OrchestrationError(409, f"Run {run_id} is already being resumed")
+    run.ctx, run.current, run.counters = data["ctx"], data["current"], data["counters"]
+    run.waiting_until = data.get("waiting_until")
+    run.status, run.error, run.auth = "running", None, auth
+    if data.get("status") == "waiting_approval":
+        run.status = "waiting_approval"     # it was paused at a checkpoint: it waits again
+    state.log_access(principal, "resume", "run", run_id, version=version, keys=["ctx", "current", "counters"])
+    run.trace("run.resumed", run.current, checkpoint=version, checkpoint_status=data.get("status"))
+    run.save()
+    if run.status == "running":
+        if wait:
+            await advance(run)
+        else:
+            task = asyncio.create_task(advance(run))
+            _TASKS.add(task)
+            task.add_done_callback(_TASKS.discard)
+    return view(load_run(run_id))
 
 
 # ---------------------------------------------------------------- starting and deciding
@@ -263,7 +334,7 @@ _TASKS: set[asyncio.Task] = set()
 
 async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], *, auth: Optional[str] = None,
                 wait: bool = True, trace_id: Optional[str] = None,
-                idempotency_key: Optional[str] = None) -> dict[str, Any]:
+                idempotency_key: Optional[str] = None, session_id: Optional[str] = None) -> dict[str, Any]:
     if runtime.active_run() is not None:
         raise OrchestrationError(409, "a workflow cannot be started from inside an agent run")
     wf = WORKFLOWS.get(workflow_id)
@@ -283,6 +354,16 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
             problems.append(f"input {k!r} is longer than {MAX_TEXT[kind]} characters")
     if problems:
         raise OrchestrationError(422, problems)
+    if session_id and not wf.session:
+        raise OrchestrationError(422, f"workflow {workflow_id} does not use session state")
+    snapshot: dict[str, Any] = {}
+    session_ref = None
+    if session_id:
+        try:
+            rec = state.read_session(session_id, principal, keys=wf.session.read, via=wf.id, trace_id=trace_id)
+        except sc.StateError as exc:
+            raise OrchestrationError(exc.status_code, exc.detail)
+        snapshot, session_ref = rec.data, {"id": session_id, "version": rec.version}
     # Idempotent start (NEXA-M3-005): the same key from the same user with the
     # same input returns the run already started; with other input it is refused.
     ikey = f"run-start/{principal.subject}/{idempotency_key}" if idempotency_key else None
@@ -302,7 +383,9 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
                    "initiator, initiator_roles, trace_id, input, context, current_step, counters, created_at, "
                    "updated_at) VALUES (?,?,?,?,'running',?,?,?,?,?,?,?,?,?)",
                    (run_id, wf.id, wf.version, wf.fingerprint(), principal.subject, json.dumps(list(principal.roles)),
-                    trace_id, json.dumps(inputs, ensure_ascii=False), json.dumps({"steps": {}}), wf.start,
+                    trace_id, json.dumps(inputs, ensure_ascii=False),
+                    json.dumps({"steps": {}, **({"session": snapshot, "_session": session_ref} if session_ref else {})},
+                               ensure_ascii=False), wf.start,
                     json.dumps({"steps": 0, "agent_calls": 0, "running_s": 0.0}), now, now))
     if ikey:
         with _store().tx() as db:
@@ -310,6 +393,7 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
                        "VALUES (?,?,?,?)", (ikey, dig, run_id, now))
     run = load_run(run_id)
     run.auth = auth
+    run.save()                     # checkpoint 1: nothing done yet, resume starts at the first step
     run.trace("run.started", None, workflow=wf.id, version=wf.version, fingerprint=wf.fingerprint(),
               pattern=wf.pattern, initiator=principal.subject, roles=list(principal.roles),
               budget=wf.budget.model_dump(), location=presence.location())
@@ -377,10 +461,39 @@ async def decide(run_id: str, principal: Principal, decision: str, comment: str 
     return view(load_run(run_id))
 
 
+def _write_session(run: Run) -> None:
+    """Hand the declared keys to the session when the run succeeds."""
+    ref = run.ctx.get("_session")
+    if not (ref and run.wf.session and run.wf.session.write):
+        return
+    updates = {k: render(t, run.template_ctx)[:2000] for k, t in run.wf.session.write.items()}
+    expected = ref["version"]
+    for attempt in (1, 2):
+        try:
+            rec = state.write_session(ref["id"], run.principal, updates, expected_version=expected, via=run.wf.id,
+                                      allowed_keys=set(run.wf.session.write), trace_id=run.trace_id)
+            run.trace("session.written", None, session=ref["id"], version=rec.version, keys=sorted(updates))
+            return
+        except sc.StateError as exc:
+            if exc.status_code == 409 and attempt == 1:
+                # Another run wrote in between. Its other keys stand; ours are
+                # declared by this workflow, so write them on the new version.
+                cur = state.load_session_raw(ref["id"])
+                if cur is None:
+                    break
+                run.trace("session.conflict", None, session=ref["id"], expected=expected, found=cur.version)
+                expected = cur.version
+                continue
+            run.trace("session.write_refused", None, session=ref["id"], status=exc.status_code,
+                      reason=str(exc.detail)[:300])
+            return
+
+
 def _finish(run: Run, status: str, error: Optional[str]) -> None:
     run.status, run.error = status, error
     if status == "succeeded":
         run.output = render(run.wf.output, run.template_ctx)
+        _write_session(run)
     run.current = None
     run.save()
     run.trace("run." + status, None, error=error, counters=run.counters,

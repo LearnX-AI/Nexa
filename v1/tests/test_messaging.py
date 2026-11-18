@@ -274,7 +274,8 @@ def test_live_check_tool_passes_against_the_real_apps(monkeypatch, capsys):
     monkeypatch.setattr(api, "_transport", httpx.ASGITransport(app=app))
     with TestClient(api.app) as gw:
         monkeypatch.setattr(messaging_check.httpx, "Client", lambda base_url, timeout: gw)
-        monkeypatch.setattr(messaging_check.time, "sleep", lambda s: time.sleep(0.05))
+        real_sleep = time.sleep
+        monkeypatch.setattr(messaging_check.time, "sleep", lambda s: real_sleep(0.05))
         code = messaging_check.main([])
     out = capsys.readouterr().out
     assert code == 0, out

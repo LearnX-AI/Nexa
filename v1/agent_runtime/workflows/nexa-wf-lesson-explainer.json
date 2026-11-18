@@ -2,31 +2,58 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-lesson-explainer",
   "name": "Lesson explainer for teachers",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
-  "description": "Bounded multi-agent: a coordinating agent prepares teaching material by delegating, at most twice, to an allowlisted explainer and a worked-example agent. A second teacher or school administrator approves the material before it is released.",
+  "description": "Bounded multi-agent: a coordinating agent prepares teaching material by delegating, at most twice, to an allowlisted explainer and a worked-example agent. A second teacher or school administrator approves the material before it is released. With a session, it remembers the last topic it prepared for this teacher and builds on it (NEXA-M3-006).",
   "pattern": "bounded_multi_agent",
   "state": "active",
-  "allowed_roles": ["teacher", "school_admin", "ai_engineer", "admin", "platform_admin"],
+  "allowed_roles": [
+    "teacher",
+    "school_admin",
+    "ai_engineer",
+    "admin",
+    "platform_admin"
+  ],
   "run_permission": "model.invoke",
-  "input": {"topic": "short_text", "grade": "short_text"},
-  "budget": {"max_steps": 5, "max_agent_calls": 5, "max_wall_s": 420},
+  "input": {
+    "topic": "short_text",
+    "grade": "short_text"
+  },
+  "budget": {
+    "max_steps": 5,
+    "max_agent_calls": 5,
+    "max_wall_s": 420
+  },
   "start": "prepare",
   "steps": [
     {
-      "id": "prepare", "type": "delegate", "title": "Prepare the explanation and a worked example",
+      "id": "prepare",
+      "type": "delegate",
+      "title": "Prepare the explanation and a worked example",
       "coordinator": "nexa-precise",
-      "delegates": {"explain": "nexa-tutor", "worked_example": "nexa-precise"},
-      "instructions": "You coordinate the preparation of teaching material for a Grade {{input.grade}} teacher in Papua New Guinea on the topic: {{input.topic}}. The material needs a clear explanation of the concept for students and one worked example. Choose the next action. Choose done only when both parts exist.",
+      "delegates": {
+        "explain": "nexa-tutor",
+        "worked_example": "nexa-precise"
+      },
+      "instructions": "You coordinate the preparation of teaching material for a Grade {{input.grade}} teacher in Papua New Guinea on the topic: {{input.topic}}. The material needs a clear explanation of the concept for students and one worked example. Choose the next action. Choose done only when both parts exist. Earlier in this teacher's session (may be empty): topic \"{{session.last_topic}}\", Grade {{session.last_grade}}. If the new topic follows on from it, say how in the explanation.",
       "delegate_prompt": "{{task}}\n\nTopic: {{input.topic}}. Audience: Grade {{input.grade}} students in Papua New Guinea. Keep it under 300 words.",
       "max_delegations": 2,
       "temperature": 0.0,
-      "policy": {"timeout_s": 120, "max_attempts": 2, "backoff_s": 2},
+      "policy": {
+        "timeout_s": 120,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
       "next": "review"
     },
     {
-      "id": "review", "type": "checkpoint", "title": "Teacher review before release",
-      "approver_roles": ["teacher", "school_admin"],
+      "id": "review",
+      "type": "checkpoint",
+      "title": "Teacher review before release",
+      "approver_roles": [
+        "teacher",
+        "school_admin"
+      ],
       "four_eyes": true,
       "show": "Topic: {{input.topic}} (Grade {{input.grade}})\n\n{{steps.prepare.output}}",
       "expires_after_s": 604800,
@@ -34,9 +61,22 @@
       "on_reject": "end"
     },
     {
-      "id": "release", "type": "respond", "title": "Release the approved material",
+      "id": "release",
+      "type": "respond",
+      "title": "Release the approved material",
       "output": "{{steps.prepare.output}}\n\n---\nReviewed and approved by {{review.by}}. {{review.comment}}"
     }
   ],
-  "output": "{{last.output}}"
+  "output": "{{last.output}}",
+  "session": {
+    "read": [
+      "last_topic",
+      "last_grade"
+    ],
+    "write": {
+      "last_topic": "{{input.topic}}",
+      "last_grade": "{{input.grade}}",
+      "last_reviewed_by": "{{review.by}}"
+    }
+  }
 }

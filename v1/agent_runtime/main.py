@@ -21,6 +21,8 @@ from . import manifest, presence, registry, tools
 from .registry_api import router as registry_router
 from .orchestration import engine as orchestration
 from .orchestration.api import router as orchestration_router
+from .state import purge as state_purge
+from .state.api import router as state_router
 from .auth import require_principal
 from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
@@ -30,6 +32,7 @@ app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
 app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
 app.include_router(registry_router)
 app.include_router(orchestration_router)
+app.include_router(state_router)
 # Workflows are validated against the registry at start, like manifests (NEXA-M3-003).
 orchestration.load_workflows()
 _tasks: list[asyncio.Task] = []
@@ -47,6 +50,21 @@ async def _startup():
     except Exception:  # noqa: BLE001 - the runtime still serves; discovery shows it as missing
         presence.log.exception("agent registry: first heartbeat failed")
     _tasks.append(asyncio.create_task(presence.run_forever()))
+    _tasks.append(asyncio.create_task(_purge_forever()))
+
+
+async def _purge_forever():
+    """State retention (NEXA-M3-006): at start, then every NEXA_STATE_PURGE_S."""
+    import os
+    period = float(os.environ.get("NEXA_STATE_PURGE_S", "3600"))
+    while True:
+        try:
+            state_purge.purge()
+        except Exception:  # noqa: BLE001 - retention must not stop the runtime
+            presence.log.exception("state retention failed")
+        if period <= 0:
+            return
+        await asyncio.sleep(period)
 
 
 @app.on_event("shutdown")

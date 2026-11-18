@@ -363,7 +363,8 @@
     "delegate.",
     "agent.",
     "tool.",
-    "knowledge."
+    "knowledge.",
+    "session."
   ],
   "x-nexa-payloads": {
     "nexa.payload.agent.task/1": {

@@ -568,6 +568,29 @@
       "title": "Rule",
       "type": "object"
     },
+    "SessionUse": {
+      "additionalProperties": false,
+      "properties": {
+        "read": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Read",
+          "type": "array"
+        },
+        "write": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 20,
+          "title": "Write",
+          "type": "object"
+        }
+      },
+      "title": "SessionUse",
+      "type": "object"
+    },
     "StepPolicy": {
       "additionalProperties": false,
       "properties": {
@@ -802,6 +825,18 @@
       "description": "The run's final output (template); last = the last step.",
       "title": "Output",
       "type": "string"
+    },
+    "session": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SessionUse"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Session keys read at start and written on success."
     }
   },
   "required": [
