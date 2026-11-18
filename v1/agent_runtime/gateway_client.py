@@ -14,7 +14,11 @@ from . import config
 
 
 class GatewayError(Exception):
-    pass
+    """kind: "unavailable" (unreachable, or 502/503/504: worth retrying),
+    "timeout", or "error" (anything else: not retried)."""
+    def __init__(self, message: str, kind: str = "error"):
+        super().__init__(message)
+        self.kind = kind
 
 
 async def chat(
@@ -38,8 +42,11 @@ async def chat(
     try:
         async with httpx.AsyncClient(timeout=config.GATEWAY_TIMEOUT) as client:
             resp = await client.post(url, json=payload, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise GatewayError(f"gateway timed out: {exc}", "timeout")
     except httpx.RequestError as exc:
-        raise GatewayError(f"gateway unreachable: {exc}")
+        raise GatewayError(f"gateway unreachable: {exc}", "unavailable")
     if resp.status_code != 200:
-        raise GatewayError(f"gateway {resp.status_code}: {resp.text[:200]}")
+        raise GatewayError(f"gateway {resp.status_code}: {resp.text[:200]}",
+                           "unavailable" if resp.status_code in (502, 503, 504) else "error")
     return resp.json()

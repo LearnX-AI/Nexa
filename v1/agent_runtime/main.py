@@ -12,7 +12,7 @@ from v1.identity.principal import Principal
 from v1.observability import TraceMiddleware, metrics_endpoint
 from v1.shared.config import preflight
 
-from . import registry
+from . import manifest, registry
 from .auth import require_principal
 from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
@@ -34,6 +34,8 @@ async def health():
         "service": "nexa-agent-runtime",
         "version": "0.1.0",
         "agents": list(registry.AGENTS),
+        "agent_states": {a.name: a.state for a in registry.AGENTS.values()},
+        "manifest_version": manifest.MANIFEST_VERSION,
     }
 
 
@@ -52,10 +54,25 @@ async def list_agents(principal: Principal = Depends(require_principal)):
                 "required_permission": a.required_permission,
                 "capabilities": list(a.capabilities),
                 "tools": list(a.tools),
+                "state": a.state,
+                "runnable": a.runnable,
+                "allowed_roles": list(a.allowed_roles),
+                "sunset_on": a.sunset_on,
+                "manifest": a.fingerprint,
             }
             for a in registry.AGENTS.values()
         ]
     }
+
+
+@app.get("/v1/agents/{name}/manifest")
+async def get_manifest(name: str, principal: Principal = Depends(require_principal)):
+    """The agent's full manifest (nexa.agent/1.0) and its fingerprint: what was
+    reviewed is what runs."""
+    m = registry.MANIFESTS.get(name)
+    if m is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent: {name}")
+    return {"manifest": m.model_dump(mode="json"), "fingerprint": m.fingerprint()}
 
 
 @app.post("/v1/agents/{name}/run", response_model=RunResponse)

@@ -119,18 +119,26 @@ def test_client_cannot_override_system_prompt(wired, make_token, auth):
     assert r.status_code == 422
 
 
-def test_unknown_and_deprecated_agents(wired, make_token, auth, monkeypatch):
+def test_unknown_deprecated_and_retired_agents(wired, make_token, auth, monkeypatch):
+    """Lifecycle (NEXA-M3-001): a deprecated agent still runs, with its successor
+    and sunset date in the response, until the sunset date; a retired one, or a
+    deprecated one past its sunset, answers 410 and names its successor."""
     h = auth(make_token(["teacher"]))
     assert _run(wired, h, name="nope").status_code == 404
-    old = replace(registry.AGENTS["nexa-tutor"], deprecated=True,
-                  deprecated_since="2026-12-01", replaced_by="nexa-tutor-v2")
+    old = replace(registry.AGENTS["nexa-tutor"], state="deprecated", deprecated=True,
+                  deprecated_since="2026-12-01", sunset_on="2999-01-01", replaced_by="nexa-tutor-v2")
     monkeypatch.setitem(registry.AGENTS, "nexa-tutor", old)
     r = _run(wired, h)
-    assert r.status_code == 410
-    assert "nexa-tutor-v2" in r.json()["detail"]
+    assert r.status_code == 200
+    assert r.json()["x_nexa"]["deprecation"]["replaced_by"] == "nexa-tutor-v2"
     listing = wired.get("/v1/agents", headers=h).json()["agents"]
     entry = next(a for a in listing if a["name"] == "nexa-tutor")
-    assert entry["deprecated"] and entry["replaced_by"] == "nexa-tutor-v2"
+    assert entry["deprecated"] and entry["replaced_by"] == "nexa-tutor-v2" and entry["runnable"]
+    monkeypatch.setitem(registry.AGENTS, "nexa-tutor", replace(old, sunset_on="2000-01-01"))
+    r = _run(wired, h)
+    assert r.status_code == 410 and "nexa-tutor-v2" in r.json()["detail"]
+    monkeypatch.setitem(registry.AGENTS, "nexa-tutor", replace(old, state="retired", deprecated=False))
+    assert _run(wired, h).status_code == 410
 
 
 # ---- tool invocation boundary -------------------------------------------

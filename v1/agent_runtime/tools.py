@@ -16,7 +16,6 @@ from v1.identity.principal import Principal
 from v1.identity.rbac import can
 from v1.observability import audit_event, span
 
-from . import registry
 
 
 class ToolError(Exception):
@@ -30,8 +29,13 @@ class ToolError(Exception):
 class ToolSpec:
     name: str
     description: str
-    handler: Callable[[dict], Any]
+    handler: Optional[Callable[[dict], Any]]
     required_permission: str = "model.invoke"
+    # A tool may be declared before it is built, so agent manifests can be
+    # written and reviewed against it (NEXA-M3-001). An unavailable tool is
+    # never called: invoke_tool answers 503, and an agent that is runnable
+    # (active or deprecated) may not be granted one.
+    available: bool = True
 
 
 TOOLS: dict[str, ToolSpec] = {}
@@ -46,6 +50,13 @@ def _current_time(args: dict) -> dict:
 
 
 register_tool(ToolSpec("current_time", "Return the current UTC time.", _current_time))
+# Declared for the agent contract; implemented with the Tool Gateway (NEXA-ADR-0006).
+register_tool(ToolSpec("knowledge_answer", "Grounded answer with citations from the approved curriculum "
+                       "(Knowledge Service /v1/knowledge/answer), as the calling user.", None,
+                       required_permission="knowledge.query", available=False))
+register_tool(ToolSpec("course_outline", "Syllabus or course outline for a subject and grade "
+                       "(Knowledge Service), as the calling user.", None,
+                       required_permission="knowledge.query", available=False))
 
 
 def invoke_tool(
@@ -55,6 +66,7 @@ def invoke_tool(
     args: Optional[dict] = None,
     trace_id: Optional[str] = None,
 ) -> Any:
+    from . import registry   # here, not at import: the registry validates manifests against TOOLS
     action = f"tool.invoke:{agent_name}:{tool_name}"
     agent = registry.get_agent(agent_name)
     if agent is None:
@@ -68,6 +80,10 @@ def invoke_tool(
         audit_event(action=action, decision="deny", principal=principal.subject,
                     permission=spec.required_permission, trace_id=trace_id)
         raise ToolError(403, "Not permitted")
+    if not spec.available or spec.handler is None:
+        audit_event(action=action, decision="deny", principal=principal.subject,
+                    reason="tool declared but not yet available", trace_id=trace_id)
+        raise ToolError(503, f"Tool {tool_name} is not available yet")
     audit_event(action=action, decision="allow", principal=principal.subject,
                 permission=spec.required_permission, trace_id=trace_id)
     with span(f"tool.{tool_name}", trace_id, agent=agent_name):
