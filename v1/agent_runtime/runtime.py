@@ -38,6 +38,9 @@ async def run_agent(
     if agent is None:
         raise AgentRuntimeError(404, f"Unknown agent: {name}")
     hint = f"; use {agent.replaced_by}" if agent.replaced_by else ""
+    if not agent.enabled:
+        # The registry's kill switch (NEXA-M3-002): refused whatever the state.
+        raise AgentRuntimeError(423, f"Agent {name} is disabled: {agent.disabled_reason or 'no reason given'}")
     if not agent.runnable:
         # Lifecycle (NEXA-M3-001): only active agents, and deprecated ones
         # until their sunset date, run.

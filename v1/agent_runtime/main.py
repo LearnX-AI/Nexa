@@ -6,13 +6,16 @@ Run:
     uvicorn v1.agent_runtime.main:app --host 127.0.0.1 --port 8102
 """
 from __future__ import annotations
+import asyncio
+
 from fastapi import FastAPI, Depends, HTTPException, Request
 
 from v1.identity.principal import Principal
 from v1.observability import TraceMiddleware, metrics_endpoint
 from v1.shared.config import preflight
 
-from . import manifest, registry
+from . import manifest, presence, registry
+from .registry_api import router as registry_router
 from .auth import require_principal
 from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
@@ -20,11 +23,25 @@ from .schemas import RunRequest, RunResponse
 app = FastAPI(title="NEXA Agent Runtime", version="0.1.0")
 app.add_middleware(TraceMiddleware, service="nexa-agent-runtime")
 app.add_route("/metrics", metrics_endpoint, include_in_schema=False)
+app.include_router(registry_router)
+_tasks: list[asyncio.Task] = []
 
 
 @app.on_event("startup")
 async def _startup():
     preflight("nexa-agent-runtime", ["NEXA_IDENTITY_SECRET", "NEXA_AGENT_GATEWAY_TOKEN"])
+    # Record this instance's deployments in the registry (NEXA-M3-002).
+    try:
+        await presence.beat()
+    except Exception:  # noqa: BLE001 - the runtime still serves; discovery shows it as missing
+        presence.log.exception("agent registry: first heartbeat failed")
+    _tasks.append(asyncio.create_task(presence.run_forever()))
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    for t in _tasks:
+        t.cancel()
 
 
 @app.get("/health")
@@ -36,6 +53,8 @@ async def health():
         "agents": list(registry.AGENTS),
         "agent_states": {a.name: a.state for a in registry.AGENTS.values()},
         "manifest_version": manifest.MANIFEST_VERSION,
+        "registry": {"location": presence.location(), "instance": presence.instance(),
+                     "disabled": sorted(a.name for a in registry.AGENTS.values() if not a.enabled)},
     }
 
 
@@ -59,6 +78,7 @@ async def list_agents(principal: Principal = Depends(require_principal)):
                 "allowed_roles": list(a.allowed_roles),
                 "sunset_on": a.sunset_on,
                 "manifest": a.fingerprint,
+                "enabled": a.enabled,
             }
             for a in registry.AGENTS.values()
         ]

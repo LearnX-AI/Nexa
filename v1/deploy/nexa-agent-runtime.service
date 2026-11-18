@@ -10,6 +10,10 @@ WorkingDirectory=/home/admin/Nexa/Nexa
 EnvironmentFile=/etc/nexa/identity.env
 EnvironmentFile=/etc/nexa/agent-runtime.env
 Environment=PYTHONUNBUFFERED=1
+# Agent registry (NEXA-M3-002). Override in /etc/nexa/agent-runtime.env.
+Environment=NEXA_AGENT_REGISTRY_DB=/home/admin/.nexa/agent-registry.sqlite
+Environment=NEXA_AGENT_LOCATION=core:dgx
+Environment=NEXA_AGENT_PUBLIC_URL=http://127.0.0.1:8102
 ExecStart=/home/admin/Nexa/venv310/bin/python -m uvicorn v1.agent_runtime.main:app --host 127.0.0.1 --port 8102
 Restart=always
 RestartSec=3
