@@ -188,3 +188,38 @@ async def registry_proxy(
                     principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
     query = f"?{request.url.query}" if request.url.query else ""
     return await _forward(request.method, f"/v1/registry/{rest}{query}", authorization, trace_id, body)
+
+
+# Orchestration (NEXA-M3-003): workflows run in the Agent Runtime, which
+# enforces who may start, see and decide each run. Long runs: start with
+# ?wait=false and poll the run.
+@app.api_route("/v1/workflows/{rest:path}", methods=["GET", "POST"], responses=_ERRORS)
+@app.api_route("/v1/workflow-runs/{rest:path}", methods=["GET", "POST"], responses=_ERRORS)
+async def orchestration_proxy(
+    request: Request,
+    rest: str = Path(..., pattern=r"^[A-Za-z0-9._/-]{0,200}$"),
+    principal: Principal = Depends(require_principal),
+    authorization: str = Header(...),
+):
+    if ".." in rest:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    trace_id = getattr(request.state, "trace_id", None)
+    body = None
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="JSON body required")
+        audit_event(action=f"api.orchestration.post:{request.url.path}", decision="allow",
+                    principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward(request.method, f"{request.url.path}{query}", authorization, trace_id, body)
+
+
+@app.get("/v1/workflows", responses=_ERRORS)
+@app.get("/v1/workflow-runs", responses=_ERRORS)
+async def orchestration_list_proxy(request: Request, principal: Principal = Depends(require_principal),
+                                   authorization: str = Header(...)):
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward("GET", f"{request.url.path}{query}", authorization,
+                          getattr(request.state, "trace_id", None))

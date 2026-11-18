@@ -1,0 +1,750 @@
+{
+  "$defs": {
+    "AgentStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "agent",
+          "title": "Type",
+          "type": "string"
+        },
+        "agent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Agent id. Or give capability.",
+          "title": "Agent"
+        },
+        "capability": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resolved through the registry at run time.",
+          "title": "Capability"
+        },
+        "fallback_agents": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Agents",
+          "type": "array"
+        },
+        "prompt": {
+          "maxLength": 6000,
+          "minLength": 3,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "max_tokens": {
+          "anyOf": [
+            {
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Tokens"
+        },
+        "next": {
+          "default": "end",
+          "title": "Next",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "prompt"
+      ],
+      "title": "AgentStep",
+      "type": "object"
+    },
+    "Budget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_steps": {
+          "default": 20,
+          "description": "Steps executed in one run, delegations included.",
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Max Steps",
+          "type": "integer"
+        },
+        "max_agent_calls": {
+          "default": 10,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Max Agent Calls",
+          "type": "integer"
+        },
+        "max_wall_s": {
+          "default": 300.0,
+          "description": "Running time, not time waiting for a person.",
+          "maximum": 1800.0,
+          "minimum": 5.0,
+          "title": "Max Wall S",
+          "type": "number"
+        }
+      },
+      "title": "Budget",
+      "type": "object"
+    },
+    "CheckpointStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "checkpoint",
+          "title": "Type",
+          "type": "string"
+        },
+        "approver_roles": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Approver Roles",
+          "type": "array"
+        },
+        "four_eyes": {
+          "default": false,
+          "description": "The person who started the run may not decide.",
+          "title": "Four Eyes",
+          "type": "boolean"
+        },
+        "show": {
+          "description": "What the reviewer is shown (template).",
+          "maxLength": 6000,
+          "minLength": 3,
+          "title": "Show",
+          "type": "string"
+        },
+        "expires_after_s": {
+          "default": 604800,
+          "maximum": 2592000,
+          "minimum": 60,
+          "title": "Expires After S",
+          "type": "integer"
+        },
+        "on_approve": {
+          "title": "On Approve",
+          "type": "string"
+        },
+        "on_reject": {
+          "default": "end",
+          "title": "On Reject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "approver_roles",
+        "show",
+        "on_approve"
+      ],
+      "title": "CheckpointStep",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "True when the field's value matches. Exactly one test is given.",
+      "properties": {
+        "field": {
+          "description": "input.<name> or steps.<step>.<field>",
+          "title": "Field",
+          "type": "string"
+        },
+        "matches": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Regular expression, case-insensitive, searched in the text.",
+          "title": "Matches"
+        },
+        "equals": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Equals"
+        },
+        "in": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In"
+        },
+        "exists": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exists"
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "DelegateStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "delegate",
+          "title": "Type",
+          "type": "string"
+        },
+        "coordinator": {
+          "description": "Agent that chooses the next action.",
+          "title": "Coordinator",
+          "type": "string"
+        },
+        "delegates": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Allowed action name -> agent id.",
+          "minProperties": 1,
+          "title": "Delegates",
+          "type": "object"
+        },
+        "instructions": {
+          "description": "What the coordinator sees; the engine adds the allowed actions.",
+          "maxLength": 4000,
+          "minLength": 10,
+          "title": "Instructions",
+          "type": "string"
+        },
+        "delegate_prompt": {
+          "description": "Sent to the delegate; {{task}} is the coordinator's instruction.",
+          "maxLength": 4000,
+          "minLength": 3,
+          "title": "Delegate Prompt",
+          "type": "string"
+        },
+        "max_delegations": {
+          "default": 2,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Max Delegations",
+          "type": "integer"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.0,
+          "title": "Temperature"
+        },
+        "next": {
+          "default": "end",
+          "title": "Next",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "coordinator",
+        "delegates",
+        "instructions",
+        "delegate_prompt"
+      ],
+      "title": "DelegateStep",
+      "type": "object"
+    },
+    "KnowledgeStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "knowledge",
+          "title": "Type",
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 2000,
+          "minLength": 3,
+          "title": "Question",
+          "type": "string"
+        },
+        "audience": {
+          "anyOf": [
+            {
+              "enum": [
+                "student",
+                "teacher"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audience"
+        },
+        "general": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "title": "General"
+        },
+        "next": {
+          "default": "end",
+          "title": "Next",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "question"
+      ],
+      "title": "KnowledgeStep",
+      "type": "object"
+    },
+    "RespondStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "respond",
+          "title": "Type",
+          "type": "string"
+        },
+        "output": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Output",
+          "type": "string"
+        },
+        "next": {
+          "default": "end",
+          "title": "Next",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "output"
+      ],
+      "title": "RespondStep",
+      "type": "object"
+    },
+    "RouteStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "route",
+          "title": "Type",
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "minItems": 1,
+          "title": "Rules",
+          "type": "array"
+        },
+        "default": {
+          "type": "string",
+          "title": "Default"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "rules",
+        "default"
+      ],
+      "title": "RouteStep",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "properties": {
+        "when": {
+          "description": "All must hold.",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "minItems": 1,
+          "title": "When",
+          "type": "array"
+        },
+        "goto": {
+          "title": "Goto",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Recorded in the trace when the rule is taken.",
+          "minLength": 3,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "when",
+        "goto",
+        "reason"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "StepPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_s": {
+          "default": 90.0,
+          "description": "One attempt of the step.",
+          "maximum": 600.0,
+          "minimum": 1.0,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "max_attempts": {
+          "default": 1,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "backoff_s": {
+          "default": 1.0,
+          "maximum": 30.0,
+          "minimum": 0.0,
+          "title": "Backoff S",
+          "type": "number"
+        },
+        "on_error": {
+          "default": "fail",
+          "description": "fail, or the id of the step to go to instead.",
+          "title": "On Error",
+          "type": "string"
+        }
+      },
+      "title": "StepPolicy",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "workflow_version": {
+      "const": "nexa.workflow/1.0",
+      "title": "Workflow Version",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 3,
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "owner": {
+      "minLength": 2,
+      "title": "Owner",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 600,
+      "minLength": 10,
+      "title": "Description",
+      "type": "string"
+    },
+    "pattern": {
+      "enum": [
+        "deterministic",
+        "bounded_multi_agent"
+      ],
+      "title": "Pattern",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "active",
+        "retired"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "allowed_roles": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Allowed Roles",
+      "type": "array"
+    },
+    "run_permission": {
+      "default": "model.invoke",
+      "title": "Run Permission",
+      "type": "string"
+    },
+    "input": {
+      "additionalProperties": {
+        "enum": [
+          "text",
+          "short_text"
+        ],
+        "type": "string"
+      },
+      "description": "Input field -> kind (text <= 4000 chars, short_text <= 200).",
+      "minProperties": 1,
+      "title": "Input",
+      "type": "object"
+    },
+    "budget": {
+      "$ref": "#/$defs/Budget"
+    },
+    "start": {
+      "title": "Start",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "agent": "#/$defs/AgentStep",
+            "checkpoint": "#/$defs/CheckpointStep",
+            "delegate": "#/$defs/DelegateStep",
+            "knowledge": "#/$defs/KnowledgeStep",
+            "respond": "#/$defs/RespondStep",
+            "route": "#/$defs/RouteStep"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/AgentStep"
+          },
+          {
+            "$ref": "#/$defs/KnowledgeStep"
+          },
+          {
+            "$ref": "#/$defs/RouteStep"
+          },
+          {
+            "$ref": "#/$defs/DelegateStep"
+          },
+          {
+            "$ref": "#/$defs/CheckpointStep"
+          },
+          {
+            "$ref": "#/$defs/RespondStep"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "output": {
+      "default": "{{last.output}}",
+      "description": "The run's final output (template); last = the last step.",
+      "title": "Output",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workflow_version",
+    "id",
+    "name",
+    "version",
+    "owner",
+    "description",
+    "pattern",
+    "state",
+    "allowed_roles",
+    "input",
+    "start",
+    "steps"
+  ],
+  "title": "NEXA workflow (nexa.workflow/1.0)",
+  "type": "object"
+}
