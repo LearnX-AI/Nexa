@@ -8,13 +8,16 @@ Run:
 from __future__ import annotations
 import asyncio
 
-from fastapi import FastAPI, Depends, HTTPException, Request
+from typing import Any, Optional
+
+from fastapi import FastAPI, Depends, Header, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from v1.identity.principal import Principal
 from v1.observability import TraceMiddleware, metrics_endpoint
 from v1.shared.config import preflight
 
-from . import manifest, presence, registry
+from . import manifest, presence, registry, tools
 from .registry_api import router as registry_router
 from .orchestration import engine as orchestration
 from .orchestration.api import router as orchestration_router
@@ -120,3 +123,23 @@ async def run(
         )
     except AgentRuntimeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+class ToolCall(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    scopes: Optional[list[str]] = None
+
+
+@app.post("/v1/agents/{name}/tools/{tool}")
+async def call_tool(name: str, tool: str, body: ToolCall, request: Request,
+                    principal: Principal = Depends(require_principal),
+                    authorization: Optional[str] = Header(default=None)):
+    """A tool call for an agent, as the calling user, through the Tool &
+    Connector Gateway (NEXA-M3-004). The manifest grant, the gateway's
+    allowlist, scopes, limits and audit all apply."""
+    try:
+        return await tools.invoke_tool(name, tool, principal, body.arguments, user_token=authorization,
+                                       scopes=body.scopes, trace_id=getattr(request.state, "trace_id", None))
+    except tools.ToolError as exc:
+        detail = {"detail": exc.detail, **({"call_id": exc.call_id} if exc.call_id else {})}
+        raise HTTPException(status_code=exc.status_code, detail=detail)

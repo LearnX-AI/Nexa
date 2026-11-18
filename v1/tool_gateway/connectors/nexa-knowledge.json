@@ -1,0 +1,14 @@
+{
+  "tool_version": "nexa.tool/1.0",
+  "id": "nexa-knowledge",
+  "name": "NEXA Knowledge Service",
+  "kind": "http",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "url_env": "NEXA_KNOWLEDGE_URL",
+  "default_url": "http://127.0.0.1:8103",
+  "credential": {
+    "mode": "user_delegated"
+  },
+  "approved": false,
+  "timeout_s": 180
+}

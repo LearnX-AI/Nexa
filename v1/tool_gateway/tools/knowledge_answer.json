@@ -1,0 +1,86 @@
+{
+  "tool_version": "nexa.tool/1.0",
+  "id": "knowledge_answer",
+  "name": "Curriculum answer",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "A grounded answer from the approved curriculum with citations (Knowledge Service), as the calling user: the user's school, role and access apply.",
+  "state": "active",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "question"
+    ],
+    "properties": {
+      "question": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 2000
+      },
+      "audience": {
+        "type": "string",
+        "enum": [
+          "student",
+          "teacher"
+        ]
+      },
+      "general": {
+        "type": "boolean"
+      }
+    }
+  },
+  "permission": "knowledge.query",
+  "scopes": {
+    "curriculum.learner": {
+      "description": "Learner material: syllabi, student guides, school and LMS content.",
+      "roles": [
+        "student",
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    },
+    "curriculum.teacher": {
+      "description": "Teacher-only material: teacher guides, marking guides.",
+      "roles": [
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    }
+  },
+  "default_scopes": [
+    "curriculum.learner"
+  ],
+  "allowed_agents": {
+    "nexa-curriculum-tutor": [
+      "curriculum.learner"
+    ],
+    "nexa-lesson-planner": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ]
+  },
+  "timeout_s": 170,
+  "rate_limit": {
+    "per_user_per_minute": 20,
+    "per_tool_per_minute": 600
+  },
+  "max_output_bytes": 131072,
+  "side_effects": "read",
+  "data": {
+    "returns": "learner",
+    "leaves_nexa": false
+  },
+  "implementation": {
+    "kind": "http",
+    "connector": "nexa-knowledge",
+    "handler": "knowledge_answer",
+    "path": "/v1/knowledge/answer"
+  }
+}

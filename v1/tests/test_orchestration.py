@@ -344,7 +344,7 @@ def test_workflow_platform_checks():
     r["steps"][0]["delegates"]["plan"] = "nexa-unknown"
     wf = wfm.Workflow.model_validate(r)
     assert any("nexa-unknown" in p for p in wfm.validate_platform(wf, set(registry.AGENTS), ROLE_PERMISSIONS))
-    assert {w for w in engine.WORKFLOWS} == {"nexa-wf-student-question", "nexa-wf-lesson-explainer"}
+    assert {"nexa-wf-student-question", "nexa-wf-lesson-explainer"} <= set(engine.WORKFLOWS)
 
 
 def test_published_workflow_schema_matches():
@@ -370,8 +370,8 @@ def test_api_end_to_end_with_background_run_and_decision(monkeypatch):
     monkeypatch.setattr(gateway_client, "chat", Gateway(choices=[{"action": "explain", "task": "Explain."},
                                                                   {"action": "done"}]).chat)
     with TestClient(app) as c:
-        assert {w["id"] for w in c.get("/v1/workflows", headers=hdr(TEACHER)).json()["workflows"]} == \
-            {"nexa-wf-student-question", "nexa-wf-lesson-explainer"}
+        assert {"nexa-wf-student-question", "nexa-wf-lesson-explainer"} <= \
+            {w["id"] for w in c.get("/v1/workflows", headers=hdr(TEACHER)).json()["workflows"]}
         r = c.post("/v1/workflows/nexa-wf-lesson-explainer/runs?wait=false", json={"input": LESSON},
                    headers=hdr(TEACHER))
         assert r.status_code == 202

@@ -223,3 +223,23 @@ async def orchestration_list_proxy(request: Request, principal: Principal = Depe
     query = f"?{request.url.query}" if request.url.query else ""
     return await _forward("GET", f"{request.url.path}{query}", authorization,
                           getattr(request.state, "trace_id", None))
+
+
+# Agent tool calls (NEXA-M3-004): the Agent Runtime checks the manifest grant
+# and calls the Tool & Connector Gateway, which applies its own policy.
+@app.post("/v1/agents/{name}/tools/{tool}", responses=_ERRORS)
+async def agent_tool_proxy(
+    request: Request,
+    name: str = Path(..., pattern=r"^[a-z0-9][a-z0-9-]{0,63}$"),
+    tool: str = Path(..., pattern=r"^[a-z][a-z0-9_]{1,40}$"),
+    principal: Principal = Depends(require_principal),
+    authorization: str = Header(...),
+):
+    trace_id = getattr(request.state, "trace_id", None)
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=422, detail="JSON body required")
+    audit_event(action=f"api.agents.tool:{name}:{tool}", decision="allow", principal=principal.subject,
+                roles=list(principal.roles), trace_id=trace_id)
+    return await _forward("POST", f"/v1/agents/{name}/tools/{tool}", authorization, trace_id, body)

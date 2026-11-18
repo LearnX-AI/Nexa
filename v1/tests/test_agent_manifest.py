@@ -103,10 +103,14 @@ def test_platform_rules(change, expect):
     assert p and expect in " ".join(p), p
 
 
-def test_an_active_agent_cannot_be_granted_a_tool_that_is_not_built_yet():
+def test_an_active_agent_cannot_be_granted_a_tool_that_is_not_built_yet(monkeypatch):
     raw = copy.deepcopy(load("nexa-curriculum-tutor"))
+    raw["lifecycle"].update(state="active", approved_by="A reviewer", approved_on="2026-11-20")
+    assert problems_of(raw) == []                                  # the Tool Gateway serves its tools (M3-004)
+    monkeypatch.setitem(tools.TOOLS, "knowledge_answer", replace(tools.TOOLS["knowledge_answer"], available=False))
+    raw["lifecycle"]["state"] = "review"
     assert problems_of(raw) == []                                  # in review: allowed, it waits for the tool
-    raw["lifecycle"].update(state="active", approved_by="Mr. Chandana", approved_on="2026-11-20")
+    raw["lifecycle"]["state"] = "active"
     assert "not available yet" in " ".join(problems_of(raw))
 
 
@@ -237,15 +241,14 @@ def test_whole_run_timeout(monkeypatch):
     assert e.value.status_code == 504
 
 
-def test_declared_tool_that_is_not_built_answers_503():
+def test_declared_tool_that_is_not_active_answers_503(monkeypatch):
     planner = replace(registry.AGENTS["nexa-lesson-planner"], state="active")
-    registry.AGENTS["nexa-lesson-planner"], saved = planner, registry.AGENTS["nexa-lesson-planner"]
-    try:
-        with pytest.raises(tools.ToolError) as e:
-            tools.invoke_tool("nexa-lesson-planner", "course_outline", Principal("user:t", ("teacher",)))
-        assert e.value.status_code == 503
-    finally:
-        registry.AGENTS["nexa-lesson-planner"] = saved
+    monkeypatch.setitem(registry.AGENTS, "nexa-lesson-planner", planner)
+    monkeypatch.setitem(tools.TOOLS, "course_outline", replace(tools.TOOLS["course_outline"], available=False))
+    with pytest.raises(tools.ToolError) as e:
+        asyncio.run(tools.invoke_tool("nexa-lesson-planner", "course_outline", Principal("user:t", ("teacher",)),
+                                      user_token="Bearer t"))
+    assert e.value.status_code == 503
 
 
 def test_manifest_endpoint_returns_the_reviewed_manifest(monkeypatch):

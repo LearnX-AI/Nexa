@@ -1,0 +1,91 @@
+{
+  "tool_version": "nexa.tool/1.0",
+  "id": "course_outline",
+  "name": "Course outline",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "The topics of a course (subject, grade, term) from the syllabi and guides NEXA holds, with citations, as the calling user.",
+  "state": "active",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "subject"
+    ],
+    "properties": {
+      "subject": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 60
+      },
+      "grade": {
+        "type": "string",
+        "enum": [
+          "9",
+          "10",
+          "11",
+          "12"
+        ]
+      },
+      "term": {
+        "type": "string",
+        "enum": [
+          "1",
+          "2",
+          "3",
+          "4"
+        ]
+      }
+    }
+  },
+  "permission": "knowledge.query",
+  "scopes": {
+    "curriculum.learner": {
+      "description": "Outlines from learner material.",
+      "roles": [
+        "student",
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    },
+    "curriculum.teacher": {
+      "description": "Outlines that may draw on teacher guides.",
+      "roles": [
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    }
+  },
+  "default_scopes": [
+    "curriculum.learner"
+  ],
+  "allowed_agents": {
+    "nexa-lesson-planner": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ]
+  },
+  "timeout_s": 170,
+  "rate_limit": {
+    "per_user_per_minute": 10,
+    "per_tool_per_minute": 300
+  },
+  "max_output_bytes": 131072,
+  "side_effects": "read",
+  "data": {
+    "returns": "learner",
+    "leaves_nexa": false
+  },
+  "implementation": {
+    "kind": "http",
+    "connector": "nexa-knowledge",
+    "handler": "course_outline",
+    "path": "/v1/knowledge/answer"
+  }
+}

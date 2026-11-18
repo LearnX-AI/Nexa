@@ -602,6 +602,75 @@
       },
       "title": "StepPolicy",
       "type": "object"
+    },
+    "ToolStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 120,
+          "minLength": 3,
+          "title": "Title",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/StepPolicy"
+        },
+        "type": {
+          "const": "tool",
+          "title": "Type",
+          "type": "string"
+        },
+        "agent": {
+          "description": "The agent the tool is used for: its manifest grant and allowlist apply.",
+          "title": "Agent",
+          "type": "string"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        },
+        "arguments": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Argument -> template.",
+          "title": "Arguments",
+          "type": "object"
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scopes"
+        },
+        "next": {
+          "default": "end",
+          "title": "Next",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "type",
+        "agent",
+        "tool"
+      ],
+      "title": "ToolStep",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -695,7 +764,8 @@
             "delegate": "#/$defs/DelegateStep",
             "knowledge": "#/$defs/KnowledgeStep",
             "respond": "#/$defs/RespondStep",
-            "route": "#/$defs/RouteStep"
+            "route": "#/$defs/RouteStep",
+            "tool": "#/$defs/ToolStep"
           },
           "propertyName": "type"
         },
@@ -705,6 +775,9 @@
           },
           {
             "$ref": "#/$defs/KnowledgeStep"
+          },
+          {
+            "$ref": "#/$defs/ToolStep"
           },
           {
             "$ref": "#/$defs/RouteStep"
