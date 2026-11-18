@@ -8,10 +8,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from v1.agent_runtime import gateway_client, registry, tools
+from v1.agent_runtime import gateway_client, registry
 from v1.agent_runtime.main import app as agent_app
 from v1.identity import tokens
-from v1.identity.principal import Principal
 from v1.model_gateway import main as gw, registry as model_registry
 from v1.model_gateway.backends.base import Backend
 
@@ -143,35 +142,4 @@ def test_unknown_deprecated_and_retired_agents(wired, make_token, auth, monkeypa
 
 # ---- tool invocation boundary -------------------------------------------
 
-@pytest.fixture
-def tool_agent(monkeypatch):
-    spec = replace(registry.AGENTS["nexa-tutor"], name="tool-agent", tools=("current_time",))
-    monkeypatch.setitem(registry.AGENTS, "tool-agent", spec)
-    return spec
-
-
-def test_tool_allowed_for_declared_tool_and_permitted_role(tool_agent, capsys):
-    result = tools.invoke_tool("tool-agent", "current_time",
-                               Principal("user:t", ("teacher",)), {}, "tid-1")
-    assert "utc" in result
-    lines = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
-    assert any(l.get("event") == "audit" and l["decision"] == "allow" for l in lines)
-    assert any(l.get("event") == "span" and l["span"] == "tool.current_time"
-               and l["trace_id"] == "tid-1" for l in lines)
-
-
-def test_tool_denied_when_not_declared_or_not_permitted(tool_agent, capsys):
-    with pytest.raises(tools.ToolError) as undeclared:
-        tools.invoke_tool("nexa-tutor", "current_time", Principal("user:t", ("teacher",)))
-    assert undeclared.value.status_code == 403
-    with pytest.raises(tools.ToolError) as forbidden:
-        tools.invoke_tool("tool-agent", "current_time", Principal("user:a", ("auditor",)))
-    assert forbidden.value.status_code == 403
-    out = [json.loads(x) for x in capsys.readouterr().out.splitlines()]
-    assert sum(1 for l in out if l.get("event") == "audit" and l["decision"] == "deny") == 2
-
-
-def test_unknown_agent_for_tool():
-    with pytest.raises(tools.ToolError) as exc:
-        tools.invoke_tool("ghost", "current_time", Principal("user:t", ("teacher",)))
-    assert exc.value.status_code == 404
+# Tool calls go through the Tool & Connector Gateway: see test_tool_gateway.py (NEXA-M3-004).

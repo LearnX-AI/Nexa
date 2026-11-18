@@ -47,6 +47,10 @@ for _r in ("admin", "platform_admin", "national_admin"):
     ROLE_PERMISSIONS[_r] |= {"agents.approve"}
 for _r in ("service", "service_account", "admin", "platform_admin"):
     ROLE_PERMISSIONS[_r] |= {"agents.deploy"}
+# Tool Gateway (NEXA-M3-004): only the Agent Runtime's service identity calls
+# tools, on behalf of a user and an agent.
+for _r in ("service", "service_account"):
+    ROLE_PERMISSIONS[_r] |= {"tools.invoke"}
 
 
 def permissions_for(roles) -> set:

@@ -1,0 +1,64 @@
+{
+  "tool_version": "nexa.tool/1.0",
+  "id": "calculator",
+  "name": "Exact calculator",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "Exact arithmetic on fractions: + - * / ^ % ( ), sqrt, abs, round. Replaces the v0 SymPy maths engine for worked answers; nothing but arithmetic is evaluated.",
+  "state": "active",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "expression"
+    ],
+    "properties": {
+      "expression": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "pattern": "^[0-9+\\-*/^%().,\\s×÷a-z]+$"
+      }
+    }
+  },
+  "permission": "model.invoke",
+  "scopes": {
+    "compute": {
+      "description": "Arithmetic only; reads and writes no data.",
+      "roles": [
+        "student",
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    }
+  },
+  "default_scopes": [
+    "compute"
+  ],
+  "allowed_agents": {
+    "nexa-curriculum-tutor": [
+      "compute"
+    ],
+    "nexa-lesson-planner": [
+      "compute"
+    ]
+  },
+  "timeout_s": 2,
+  "rate_limit": {
+    "per_user_per_minute": 60,
+    "per_tool_per_minute": 3000
+  },
+  "max_output_bytes": 4096,
+  "side_effects": "read",
+  "data": {
+    "returns": "public",
+    "leaves_nexa": false
+  },
+  "implementation": {
+    "kind": "builtin",
+    "handler": "calculator"
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=NEXA Tool & Connector Gateway (M3-004)
+# The only way agents reach tools, APIs and connectors (ADR-0006). Only the
+# Agent Runtime calls it. Service credentials for connectors go in
+# /etc/nexa/tool-gateway.env (optional, root-readable), never in the repository.
+After=network-online.target nexa-knowledge.service
+Wants=network-online.target
+
+[Service]
+User=admin
+WorkingDirectory=/home/admin/Nexa/Nexa
+EnvironmentFile=/etc/nexa/identity.env
+EnvironmentFile=-/etc/nexa/tool-gateway.env
+Environment=PYTHONUNBUFFERED=1
+Environment=NEXA_TOOL_AUDIT_DB=/home/admin/.nexa/tool-gateway.sqlite
+ExecStart=/home/admin/Nexa/venv310/bin/python -m uvicorn v1.tool_gateway.main:app --host 127.0.0.1 --port 8105
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

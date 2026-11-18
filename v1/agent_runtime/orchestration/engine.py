@@ -41,7 +41,7 @@ from v1.identity.principal import Principal
 from v1.identity.rbac import ROLE_PERMISSIONS, can
 from v1.observability import audit_event, new_trace_id
 
-from .. import presence, registry, runtime
+from .. import presence, registry, runtime, tools
 from . import workflow as wfm
 
 log = logging.getLogger("nexa.agent_runtime.orchestration")
@@ -76,7 +76,8 @@ WORKFLOWS: dict[str, wfm.Workflow] = {}
 
 def load_workflows(directory: Optional[str] = None) -> dict[str, wfm.Workflow]:
     found = wfm.load_dir(directory or os.environ.get("NEXA_WORKFLOW_DIR") or wfm.WORKFLOWS_DIR,
-                         agent_ids=set(registry.AGENTS), roles=ROLE_PERMISSIONS)
+                         agent_ids=set(registry.AGENTS), roles=ROLE_PERMISSIONS,
+                         grants={a: set(s.tools) for a, s in registry.AGENTS.items()})
     WORKFLOWS.clear()
     WORKFLOWS.update(found)
     return found
@@ -432,6 +433,8 @@ async def _execute(run: Run, step, remaining) -> tuple[str, dict[str, Any]]:
         return step.next, await _with_policy(run, step, remaining, lambda t: _knowledge(run, step, ctx, t))
     if isinstance(step, wfm.AgentStep):
         return step.next, await _agent_step(run, step, ctx, remaining)
+    if isinstance(step, wfm.ToolStep):
+        return step.next, await _with_policy(run, step, remaining, lambda t: _tool(run, step, ctx, t))
     if isinstance(step, wfm.DelegateStep):
         return step.next, await _delegate(run, step, ctx, remaining)
     raise StepError(f"unknown step type {step.type}", retry=False)
@@ -589,6 +592,32 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
     combined = "\n\n".join(f"## {d['action'].replace('_', ' ').capitalize()}\n\n{d['output']}" for d in done)
     return {"output": combined, "last_output": done[-1]["output"], "delegations": done, "decisions": decisions,
             "stopped": stop_reason}
+
+
+# ---------------------------------------------------------------- tools (NEXA-M3-004)
+
+async def _tool(run: Run, step: wfm.ToolStep, ctx, timeout: float) -> dict[str, Any]:
+    """One tool call through the Tool & Connector Gateway, for the step's agent,
+    as the calling user."""
+    if not run.auth:
+        raise StepError("a tool step needs the user's own session", retry=False)
+    args = {k: render(v, ctx).strip() for k, v in step.arguments.items()}
+    t0 = time.monotonic()
+    try:
+        out = await tools.invoke_tool(step.agent, step.tool, run.principal, args, user_token=run.auth,
+                                      scopes=step.scopes, run_id=run.run_id, step=step.id, trace_id=run.trace_id)
+    except tools.ToolError as exc:
+        run.trace("tool.call", step.id, agent=step.agent, tool=step.tool, ok=False, status=exc.status_code,
+                  error=exc.detail, call_id=exc.call_id, arguments=_short(json.dumps(args, ensure_ascii=False)))
+        raise StepError(f"{step.tool}: {exc.detail}", retry=exc.status_code in (502, 503, 504),
+                        status=exc.status_code)
+    result = out.get("result") or {}
+    rec = {"tool": step.tool, "version": out.get("version"), "call_id": out.get("call_id"),
+           "scopes": out.get("scopes"), "agent": step.agent,
+           "latency_ms": int((time.monotonic() - t0) * 1000)}
+    run.trace("tool.call", step.id, ok=True, arguments=_short(json.dumps(args, ensure_ascii=False)),
+              implementation=(out.get("x_nexa") or {}).get("implementation"), **rec)
+    return {"output": result.get("text", ""), "result": result, **rec}
 
 
 # ---------------------------------------------------------------- knowledge

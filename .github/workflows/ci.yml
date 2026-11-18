@@ -87,6 +87,13 @@ jobs:
           python -m v1.agent_runtime.manifest validate
           python -m v1.agent_runtime.manifest schema | diff - v1/agent_runtime/schema/nexa-agent-manifest-1.0.schema.json
 
+      - name: Tool contracts (NEXA-M3-004)
+        # Every tool and connector contract must satisfy nexa.tool/1.0, bind to
+        # a real handler or an approved connector, and match the published schema.
+        run: |
+          python -c "from v1.tool_gateway import contract as ct, handlers as h; t, c = ct.load(handlers=set(h.HANDLERS)); print('ok', sorted(t), sorted(c))"
+          python -c "import json; from v1.tool_gateway import contract as ct; print(json.dumps(ct.json_schema(), indent=2))" | diff - v1/tool_gateway/schema/nexa-tool-1.0.schema.json
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published

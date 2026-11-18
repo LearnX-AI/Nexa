@@ -30,8 +30,8 @@ NEXA_BRANCH="${NEXA_BRANCH:-nexa-v1-core}"
 # Opt-in: leave empty to skip pip. Point it at a venv used only by v1. Do not
 # point it at a venv shared with v0, or the pinned versions upgrade v0 as well.
 NEXA_VENV="${NEXA_VENV:-}"
-NEXA_SERVICES="${NEXA_SERVICES:-nexa-identity nexa-model-gateway nexa-knowledge nexa-agent-runtime nexa-api-gateway}"
-NEXA_HEALTH_URLS="${NEXA_HEALTH_URLS:-http://127.0.0.1:8101/health http://127.0.0.1:8100/health http://127.0.0.1:8103/health http://127.0.0.1:8102/health http://127.0.0.1:8099/ready}"
+NEXA_SERVICES="${NEXA_SERVICES:-nexa-identity nexa-model-gateway nexa-knowledge nexa-tool-gateway nexa-agent-runtime nexa-api-gateway}"
+NEXA_HEALTH_URLS="${NEXA_HEALTH_URLS:-http://127.0.0.1:8101/health http://127.0.0.1:8100/health http://127.0.0.1:8103/health http://127.0.0.1:8105/health http://127.0.0.1:8102/health http://127.0.0.1:8099/ready}"
 NEXA_HEALTH_TRIES="${NEXA_HEALTH_TRIES:-20}"
 NEXA_HEALTH_WAIT="${NEXA_HEALTH_WAIT:-3}"
 NEXA_SYSTEMCTL="${NEXA_SYSTEMCTL:-sudo -n systemctl}"
@@ -62,7 +62,7 @@ install_requirements() {
   if [ -n "$NEXA_VENV" ] && [ -x "$NEXA_VENV/bin/pip" ]; then
     log "installing pinned requirements into $NEXA_VENV"
     local f
-    for f in agent_runtime api_gateway identity knowledge model_gateway; do
+    for f in agent_runtime api_gateway identity knowledge model_gateway tool_gateway; do
       "$NEXA_VENV/bin/pip" install -q -r "v1/$f/requirements.txt"
     done
   else

@@ -20,6 +20,10 @@ Step types
               max_delegations times
   checkpoint  human in the loop: the run pauses until a person holding one of
               approver_roles approves or rejects it
+  tool        call a tool through the Tool & Connector Gateway on behalf of
+              an agent (NEXA-M3-004): the agent's manifest must grant it and
+              the gateway applies its allowlist, scopes and limits; arguments
+              are templates
   respond     a fixed, templated final output
 
 The step graph must be acyclic (every run ends); the only repetition is inside
@@ -172,13 +176,22 @@ class CheckpointStep(_Step):
     on_reject: str = END
 
 
+class ToolStep(_Step):
+    type: Literal["tool"]
+    agent: str = Field(description="The agent the tool is used for: its manifest grant and allowlist apply.")
+    tool: str
+    arguments: dict[str, str] = Field(default_factory=dict, description="Argument -> template.")
+    scopes: Optional[list[str]] = None
+    next: str = END
+
+
 class RespondStep(_Step):
     type: Literal["respond"]
     output: str = Field(min_length=1, max_length=8000)
     next: str = END
 
 
-Step = Annotated[Union[AgentStep, KnowledgeStep, RouteStep, DelegateStep, CheckpointStep, RespondStep],
+Step = Annotated[Union[AgentStep, KnowledgeStep, ToolStep, RouteStep, DelegateStep, CheckpointStep, RespondStep],
                  Field(discriminator="type")]
 
 
@@ -257,7 +270,7 @@ class Workflow(Strict):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} names an unknown step")
                     if head not in ("input", "steps", "task", "last", "review"):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not a known template value")
-        # A knowledge step answers with the user's own session, which is never
+        # Knowledge and tool steps use the user's own session, which is never
         # stored; after a checkpoint the run continues without it.
         after: set[str] = set()
         todo = [t for s in self.steps if isinstance(s, CheckpointStep) for t in successors(s)]
@@ -267,9 +280,9 @@ class Workflow(Strict):
                 continue
             after.add(n)
             todo.extend(edges[n])
-        late = sorted(s.id for s in self.steps if isinstance(s, KnowledgeStep) and s.id in after)
+        late = sorted(s.id for s in self.steps if isinstance(s, (KnowledgeStep, ToolStep)) and s.id in after)
         if late:
-            raise ValueError(f"knowledge steps cannot come after a checkpoint: {late}")
+            raise ValueError(f"knowledge and tool steps cannot come after a checkpoint: {late}")
         if self.pattern == "bounded_multi_agent" and not any(isinstance(s, DelegateStep) for s in self.steps):
             raise ValueError("a bounded_multi_agent workflow has a delegate step")
         return self
@@ -284,6 +297,8 @@ class Workflow(Strict):
                 out |= {x for x in [s.agent, *s.fallback_agents] if x}
             if isinstance(s, DelegateStep):
                 out |= {s.coordinator, *s.delegates.values()}
+            if isinstance(s, ToolStep):
+                out.add(s.agent)
         return out
 
     def fingerprint(self) -> str:
@@ -307,6 +322,8 @@ def templates_of(s: Step) -> list[str]:
         return [s.prompt]
     if isinstance(s, KnowledgeStep):
         return [s.question]
+    if isinstance(s, ToolStep):
+        return list(s.arguments.values())
     if isinstance(s, DelegateStep):
         return [s.instructions, s.delegate_prompt]
     if isinstance(s, CheckpointStep):
@@ -318,10 +335,15 @@ def templates_of(s: Step) -> list[str]:
 
 # ---------------------------------------------------------------- platform checks
 
-def validate_platform(wf: Workflow, agent_ids: set[str], roles: dict[str, set[str]]) -> list[str]:
+def validate_platform(wf: Workflow, agent_ids: set[str], roles: dict[str, set[str]],
+                      grants: Optional[dict[str, set[str]]] = None) -> list[str]:
     """Rules that need the rest of NEXA: every agent is registered, every role
-    exists and holds the run permission."""
+    exists and holds the run permission, every tool step's tool is granted to
+    its agent by the agent's manifest."""
     problems = []
+    for s in wf.steps:
+        if isinstance(s, ToolStep) and grants is not None and s.tool not in grants.get(s.agent, set()):
+            problems.append(f"tool step {s.id!r}: {s.agent} is not granted {s.tool!r} in its manifest")
     for a in sorted(wf.agents() - agent_ids):
         problems.append(f"agent {a!r} is not in the agent registry")
     for r in wf.allowed_roles:
@@ -355,7 +377,8 @@ def parse(path: str) -> Workflow:
 
 
 def load_dir(directory: str = WORKFLOWS_DIR, *, agent_ids: Optional[set[str]] = None,
-             roles: Optional[dict[str, set[str]]] = None) -> dict[str, Workflow]:
+             roles: Optional[dict[str, set[str]]] = None,
+             grants: Optional[dict[str, set[str]]] = None) -> dict[str, Workflow]:
     found: dict[str, Workflow] = {}
     if not os.path.isdir(directory):
         return found
@@ -367,7 +390,7 @@ def load_dir(directory: str = WORKFLOWS_DIR, *, agent_ids: Optional[set[str]] = 
         if f != f"{wf.id}.json":
             raise WorkflowError(path, [f"file must be named {wf.id}.json"])
         if agent_ids is not None and roles is not None:
-            problems = validate_platform(wf, agent_ids, roles)
+            problems = validate_platform(wf, agent_ids, roles, grants)
             if problems:
                 raise WorkflowError(path, problems)
         found[wf.id] = wf
@@ -387,7 +410,7 @@ def main(argv: list[str]) -> int:
     from v1.identity.rbac import ROLE_PERMISSIONS
     from .. import registry
     found = load_dir(argv[1] if len(argv) > 1 else WORKFLOWS_DIR, agent_ids=set(registry.AGENTS),
-                     roles=ROLE_PERMISSIONS)
+                     roles=ROLE_PERMISSIONS, grants={a: set(s.tools) for a, s in registry.AGENTS.items()})
     for wf in found.values():
         print(f"ok  {wf.id} {wf.version} {wf.state} {wf.pattern}  {len(wf.steps)} steps  {wf.fingerprint()[:19]}")
     return 0

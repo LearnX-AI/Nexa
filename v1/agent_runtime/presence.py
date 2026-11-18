@@ -7,7 +7,8 @@ health of what each agent depends on (its manifest's health.requires):
 
   model_gateway      GET {NEXA_GATEWAY_URL}/health
   knowledge_service  GET {NEXA_KNOWLEDGE_URL}/health   (default http://127.0.0.1:8103)
-  tool_registry      every tool the agent is granted is registered and available
+  tool_registry      every tool the agent is granted is registered and available,
+                     and the Tool Gateway answers GET {NEXA_TOOL_GATEWAY_URL}/health
   memory_service     not built yet: never ready
 
 A deployment whose heartbeat is older than NEXA_AGENT_HEARTBEAT_STALE_S (120 s)
@@ -64,8 +65,10 @@ async def _probe(url: str) -> dict[str, Any]:
 
 async def dependency_checks() -> dict[str, dict[str, Any]]:
     knowledge = os.environ.get("NEXA_KNOWLEDGE_URL", "http://127.0.0.1:8103").rstrip("/")
-    gw, kn = await asyncio.gather(_probe(f"{config.GATEWAY_URL}/health"), _probe(f"{knowledge}/health"))
-    return {"model_gateway": gw, "knowledge_service": kn,
+    tools_url = os.environ.get("NEXA_TOOL_GATEWAY_URL", "http://127.0.0.1:8105").rstrip("/")
+    gw, kn, tg = await asyncio.gather(_probe(f"{config.GATEWAY_URL}/health"), _probe(f"{knowledge}/health"),
+                                      _probe(f"{tools_url}/health"))
+    return {"model_gateway": gw, "knowledge_service": kn, "tool_gateway": tg,
             "memory_service": {"ok": False, "error": "not built (NEXA-M3 Memory Service)"}}
 
 
@@ -74,7 +77,9 @@ def agent_health(spec: registry.AgentSpec, requires: list[str], deps: dict[str, 
     for need in requires:
         if need == "tool_registry":
             missing = [t for t in spec.tools if t not in tools.TOOLS or not tools.TOOLS[t].available]
-            checks[need] = {"ok": not missing, **({"unavailable": missing} if missing else {})}
+            gateway_ok = deps.get("tool_gateway", {"ok": True}).get("ok", False)
+            checks[need] = {"ok": not missing and gateway_ok, **({"unavailable": missing} if missing else {}),
+                            **({} if gateway_ok else {"tool_gateway": deps.get("tool_gateway")})}
         else:
             checks[need] = deps.get(need, {"ok": False, "error": "unknown dependency"})
     return {"ready": all(c["ok"] for c in checks.values()), "checks": checks}

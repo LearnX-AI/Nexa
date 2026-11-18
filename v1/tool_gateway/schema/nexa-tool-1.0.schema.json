@@ -1,0 +1,271 @@
+{
+  "$defs": {
+    "DataPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "returns": {
+          "default": "public",
+          "enum": [
+            "public",
+            "learner",
+            "teacher_only"
+          ],
+          "title": "Returns",
+          "type": "string"
+        },
+        "leaves_nexa": {
+          "default": false,
+          "description": "Arguments are sent outside NEXA: personal data is refused.",
+          "title": "Leaves Nexa",
+          "type": "boolean"
+        }
+      },
+      "title": "DataPolicy",
+      "type": "object"
+    },
+    "Implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "builtin",
+            "http",
+            "mcp"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "handler": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "builtin: the handler name.",
+          "title": "Handler"
+        },
+        "connector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "http and mcp: the connector id.",
+          "title": "Connector"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "http: the request path on the connector.",
+          "title": "Path"
+        },
+        "mcp_tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "mcp: the tool's name on the MCP server.",
+          "title": "Mcp Tool"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Implementation",
+      "type": "object"
+    },
+    "RateLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "per_user_per_minute": {
+          "default": 30,
+          "maximum": 6000,
+          "minimum": 1,
+          "title": "Per User Per Minute",
+          "type": "integer"
+        },
+        "per_tool_per_minute": {
+          "default": 600,
+          "maximum": 60000,
+          "minimum": 1,
+          "title": "Per Tool Per Minute",
+          "type": "integer"
+        }
+      },
+      "title": "RateLimit",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 5,
+          "title": "Description",
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Roles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "roles"
+      ],
+      "title": "Scope",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "tool_version": {
+      "const": "nexa.tool/1.0",
+      "title": "Tool Version",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 3,
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "owner": {
+      "minLength": 2,
+      "title": "Owner",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 600,
+      "minLength": 10,
+      "title": "Description",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "active",
+        "retired"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "input_schema": {
+      "additionalProperties": true,
+      "title": "Input Schema",
+      "type": "object"
+    },
+    "permission": {
+      "title": "Permission",
+      "type": "string"
+    },
+    "scopes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Scope"
+      },
+      "minProperties": 1,
+      "title": "Scopes",
+      "type": "object"
+    },
+    "default_scopes": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Default Scopes",
+      "type": "array"
+    },
+    "allowed_agents": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "The allowlist: agent id -> the scopes granted to it.",
+      "minProperties": 1,
+      "title": "Allowed Agents",
+      "type": "object"
+    },
+    "timeout_s": {
+      "default": 30.0,
+      "maximum": 300.0,
+      "minimum": 0.5,
+      "title": "Timeout S",
+      "type": "number"
+    },
+    "rate_limit": {
+      "$ref": "#/$defs/RateLimit"
+    },
+    "max_output_bytes": {
+      "default": 65536,
+      "maximum": 1048576,
+      "minimum": 256,
+      "title": "Max Output Bytes",
+      "type": "integer"
+    },
+    "side_effects": {
+      "default": "read",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "title": "Side Effects",
+      "type": "string"
+    },
+    "data": {
+      "$ref": "#/$defs/DataPolicy"
+    },
+    "implementation": {
+      "$ref": "#/$defs/Implementation"
+    }
+  },
+  "required": [
+    "tool_version",
+    "id",
+    "name",
+    "version",
+    "owner",
+    "description",
+    "state",
+    "input_schema",
+    "permission",
+    "scopes",
+    "default_scopes",
+    "allowed_agents",
+    "implementation"
+  ],
+  "title": "NEXA tool contract (nexa.tool/1.0)",
+  "type": "object"
+}
