@@ -283,6 +283,18 @@ class AgentManifest(Strict):
         raw = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
 
+    def content_fingerprint(self) -> str:
+        """sha256 of the manifest without its lifecycle record (state, approval,
+        deprecation): what identifies a version. Approving or deprecating a
+        version changes its state, not what it is (NEXA-M3-002)."""
+        raw = self.model_dump(mode="json")
+        raw["lifecycle"] = {k: v for k, v in raw["lifecycle"].items() if k not in LIFECYCLE_RECORD}
+        text = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+        return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+
+
+LIFECYCLE_RECORD = ("state", "approved_by", "approved_on", "deprecated_on", "sunset_on", "replaced_by")
+
 
 # ---------------------------------------------------------------- safety policies
 

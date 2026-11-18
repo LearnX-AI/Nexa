@@ -33,6 +33,21 @@ for _r in ("admin", "platform_admin"):
     ROLE_PERMISSIONS[_r] |= {"knowledge.lms.sync", "knowledge.lms.admin"}
 ROLE_PERMISSIONS["ai_engineer"] |= {"knowledge.lms.admin"}
 
+# Agent registry (NEXA-M3-002). Reading it is open to every human and service
+# role; changing it is not. agents.register: submit a manifest (a new agent or
+# version). agents.approve: move a version through review, approval and
+# activation. agents.admin: suspend, deprecate, disable (the kill switch).
+# agents.deploy: an Agent Runtime instance recording where it runs and its health.
+for _r in ROLE_PERMISSIONS:
+    if _r not in ("lms_sync",):
+        ROLE_PERMISSIONS[_r] |= {"agents.read"}
+for _r in ("ai_engineer", "admin", "platform_admin"):
+    ROLE_PERMISSIONS[_r] |= {"agents.register", "agents.admin"}
+for _r in ("admin", "platform_admin", "national_admin"):
+    ROLE_PERMISSIONS[_r] |= {"agents.approve"}
+for _r in ("service", "service_account", "admin", "platform_admin"):
+    ROLE_PERMISSIONS[_r] |= {"agents.deploy"}
+
 
 def permissions_for(roles) -> set:
     perms: set = set()

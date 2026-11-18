@@ -10,6 +10,9 @@ os.environ.setdefault("NEXA_IDENTITY_SECRET", "test-secret-not-real-0123456789-a
 os.environ.setdefault("NEXA_AGENT_GATEWAY_TOKEN", "test-token")
 os.environ.setdefault("NEXA_KNOWLEDGE_GATEWAY_TOKEN", "test-token")
 os.environ.pop("NEXA_MODEL_CONFIG", None)
+# A throwaway agent registry per test run, and no background heartbeat.
+os.environ["NEXA_AGENT_REGISTRY_DB"] = ":memory:"
+os.environ["NEXA_AGENT_HEARTBEAT_S"] = "0"
 # Strict curriculum-only answers unless a test turns general answers on.
 os.environ["NEXA_GENERAL_ANSWERS"] = "off"
 

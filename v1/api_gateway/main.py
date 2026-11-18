@@ -157,3 +157,34 @@ async def run_agent(
         "POST", f"/v1/agents/{name}/run", authorization, trace_id,
         payload.model_dump(exclude_none=True),
     )
+
+
+# Agent registry and discovery (NEXA-M3-002): served by the Agent Runtime,
+# which enforces the agents.* permissions; the gateway authenticates and
+# forwards. Clients discover agents by capability here instead of hard-coding
+# agent names.
+_REGISTRY_PATH = r"^[A-Za-z0-9._@:/-]{1,300}$"
+
+
+@app.api_route("/v1/registry/{rest:path}", methods=["GET", "POST", "PUT"], responses=_ERRORS,
+               include_in_schema=True)
+async def registry_proxy(
+    request: Request,
+    rest: str = Path(..., pattern=_REGISTRY_PATH),
+    principal: Principal = Depends(require_principal),
+    authorization: str = Header(...),
+):
+    if ".." in rest:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    trace_id = getattr(request.state, "trace_id", None)
+    body = None
+    if request.method in ("POST", "PUT"):
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=422, detail="JSON body required")
+    if request.method != "GET":
+        audit_event(action=f"api.registry.{request.method.lower()}:{rest}", decision="allow",
+                    principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward(request.method, f"/v1/registry/{rest}{query}", authorization, trace_id, body)
