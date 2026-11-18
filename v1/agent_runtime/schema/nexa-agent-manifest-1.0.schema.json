@@ -1,0 +1,682 @@
+{
+  "$defs": {
+    "Audience": {
+      "enum": [
+        "student",
+        "teacher",
+        "school_admin",
+        "national_admin",
+        "service"
+      ],
+      "title": "Audience",
+      "type": "string"
+    },
+    "Capability": {
+      "description": "What an agent does. A new capability is added here, reviewed, and\nreleased as a minor version of the contract.",
+      "enum": [
+        "chat",
+        "curriculum_answer",
+        "general_answer",
+        "explanation",
+        "calculation",
+        "lesson_planning",
+        "assessment_generation",
+        "summarisation",
+        "translation",
+        "course_outline"
+      ],
+      "title": "Capability",
+      "type": "string"
+    },
+    "ChangelogEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "change": {
+          "minLength": 3,
+          "title": "Change",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "date",
+        "change"
+      ],
+      "title": "ChangelogEntry",
+      "type": "object"
+    },
+    "Health": {
+      "additionalProperties": false,
+      "properties": {
+        "requires": {
+          "items": {
+            "enum": [
+              "model_gateway",
+              "knowledge_service",
+              "tool_registry",
+              "memory_service"
+            ],
+            "type": "string"
+          },
+          "title": "Requires",
+          "type": "array"
+        }
+      },
+      "title": "Health",
+      "type": "object"
+    },
+    "Identity": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable id, lower-case, starts with 'nexa-'. Never reused.",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name.",
+          "maxLength": 80,
+          "minLength": 3,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Semantic version of this agent (MAJOR.MINOR.PATCH).",
+          "title": "Version",
+          "type": "string"
+        },
+        "owner": {
+          "description": "Accountable team or person.",
+          "minLength": 2,
+          "title": "Owner",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 10,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "version",
+        "owner",
+        "description"
+      ],
+      "title": "Identity",
+      "type": "object"
+    },
+    "Interface": {
+      "additionalProperties": false,
+      "description": "The envelopes the agent accepts and returns. Version 1 of both is the\nAgent Runtime's RunRequest and RunResponse (schemas.py).",
+      "properties": {
+        "input": {
+          "const": "nexa.run.request/1",
+          "default": "nexa.run.request/1",
+          "title": "Input",
+          "type": "string"
+        },
+        "output": {
+          "const": "nexa.run.response/1",
+          "default": "nexa.run.response/1",
+          "title": "Output",
+          "type": "string"
+        },
+        "accepts_course_context": {
+          "default": false,
+          "description": "Uses the learner's course grade and subject.",
+          "title": "Accepts Course Context",
+          "type": "boolean"
+        },
+        "max_input_messages": {
+          "default": 50,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Max Input Messages",
+          "type": "integer"
+        },
+        "output_includes_citations": {
+          "default": false,
+          "title": "Output Includes Citations",
+          "type": "boolean"
+        }
+      },
+      "title": "Interface",
+      "type": "object"
+    },
+    "KnowledgeAccess": {
+      "additionalProperties": false,
+      "properties": {
+        "access_classes": {
+          "items": {
+            "enum": [
+              "learner",
+              "teacher_only",
+              "restricted"
+            ],
+            "type": "string"
+          },
+          "title": "Access Classes",
+          "type": "array"
+        },
+        "scopes": {
+          "items": {
+            "enum": [
+              "national",
+              "provincial",
+              "school",
+              "lms_site"
+            ],
+            "type": "string"
+          },
+          "title": "Scopes",
+          "type": "array"
+        }
+      },
+      "title": "KnowledgeAccess",
+      "type": "object"
+    },
+    "Lifecycle": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/LifecycleState"
+        },
+        "approved_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved By"
+        },
+        "approved_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved On"
+        },
+        "deprecated_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deprecated On"
+        },
+        "sunset_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sunset On"
+        },
+        "replaced_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Replaced By"
+        },
+        "changelog": {
+          "items": {
+            "$ref": "#/$defs/ChangelogEntry"
+          },
+          "minItems": 1,
+          "title": "Changelog",
+          "type": "array"
+        }
+      },
+      "required": [
+        "state",
+        "changelog"
+      ],
+      "title": "Lifecycle",
+      "type": "object"
+    },
+    "LifecycleState": {
+      "enum": [
+        "draft",
+        "review",
+        "approved",
+        "active",
+        "suspended",
+        "deprecated",
+        "retired"
+      ],
+      "title": "LifecycleState",
+      "type": "string"
+    },
+    "Memory": {
+      "additionalProperties": false,
+      "properties": {
+        "conversation": {
+          "default": "request",
+          "description": "request: only the messages sent with the run; none: single turn only.",
+          "enum": [
+            "none",
+            "request"
+          ],
+          "title": "Conversation",
+          "type": "string"
+        },
+        "long_term": {
+          "default": "none",
+          "enum": [
+            "none",
+            "read",
+            "read_write"
+          ],
+          "title": "Long Term",
+          "type": "string"
+        },
+        "long_term_scopes": {
+          "items": {
+            "enum": [
+              "learner_profile",
+              "class_progress"
+            ],
+            "type": "string"
+          },
+          "title": "Long Term Scopes",
+          "type": "array"
+        },
+        "retention_days": {
+          "default": 0,
+          "maximum": 365,
+          "minimum": 0,
+          "title": "Retention Days",
+          "type": "integer"
+        }
+      },
+      "title": "Memory",
+      "type": "object"
+    },
+    "ModelRequirements": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "Logical model name in the Model Gateway, never a backend.",
+          "title": "Model",
+          "type": "string"
+        },
+        "fallbacks": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallbacks",
+          "type": "array"
+        },
+        "temperature": {
+          "default": 0.3,
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "type": "number"
+        },
+        "max_output_tokens": {
+          "default": 700,
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Max Output Tokens",
+          "type": "integer"
+        },
+        "min_context_tokens": {
+          "default": 4096,
+          "minimum": 512,
+          "title": "Min Context Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "ModelRequirements",
+      "type": "object"
+    },
+    "Permissions": {
+      "additionalProperties": false,
+      "properties": {
+        "run_permission": {
+          "default": "model.invoke",
+          "description": "Permission a caller must hold to run the agent.",
+          "title": "Run Permission",
+          "type": "string"
+        },
+        "allowed_roles": {
+          "description": "Roles that may run it (each must hold run_permission).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allowed Roles",
+          "type": "array"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/KnowledgeAccess"
+        }
+      },
+      "required": [
+        "allowed_roles"
+      ],
+      "title": "Permissions",
+      "type": "object"
+    },
+    "Prompt": {
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "maxLength": 8000,
+          "minLength": 20,
+          "title": "System",
+          "type": "string"
+        }
+      },
+      "required": [
+        "system"
+      ],
+      "title": "Prompt",
+      "type": "object"
+    },
+    "Purpose": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "maxLength": 500,
+          "minLength": 10,
+          "title": "Summary",
+          "type": "string"
+        },
+        "audience": {
+          "items": {
+            "$ref": "#/$defs/Audience"
+          },
+          "minItems": 1,
+          "title": "Audience",
+          "type": "array"
+        },
+        "in_scope": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "In Scope",
+          "type": "array"
+        },
+        "out_of_scope": {
+          "description": "What the agent must decline or hand off.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Out Of Scope",
+          "type": "array"
+        }
+      },
+      "required": [
+        "summary",
+        "audience",
+        "in_scope",
+        "out_of_scope"
+      ],
+      "title": "Purpose",
+      "type": "object"
+    },
+    "Retry": {
+      "additionalProperties": false,
+      "properties": {
+        "max_attempts": {
+          "default": 2,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Max Attempts",
+          "type": "integer"
+        },
+        "backoff_s": {
+          "default": 2.0,
+          "maximum": 60.0,
+          "minimum": 0.0,
+          "title": "Backoff S",
+          "type": "number"
+        },
+        "retry_on": {
+          "items": {
+            "enum": [
+              "gateway_unavailable",
+              "timeout"
+            ],
+            "type": "string"
+          },
+          "title": "Retry On",
+          "type": "array"
+        }
+      },
+      "title": "Retry",
+      "type": "object"
+    },
+    "Runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_s": {
+          "default": 60.0,
+          "description": "Whole run, all attempts included.",
+          "maximum": 600.0,
+          "minimum": 1.0,
+          "title": "Timeout S",
+          "type": "number"
+        },
+        "retry": {
+          "$ref": "#/$defs/Retry"
+        },
+        "max_concurrent_runs": {
+          "default": 0,
+          "description": "0: limited only by the runtime's queue.",
+          "minimum": 0,
+          "title": "Max Concurrent Runs",
+          "type": "integer"
+        }
+      },
+      "title": "Runtime",
+      "type": "object"
+    },
+    "Safety": {
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "description": "Safety policy id, for example nexa.safety.student/1.",
+          "title": "Policy",
+          "type": "string"
+        },
+        "serves_minors": {
+          "title": "Serves Minors",
+          "type": "boolean"
+        },
+        "require_citations_for_curriculum": {
+          "default": true,
+          "title": "Require Citations For Curriculum",
+          "type": "boolean"
+        },
+        "general_answers": {
+          "default": "labelled",
+          "enum": [
+            "off",
+            "labelled"
+          ],
+          "title": "General Answers",
+          "type": "string"
+        },
+        "refuse": {
+          "description": "Request categories the agent must decline.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Refuse",
+          "type": "array"
+        },
+        "pii_in_prompts": {
+          "const": "forbidden",
+          "default": "forbidden",
+          "title": "Pii In Prompts",
+          "type": "string"
+        },
+        "escalation": {
+          "description": "Where a learner is pointed when the agent must decline.",
+          "minLength": 5,
+          "title": "Escalation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy",
+        "serves_minors",
+        "refuse",
+        "escalation"
+      ],
+      "title": "Safety",
+      "type": "object"
+    },
+    "ToolGrant": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "purpose": {
+          "minLength": 5,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "permission": {
+          "description": "Permission the caller must hold for this tool call.",
+          "title": "Permission",
+          "type": "string"
+        },
+        "max_calls_per_run": {
+          "default": 3,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Max Calls Per Run",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "purpose",
+        "permission"
+      ],
+      "title": "ToolGrant",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {
+      "const": "nexa.agent/1.0",
+      "title": "Manifest Version",
+      "type": "string"
+    },
+    "identity": {
+      "$ref": "#/$defs/Identity"
+    },
+    "purpose": {
+      "$ref": "#/$defs/Purpose"
+    },
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/Capability"
+      },
+      "minItems": 1,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "interface": {
+      "$ref": "#/$defs/Interface"
+    },
+    "permissions": {
+      "$ref": "#/$defs/Permissions"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ToolGrant"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "model": {
+      "$ref": "#/$defs/ModelRequirements"
+    },
+    "memory": {
+      "$ref": "#/$defs/Memory"
+    },
+    "safety": {
+      "$ref": "#/$defs/Safety"
+    },
+    "runtime": {
+      "$ref": "#/$defs/Runtime"
+    },
+    "health": {
+      "$ref": "#/$defs/Health"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/Lifecycle"
+    },
+    "prompt": {
+      "$ref": "#/$defs/Prompt"
+    }
+  },
+  "required": [
+    "manifest_version",
+    "identity",
+    "purpose",
+    "capabilities",
+    "permissions",
+    "model",
+    "safety",
+    "lifecycle",
+    "prompt"
+  ],
+  "title": "NEXA agent manifest (nexa.agent/1.0)",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexa.learnx.ai/schemas/nexa-agent-manifest-1.0.schema.json"
+}

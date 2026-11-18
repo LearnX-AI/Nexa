@@ -79,6 +79,14 @@ jobs:
           python -m pytest v1/tests/test_knowledge_indexing.py v1/tests/test_knowledge_retrieval.py -q -k pgvector -rs | tee pg.log
           ! grep -q "skipped" pg.log
 
+      - name: Agent manifests (NEXA-M3-001)
+        # Every agent manifest must satisfy nexa.agent/1.0: structure, and the
+        # platform rules (models, roles, permissions, tools, safety policy,
+        # lifecycle record). The published JSON Schema must match the contract.
+        run: |
+          python -m v1.agent_runtime.manifest validate
+          python -m v1.agent_runtime.manifest schema | diff - v1/agent_runtime/schema/nexa-agent-manifest-1.0.schema.json
+
       - name: RAG evaluation gate (NEXA-M2-008 fixture suite)
         # Authority conflicts, school vs national scope, access, citation
         # integrity and failure behaviour, deterministically. Every check must
