@@ -284,3 +284,34 @@ def test_live_check_tool_without_restart(monkeypatch, capsys):
         code = state_check.main(["--no-restart"])
     out = capsys.readouterr().out
     assert code == 0, out
+
+
+def test_resume_through_the_gateway_with_no_body(monkeypatch):
+    """The live check found it: POST .../resume carries no body, and the API
+    Gateway must forward it rather than ask for JSON."""
+    import httpx
+
+    from v1.agent_runtime.main import app
+    from v1.api_gateway import main as api
+    m = Model(CHOICES, block_on=3)
+    monkeypatch.setattr(gateway_client, "chat", m.chat)
+
+    async def crash():
+        r = await engine.start(WF, TEACHER, LESSON, wait=False)
+        for _ in range(200):
+            if len(m.calls) >= 3:
+                break
+            await asyncio.sleep(0.01)
+        for t in list(engine._TASKS):
+            t.cancel()
+        await asyncio.sleep(0.05)
+        return r["run_id"]
+    run_id = asyncio.run(crash())
+    engine.mark_interrupted()
+    m.block_on = None
+    monkeypatch.setattr(api, "_transport", httpx.ASGITransport(app=app))
+    gw = TestClient(api.app)
+    assert gw.post(f"/v1/workflow-runs/{run_id}/resume", headers=hdr(TEACHER2)).status_code == 404
+    r = gw.post(f"/v1/workflow-runs/{run_id}/resume", headers=hdr(TEACHER))
+    assert r.status_code == 200 and r.json()["status"] == "waiting_approval"
+    assert gw.post("/v1/workflow-runs/x/decision", content=b"{not json", headers=hdr(TEACHER)).status_code == 422

@@ -11,6 +11,7 @@ Run:
     uvicorn v1.api_gateway.main:app --host 127.0.0.1 --port 8099
 """
 from __future__ import annotations
+import json
 import re
 from typing import Any, Optional
 import httpx
@@ -161,6 +162,18 @@ async def run_agent(
     )
 
 
+
+async def _json_body(request: Request) -> Optional[Any]:
+    """The request's JSON body, or None when it has none (a POST such as
+    /resume or /enable carries no body). Malformed JSON is refused."""
+    raw = await request.body()
+    if not raw.strip():
+        return None
+    try:
+        return json.loads(raw)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Malformed JSON body")
+
 # Agent registry and discovery (NEXA-M3-002): served by the Agent Runtime,
 # which enforces the agents.* permissions; the gateway authenticates and
 # forwards. Clients discover agents by capability here instead of hard-coding
@@ -181,10 +194,7 @@ async def registry_proxy(
     trace_id = getattr(request.state, "trace_id", None)
     body = None
     if request.method in ("POST", "PUT"):
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(status_code=422, detail="JSON body required")
+        body = await _json_body(request)
     if request.method != "GET":
         audit_event(action=f"api.registry.{request.method.lower()}:{rest}", decision="allow",
                     principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
@@ -208,10 +218,7 @@ async def orchestration_proxy(
     trace_id = getattr(request.state, "trace_id", None)
     body = None
     if request.method == "POST":
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(status_code=422, detail="JSON body required")
+        body = await _json_body(request)
         audit_event(action=f"api.orchestration.post:{request.url.path}", decision="allow",
                     principal=principal.subject, roles=list(principal.roles), trace_id=trace_id)
     query = f"?{request.url.query}" if request.url.query else ""
@@ -241,10 +248,7 @@ async def agent_tool_proxy(
     authorization: str = Header(...),
 ):
     trace_id = getattr(request.state, "trace_id", None)
-    try:
-        body = await request.json()
-    except ValueError:
-        raise HTTPException(status_code=422, detail="JSON body required")
+    body = await _json_body(request)
     audit_event(action=f"api.agents.tool:{name}:{tool}", decision="allow", principal=principal.subject,
                 roles=list(principal.roles), trace_id=trace_id)
     return await _forward("POST", f"/v1/agents/{name}/tools/{tool}", authorization, trace_id, body)
@@ -262,10 +266,7 @@ async def state_proxy(request: Request, principal: Principal = Depends(require_p
         raise HTTPException(status_code=400, detail="Invalid path")
     body = None
     if request.method in ("POST", "PUT"):
-        try:
-            body = await request.json()
-        except ValueError:
-            raise HTTPException(status_code=422, detail="JSON body required")
+        body = await _json_body(request)
     query = f"?{request.url.query}" if request.url.query else ""
     return await _forward(request.method, f"{path}{query}", authorization, getattr(request.state, "trace_id", None),
                           body)
