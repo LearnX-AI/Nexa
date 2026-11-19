@@ -342,3 +342,34 @@ def test_live_security_check_passes_against_the_real_apps(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert code == 0, out
     print("\n".join(x for x in out.splitlines() if x.startswith(("PASS", "FAIL", "  pd_"))))
+
+
+def test_demo_runs_end_to_end_against_the_real_apps(monkeypatch, capsys):
+    """v1/tools/nexa_demo.py: the guided demonstration, against the API Gateway,
+    Agent Runtime and Tool Gateway in process (model and Knowledge scripted)."""
+    from v1.api_gateway import main as api
+    from v1.tools import nexa_demo
+
+    async def chat(m, messages, temperature=None, max_tokens=None, trace_id=None):
+        p = messages[-1]["content"]
+        if "Reply with only one JSON object" in p:
+            n = p.count("\nTask: ")
+            c = [{"action": "explain", "task": "Explain simple interest."},
+                 {"action": "worked_example", "task": "One worked example."}]
+            return {"choices": [{"message": {"content": json.dumps(c[n] if n < 2 else {"action": "done"})}}]}
+        if "Reply with the expression only" in p:
+            return {"choices": [{"message": {"content": "500*4%*3"}}]}
+        return {"choices": [{"message": {"content": "Worked answer: the interest is K60."}}]}
+    monkeypatch.setattr(gateway_client, "chat", chat)
+    monkeypatch.setattr(api, "_transport", httpx.ASGITransport(app=runtime_app))
+    tg = TestClient(tool_app)
+    real_sleep = time.sleep
+    with TestClient(api.app) as gw:
+        monkeypatch.setattr(nexa_demo.httpx, "Client", lambda base_url, timeout: gw)
+        monkeypatch.setattr(nexa_demo.httpx, "get", lambda url, **kw: tg.get(
+            url.replace("http://127.0.0.1:8105", ""), **{k: v for k, v in kw.items() if k != "timeout"}))
+        monkeypatch.setattr(nexa_demo.time, "sleep", lambda s: real_sleep(0.02))
+        code = nexa_demo.main(["--no-pause"])
+    out = capsys.readouterr().out
+    assert code == 0, out
+    assert "demonstrated as expected" in out and "✘" not in out
