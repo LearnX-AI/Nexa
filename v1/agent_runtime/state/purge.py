@@ -22,7 +22,9 @@ from v1.identity.principal import Principal
 from . import store as state
 
 SYSTEM = Principal("system:state-retention", ("service",), "service")
-TERMINAL = ("succeeded", "rejected", "failed", "budget_exceeded", "expired")
+# Interrupted runs nobody resumed within the retention period are purged too
+# (NEXA-M3-008 follow-up to M3-006).
+TERMINAL = ("succeeded", "rejected", "failed", "budget_exceeded", "expired", "interrupted")
 
 
 def retention_days() -> float:

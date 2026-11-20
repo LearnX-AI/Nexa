@@ -29,6 +29,7 @@ from typing import Any, Optional
 from v1.identity.principal import Principal
 from v1.identity.rbac import can
 from v1.observability import audit_event
+from v1.observability.core import metrics
 
 from . import contract as pc
 
@@ -84,6 +85,8 @@ def _record(action: str, agent: Optional[str], version: Optional[str], principal
                         json.dumps(list(principal.roles)), tenant_of(principal), action, resource,
                         "allow" if d.allow else "deny", d.rule, d.reason, trace_id, run_id,
                         json.dumps(d.detail, default=str)))
+    metrics.inc("nexa_policy_decisions_total", action=action, rule=d.rule or "-",
+                decision="allow" if d.allow else "deny")
     audit_event(action=f"policy.{action}:{agent or '-'}", decision="allow" if d.allow else "deny",
                 principal=principal.subject, agent=identity(agent, version) if agent else None,
                 tenant=tenant_of(principal), resource=resource, rule=d.rule, reason=d.reason,
