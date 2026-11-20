@@ -112,6 +112,11 @@ jobs:
           python -m v1.agent_runtime.policy schema | diff - v1/agent_runtime/schema/nexa-agent-policy-1.0.schema.json
           python -m pytest -q v1/tests/test_agent_security.py -p no:warnings
 
+      - name: Resilience evaluation (NEXA-M3-009)
+        # Every deterministic failure and abuse scenario, in an isolated NEXA,
+        # scored against the agreed thresholds; fails the build if they are not met.
+        run: python -m v1.tools.resilience_eval --out resilience-report
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published

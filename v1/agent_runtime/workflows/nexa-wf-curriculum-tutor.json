@@ -2,66 +2,159 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-curriculum-tutor",
   "name": "Curriculum tutor with tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "Deterministic, with tools through the Tool & Connector Gateway (NEXA-M3-004): a calculation is computed exactly by the calculator tool and explained by the curriculum tutor; any other question is answered from the curriculum by the knowledge_answer tool, as the student.",
   "pattern": "deterministic",
   "state": "active",
-  "allowed_roles": ["student", "teacher", "platform_admin"],
+  "allowed_roles": [
+    "student",
+    "teacher",
+    "platform_admin"
+  ],
   "run_permission": "model.invoke",
-  "input": {"question": "text"},
-  "budget": {"max_steps": 6, "max_agent_calls": 3, "max_wall_s": 300},
+  "input": {
+    "question": "text"
+  },
+  "budget": {
+    "max_steps": 6,
+    "max_agent_calls": 3,
+    "max_wall_s": 300
+  },
   "start": "kind",
   "steps": [
     {
-      "id": "kind", "type": "route", "title": "Calculation or curriculum question",
+      "id": "kind",
+      "type": "route",
+      "title": "Explanation, calculation or curriculum question",
       "rules": [
-        {"when": [{"field": "input.question", "matches": "\\b(calculate|work out|how (many|much)|percent(age)?|interest|average)\\b|\\d+\\s*[-+*/x×÷^%]\\s*\\d+"}],
-         "goto": "extract", "reason": "the question asks for a calculation"}
+        {
+          "when": [
+            {
+              "field": "input.question",
+              "matches": "^\\s*(explain|describe|define|why|compare|discuss)\\b|\\b(differ|difference between|meaning of)\\b"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "the question asks for an explanation, so the curriculum answers it"
+        },
+        {
+          "when": [
+            {
+              "field": "input.question",
+              "matches": "\\d+(\\.\\d+)?\\s*[-+*/x×÷^]\\s*\\d+"
+            }
+          ],
+          "goto": "extract",
+          "reason": "the question contains an arithmetic expression"
+        },
+        {
+          "when": [
+            {
+              "field": "input.question",
+              "matches": "\\b(calculate|work out|how (many|much)|find the (average|total|sum|mean)|what (do|will) (i|we|you) have)\\b"
+            },
+            {
+              "field": "input.question",
+              "matches": "(\\d|\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)\\b)"
+            }
+          ],
+          "goto": "extract",
+          "reason": "the question asks for a calculation with numbers"
+        }
       ],
       "default": "lookup"
     },
     {
-      "id": "extract", "type": "agent", "title": "Write the calculation as an expression",
-      "agent": "nexa-curriculum-tutor", "temperature": 0.0, "max_tokens": 60,
+      "id": "extract",
+      "type": "agent",
+      "title": "Write the calculation as an expression",
+      "agent": "nexa-curriculum-tutor",
+      "temperature": 0.0,
+      "max_tokens": 60,
       "prompt": "Write the single arithmetic expression that computes the answer to the question below. Use only numbers, + - * / ^ ( ) and %. Reply with the expression only: no words, no units, no equals sign.\n\nQuestion: {{input.question}}",
-      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2},
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
       "next": "compute"
     },
     {
-      "id": "compute", "type": "tool", "title": "Compute it exactly (calculator tool)",
-      "agent": "nexa-curriculum-tutor", "tool": "calculator",
-      "arguments": {"expression": "{{steps.extract.output}}"},
-      "policy": {"timeout_s": 10, "max_attempts": 1, "on_error": "lookup"},
+      "id": "compute",
+      "type": "tool",
+      "title": "Compute it exactly (calculator tool)",
+      "agent": "nexa-curriculum-tutor",
+      "tool": "calculator",
+      "arguments": {
+        "expression": "{{steps.extract.output}}"
+      },
+      "policy": {
+        "timeout_s": 10,
+        "max_attempts": 1,
+        "on_error": "lookup"
+      },
       "next": "explain"
     },
     {
-      "id": "explain", "type": "agent", "title": "Explain the working",
+      "id": "explain",
+      "type": "agent",
+      "title": "Explain the working",
       "agent": "nexa-curriculum-tutor",
       "prompt": "A student asked: {{input.question}}\n\nThe calculator tool computed {{steps.compute.result.text}}. Explain the working step by step in simple English and state the final answer using exactly this result. Say that this is a worked answer, not a passage from the curriculum.",
-      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+      "policy": {
+        "timeout_s": 90,
+        "max_attempts": 2,
+        "backoff_s": 2
+      }
     },
     {
-      "id": "lookup", "type": "tool", "title": "Curriculum answer (knowledge_answer tool)",
-      "agent": "nexa-curriculum-tutor", "tool": "knowledge_answer",
-      "arguments": {"question": "{{input.question}}"},
-      "policy": {"timeout_s": 180, "max_attempts": 2, "backoff_s": 2},
+      "id": "lookup",
+      "type": "tool",
+      "title": "Curriculum answer (knowledge_answer tool)",
+      "agent": "nexa-curriculum-tutor",
+      "tool": "knowledge_answer",
+      "arguments": {
+        "question": "{{input.question}}"
+      },
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
       "next": "evidence"
     },
     {
-      "id": "evidence", "type": "route", "title": "Is the answer grounded?",
+      "id": "evidence",
+      "type": "route",
+      "title": "Is the answer grounded?",
       "rules": [
-        {"when": [{"field": "steps.lookup.result.status", "in": ["grounded", "grounded_weak"]}],
-         "goto": "cited", "reason": "the curriculum evidence supports an answer"}
+        {
+          "when": [
+            {
+              "field": "steps.lookup.result.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "cited",
+          "reason": "the curriculum evidence supports an answer"
+        }
       ],
       "default": "not_covered"
     },
     {
-      "id": "cited", "type": "respond", "title": "Return the cited curriculum answer",
+      "id": "cited",
+      "type": "respond",
+      "title": "Return the cited curriculum answer",
       "output": "{{steps.lookup.result.answer}}"
     },
     {
-      "id": "not_covered", "type": "respond", "title": "Say the curriculum does not cover it",
+      "id": "not_covered",
+      "type": "respond",
+      "title": "Say the curriculum does not cover it",
       "output": "{{steps.lookup.result.answer}}"
     }
   ],

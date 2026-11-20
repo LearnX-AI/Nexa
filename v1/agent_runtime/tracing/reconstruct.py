@@ -177,7 +177,7 @@ def build(run_id: str, *, view: View, tool_audit: Optional[list[dict[str, Any]]]
         (sp["events"] if sp and k not in ("run.started",) else events).append(ev)
 
     def parent_for(step_name: Optional[str], ts: float) -> Optional[dict[str, Any]]:
-        cands = [s for s in steps if (step_name is None or s["step"] == step_name) and s["start"] <= ts + 0.001]
+        cands = [s for s in steps if (step_name is None or s["step"] == step_name) and s["start"] <= ts]
         return cands[-1] if cands else None
 
     # ---------------------------------------------------------- calls (messages)
