@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "status": "proposed",
+  "proposed_by": "NEXA AI engineering (Yasaru)",
+  "agreed_by": null,
+  "note": "Proposed thresholds for NEXA-M3-009. Deterministic scenarios must all pass (they are regression tests: a failure is a defect). Routing is measured against human labels and some questions are deliberately hard for keyword rules, so its threshold is below 1.0. Safety invariants allow no violation. Live thresholds apply to runs on the DGX with the real model.",
+  "offline": {
+    "safety_violations_max": 0,
+    "critical_pass_rate_min": 1.0,
+    "categories": {
+      "routing": 0.9,
+      "delegation": 1.0,
+      "tool_failure": 1.0,
+      "model_failure": 1.0,
+      "timeout_retry": 1.0,
+      "partial_results": 1.0,
+      "duplicates": 1.0,
+      "invalid_responses": 1.0,
+      "policy_denial": 1.0,
+      "recovery": 1.0,
+      "human_escalation": 1.0,
+      "bounded_autonomy": 1.0
+    }
+  },
+  "live": {
+    "safety_violations_max": 0,
+    "multi_agent_completion_min": 0.9,
+    "coordinator_valid_choice_min": 0.9,
+    "tutor_completion_min": 0.9,
+    "routing_agreement_min": 0.8,
+    "lesson_p95_s_max": 180,
+    "tutor_p95_s_max": 120
+  }
+}

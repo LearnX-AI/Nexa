@@ -725,6 +725,10 @@ async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temper
         except runtime.AgentRuntimeError as exc:
             return bus.Delivered(error=_error(_AGENT_ERRORS.get(exc.status_code, "internal"), str(exc.detail),
                                               exc.status_code))
+        if not (resp.output or "").strip():
+            # An empty answer is an invalid response: never passed on, never
+            # recorded as done (NEXA-M3-009).
+            return bus.Delivered(error=_error("invalid", f"{agent} returned an empty response"))
         x = resp.x_nexa or {}
         u = resp.usage or {}
         return bus.Delivered(sender_version=x.get("agent_version"), payload=mc.AgentResultV2(
@@ -806,6 +810,7 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
     done: list[dict[str, Any]] = []
     decisions = 0
     stop_reason = "limit"
+    failed: Optional[str] = None
     while len(done) < step.max_delegations:
         work = "\n\n".join(f"[{i}] {d['action']} -> {d['agent']}\nTask: {d['task']}\nResult: {d['output'][:CARRY]}"
                            for i, d in enumerate(done, 1)) or "(nothing yet)"
@@ -814,10 +819,16 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
                   f"Actions left: {step.max_delegations - len(done)}. Reply with only one JSON object, for example "
                   f'{{"action": "{next(iter(step.delegates))}", "task": "what that agent should do"}} '
                   f'or {{"action": "done"}}.')
-        choice = await _with_policy(run, step, remaining, lambda t: _call_agent(
-            run, step.id, step.coordinator, prompt, temperature=step.temperature, max_tokens=300, timeout=t,
-            role="coordinator", key=f"{run.run_id}/{step.id}/coordinator/{decisions + 1}",
-            max_attempts=step.policy.max_attempts))
+        try:
+            choice = await _with_policy(run, step, remaining, lambda t: _call_agent(
+                run, step.id, step.coordinator, prompt, temperature=step.temperature, max_tokens=300, timeout=t,
+                role="coordinator", key=f"{run.run_id}/{step.id}/coordinator/{decisions + 1}",
+                max_attempts=step.policy.max_attempts))
+        except StepError as exc:
+            if not done:
+                raise
+            failed = f"coordinator failed: {exc}"
+            break
         decisions += 1
         action, task, problem = parse_choice(choice["output"], allowed)
         run.trace("delegate.choice", step.id, decision=decisions, coordinator=step.coordinator,
@@ -850,18 +861,51 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
                       reason=verdict.reason, decision_id=verdict.decision_id)
             stop_reason = f"policy: {verdict.reason}"
             break
-        res = await _with_policy(run, step, remaining, lambda t: _call_agent(
-            run, step.id, agent, render(step.delegate_prompt, {**ctx, "task": task}), timeout=t,
-            role="delegate", key=f"{run.run_id}/{step.id}/delegate/{len(done) + 1}",
-            max_attempts=step.policy.max_attempts, cause=decided.message_id))
+        try:
+            res = await _with_policy(run, step, remaining, lambda t: _call_agent(
+                run, step.id, agent, render(step.delegate_prompt, {**ctx, "task": task}), timeout=t,
+                role="delegate", key=f"{run.run_id}/{step.id}/delegate/{len(done) + 1}",
+                max_attempts=step.policy.max_attempts, cause=decided.message_id))
+        except StepError as exc:
+            if not done:
+                raise
+            failed = f"{action} by {agent} failed: {exc}"
+            break
         done.append({"action": action, "agent": agent, "task": task, "output": res["output"],
                      "version": res["version"]})
+    if failed:
+        # Partial results (NEXA-M3-009): work already done is kept only if a
+        # person reviews it before release, and is marked incomplete;
+        # otherwise the step fails and nothing partial is released.
+        if not human_review_follows(run.wf, step.id):
+            raise StepError(f"{failed}; no human review follows, so the partial work is not kept", retry=False)
+        stop_reason = failed
+        run.trace("delegate.partial", step.id, delegations=len(done), reason=_short(failed, 300))
     run.trace("delegate.finished", step.id, delegations=len(done), decisions=decisions, reason=stop_reason)
     if not done:
         raise StepError(f"no work was delegated ({stop_reason})", retry=False)
     combined = "\n\n".join(f"## {d['action'].replace('_', ' ').capitalize()}\n\n{d['output']}" for d in done)
+    if failed:
+        combined = ("INCOMPLETE: part of this material could not be prepared " f"({_short(failed, 200)}). "
+                    "Review it before use.\n\n" + combined)
     return {"output": combined, "last_output": done[-1]["output"], "delegations": done, "decisions": decisions,
-            "stopped": stop_reason}
+            "stopped": stop_reason, "partial": bool(failed)}
+
+
+def human_review_follows(wf: wfm.Workflow, step_id: str) -> bool:
+    """Whether every path from this step reaches a human checkpoint before the end."""
+    def reaches(sid: str, seen: frozenset) -> bool:
+        if sid == wfm.END or sid in seen:
+            return False
+        st = wf.step(sid)
+        if isinstance(st, wfm.CheckpointStep):
+            return True
+        nxt = [r.goto for r in st.rules] + [st.default] if isinstance(st, wfm.RouteStep) else \
+            [getattr(st, "next", wfm.END)]
+        return all(reaches(n, seen | {sid}) for n in nxt)
+    st = wf.step(step_id)
+    nxt = getattr(st, "next", wfm.END)
+    return reaches(nxt, frozenset())
 
 
 # ---------------------------------------------------------------- tools (NEXA-M3-004)
