@@ -133,6 +133,15 @@ class AgentResult(Strict):
     latency_ms: int = Field(ge=0)
 
 
+class AgentResultV2(AgentResult):
+    """nexa.payload.agent.result/2 (NEXA-M3-008): /1 plus the model usage of
+    the call, so a run's cost can be reconstructed."""
+    prompt_tokens: Optional[int] = Field(None, ge=0)
+    completion_tokens: Optional[int] = Field(None, ge=0)
+    fallback_model: Optional[str] = None
+    redacted: Optional[int] = Field(None, ge=0, description="Personal-data items removed from the output.")
+
+
 class ToolTask(Strict):
     """nexa.payload.tool.task/1: the orchestrator asks the Tool Gateway to run a
     tool for an agent (NEXA-M3-004)."""
@@ -178,6 +187,7 @@ class RunEvent(Strict):
 PAYLOADS: dict[str, type[BaseModel]] = {
     "nexa.payload.agent.task/1": AgentTask,
     "nexa.payload.agent.result/1": AgentResult,
+    "nexa.payload.agent.result/2": AgentResultV2,
     "nexa.payload.tool.task/1": ToolTask,
     "nexa.payload.tool.result/1": ToolResult,
     "nexa.payload.delegation.choice/1": DelegationChoice,
@@ -188,13 +198,15 @@ PAYLOADS: dict[str, type[BaseModel]] = {
 # Message type -> (kind, payload schema). A type is never reused with another meaning.
 TYPES: dict[str, tuple[str, str]] = {
     "agent.task": ("request", "nexa.payload.agent.task/1"),
-    "agent.result": ("result", "nexa.payload.agent.result/1"),
+    "agent.result": ("result", "nexa.payload.agent.result/2"),
     "agent.error": ("error", "nexa.payload.error/1"),
     "tool.task": ("request", "nexa.payload.tool.task/1"),
     "tool.result": ("result", "nexa.payload.tool.result/1"),
     "tool.error": ("error", "nexa.payload.error/1"),
     "delegation.choice": ("event", "nexa.payload.delegation.choice/1"),
 }
+# Earlier payload versions a type may still carry in recorded conversations.
+COMPATIBLE: dict[str, set[str]] = {"agent.result": {"nexa.payload.agent.result/1"}}
 EVENT_PREFIXES = ("run.", "step.", "route.", "checkpoint.", "delegate.", "agent.", "tool.", "knowledge.", "session.")
 
 
@@ -255,7 +267,8 @@ def rules(m: Message) -> list[str]:
             p.append(f"{m.type} is not a {m.kind} type")
         if m.receiver is None:
             p.append(f"a {m.kind} has a receiver")
-    if m.type in TYPES and TYPES[m.type][1] != m.payload_schema:
+    if m.type in TYPES and TYPES[m.type][1] != m.payload_schema and \
+            m.payload_schema not in COMPATIBLE.get(m.type, set()):
         p.append(f"{m.type} carries {TYPES[m.type][1]}, not {m.payload_schema}")
     if m.kind == "request":
         if m.sender.kind != "orchestrator":

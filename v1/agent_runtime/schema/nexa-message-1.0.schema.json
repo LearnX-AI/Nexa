@@ -332,7 +332,7 @@
     },
     "agent.result": {
       "kind": "result",
-      "payload_schema": "nexa.payload.agent.result/1"
+      "payload_schema": "nexa.payload.agent.result/2"
     },
     "agent.error": {
       "kind": "error",
@@ -514,6 +514,128 @@
         "latency_ms"
       ],
       "title": "AgentResult",
+      "type": "object"
+    },
+    "nexa.payload.agent.result/2": {
+      "additionalProperties": false,
+      "description": "nexa.payload.agent.result/2 (NEXA-M3-008): /1 plus the model usage of\nthe call, so a run's cost can be reconstructed.",
+      "properties": {
+        "output": {
+          "maxLength": 100000,
+          "title": "Output",
+          "type": "string"
+        },
+        "agent_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Version"
+        },
+        "manifest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "attempts": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempts"
+        },
+        "latency_ms": {
+          "minimum": 0,
+          "title": "Latency Ms",
+          "type": "integer"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "fallback_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Model"
+        },
+        "redacted": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Personal-data items removed from the output.",
+          "title": "Redacted"
+        }
+      },
+      "required": [
+        "output",
+        "latency_ms"
+      ],
+      "title": "AgentResultV2",
       "type": "object"
     },
     "nexa.payload.tool.task/1": {

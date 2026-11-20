@@ -33,6 +33,15 @@ services together:
 even if a caller passes them in. Audit events carry identifiers and decisions,
 not content.
 
+## Agent executions (M3-008)
+
+Agent calls, tool calls and finished workflow runs add `event: span` lines and
+Prometheus counters (`nexa_agent_calls_total`, `nexa_model_tokens_total`,
+`nexa_tool_calls_total`, `nexa_policy_decisions_total`,
+`nexa_workflow_runs_total`). A whole multi-agent run is reconstructed from the
+records with `python -m v1.tools.trace_view <run id> --operator user:<name>`;
+see `docs/agents/NEXA-M3-008-observability-tracing-audit.md`.
+
 ## Not in this baseline, by design
 
 Shipping logs off box (Loki, OpenSearch), metrics dashboards, sampling, and a

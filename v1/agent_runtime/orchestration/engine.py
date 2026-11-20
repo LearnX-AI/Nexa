@@ -44,6 +44,7 @@ from v1.observability import audit_event, new_trace_id
 from .. import presence, registry, runtime, tools
 from ..messaging import bus, contract as mc
 from ..state import contract as sc, store as state
+from ..tracing import signals as obs
 from ..policy import pdp
 from . import workflow as wfm
 
@@ -540,6 +541,7 @@ def _finish(run: Run, status: str, error: Optional[str]) -> None:
               output_chars=len(run.output or ""))
     audit_event(action=f"workflow.{status}:{run.workflow_id}", decision="allow", principal=run.principal.subject,
                 run_id=run.run_id, trace_id=run.trace_id)
+    obs.run_finished(run, status)
 
 
 # ---------------------------------------------------------------- the loop
@@ -676,6 +678,13 @@ _AGENT_ERRORS = {403: "refused", 409: "refused", 410: "refused", 423: "refused",
                  429: "budget", 502: "unavailable", 503: "unavailable", 504: "timeout"}
 
 
+def _int(v: Any) -> Optional[int]:
+    try:
+        return int(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _error(code: str, reason: str, status: Optional[int] = None) -> mc.ErrorInfo:
     return mc.ErrorInfo(code=code, retryable=code in mc.RETRYABLE, reason=reason[:1000], status=status)
 
@@ -717,22 +726,31 @@ async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temper
             return bus.Delivered(error=_error(_AGENT_ERRORS.get(exc.status_code, "internal"), str(exc.detail),
                                               exc.status_code))
         x = resp.x_nexa or {}
-        return bus.Delivered(sender_version=x.get("agent_version"), payload=mc.AgentResult(
+        u = resp.usage or {}
+        return bus.Delivered(sender_version=x.get("agent_version"), payload=mc.AgentResultV2(
             output=resp.output or "", agent_version=x.get("agent_version"), manifest=x.get("manifest"),
-            model=x.get("model"), attempts=x.get("attempts"),
-            latency_ms=int((time.monotonic() - t0) * 1000)).model_dump(exclude_none=True))
+            model=x.get("model") or resp.model, attempts=x.get("attempts"),
+            latency_ms=int((time.monotonic() - t0) * 1000),
+            prompt_tokens=_int(u.get("prompt_tokens")), completion_tokens=_int(u.get("completion_tokens")),
+            fallback_model=x.get("fallback_model"), redacted=x.get("redacted")).model_dump(exclude_none=True))
 
     reply = await bus.request(req, deliver)
     run.last_message = reply.message_id
+    ms = int((time.monotonic() - t0) * 1000)
     if reply.kind == "error":
         e = reply.error
+        obs.agent_call(run, step_id, agent, role, req.message_id, ms, ok=False, code=e.code)
         run.trace("agent.call", step_id, agent=agent, role=role, ok=False, status=e.status, error=e.reason,
                   code=e.code, request=req.message_id, reply=reply.message_id)
         raise StepError(f"{agent}: {e.reason}", retry=e.retryable, status=e.status)
     p = reply.payload
+    obs.agent_call(run, step_id, agent, role, req.message_id, ms, ok=True, model=p.get("model"),
+                   prompt_tokens=p.get("prompt_tokens"), completion_tokens=p.get("completion_tokens"),
+                   )
     rec = {"agent": agent, "version": p.get("agent_version"), "manifest": p.get("manifest"), "model": p.get("model"),
            "attempts": p.get("attempts"), "latency_ms": int((time.monotonic() - t0) * 1000),
            "trace_id": run.trace_id, "request": req.message_id, "reply": reply.message_id}
+    rec.update(prompt_tokens=p.get("prompt_tokens"), completion_tokens=p.get("completion_tokens"))
     run.trace("agent.call", step_id, role=role, ok=True, output_chars=len(p.get("output", "")), **rec)
     return {"output": p.get("output", ""), **rec}
 
@@ -885,6 +903,8 @@ async def _tool(run: Run, step: wfm.ToolStep, ctx, timeout: float) -> dict[str, 
 
     reply = await bus.request(req, deliver)
     run.last_message = reply.message_id
+    obs.tool_call(run, step.id, step.tool, step.agent, req.message_id, int((time.monotonic() - t0) * 1000),
+                  ok=reply.kind != "error", code=reply.error.code if reply.error else None)
     if reply.kind == "error":
         e = reply.error
         run.trace("tool.call", step.id, agent=step.agent, tool=step.tool, ok=False, status=e.status, error=e.reason,
