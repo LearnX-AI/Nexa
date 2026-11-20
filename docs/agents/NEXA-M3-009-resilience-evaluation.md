@@ -7,7 +7,7 @@ Owner: NEXA AI engineering.
 
 Code:
 
-- harness: `v1/agent_runtime/evaluation/` (`sandbox.py`, `scenarios.py`,
+- harness: `v1/tools/resilience/` (`sandbox.py`, `scenarios.py`,
   `invariants.py`, `runner.py`, `thresholds.json`);
 - command: `v1/tools/resilience_eval.py`;
 - tests: `v1/tests/test_resilience.py`;

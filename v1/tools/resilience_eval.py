@@ -3,7 +3,7 @@
 Offline (default): runs every deterministic scenario in an isolated NEXA (in
 memory, no network: the deployed registry, audit stores and services are not
 touched), checks the safety invariants on every run, scores each category
-against the agreed thresholds (v1/agent_runtime/evaluation/thresholds.json),
+against the agreed thresholds (v1/tools/resilience/thresholds.json),
 writes a report, and exits 1 if the thresholds are not met. CI runs it.
 
     python -m v1.tools.resilience_eval --out ~/nexa-evidence
@@ -46,7 +46,7 @@ def offline(out: str, only: str | None) -> int:
     _isolate()
     import contextlib
     import io
-    from v1.agent_runtime.evaluation import runner
+    from v1.tools.resilience import runner
     sink = io.StringIO()
     with contextlib.redirect_stdout(sink):          # the services' own log lines
         rep = runner.run(only)
@@ -106,8 +106,7 @@ def live(url: str, runs: int, school: str, out: str) -> int:
     c = httpx.Client(base_url=url.rstrip("/"), timeout=300)
     t1, t2 = tok("eval:live-teacher-1", ["teacher"], school), tok("eval:live-teacher-2", ["teacher"], school)
     student, operator = tok("eval:live-student", ["student"], school), tok("eval:live-operator", ["ai_engineer"])
-    th = json.load(open(os.path.join(os.path.dirname(__file__), "..", "agent_runtime", "evaluation",
-                                     "thresholds.json")))["live"]
+    th = json.load(open(os.path.join(os.path.dirname(__file__), "resilience", "thresholds.json")))["live"]
 
     def wait(rid, who, until=("waiting_approval", "succeeded", "failed", "rejected", "budget_exceeded")):
         run = {}

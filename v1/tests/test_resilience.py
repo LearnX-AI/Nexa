@@ -7,8 +7,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from v1.agent_runtime.evaluation import runner, sandbox
-from v1.agent_runtime.evaluation.scenarios import CATEGORIES, SCENARIOS
+from v1.tools.resilience import runner, sandbox
+from v1.tools.resilience.scenarios import CATEGORIES, SCENARIOS
 
 
 @pytest.fixture(scope="module")
