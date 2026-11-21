@@ -79,21 +79,33 @@ class Budget(Strict):
 
 # ---------------------------------------------------------------- conditions
 
+CONDITION_FIELD = re.compile(r"^(input|steps|session)\.[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$|^caller\.roles$")
+
+
 class Condition(Strict):
-    """True when the field's value matches. Exactly one test is given."""
-    field: str = Field(description="input.<name> or steps.<step>.<field>")
+    """True when the field's value matches. Exactly one test is given.
+
+    caller.roles (NEXA-M3-010) is the roles of the user who started the run,
+    from their verified identity token, never from the input: a route can send
+    a student and a teacher different ways. It routes; it does not authorize
+    (role and policy checks still apply at every step)."""
+    field: str = Field(description="input.<name>, steps.<step>.<field>, session.<key> or caller.roles")
     matches: Optional[str] = Field(None, description="Regular expression, case-insensitive, searched in the text.")
     equals: Optional[Union[str, int, float, bool]] = None
     one_of: Optional[list[Union[str, int, float, bool]]] = Field(None, alias="in")
+    any_of: Optional[list[str]] = Field(None, min_length=1,
+                                        description="The field (a list) holds at least one of these.")
     exists: Optional[bool] = None
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     @model_validator(mode="after")
     def _one(self) -> "Condition":
-        given = [x is not None for x in (self.matches, self.equals, self.one_of, self.exists)]
+        given = [x is not None for x in (self.matches, self.equals, self.one_of, self.any_of, self.exists)]
         if sum(given) != 1:
-            raise ValueError("a condition has exactly one of matches, equals, in, exists")
+            raise ValueError("a condition has exactly one of matches, equals, in, any_of, exists")
+        if not CONDITION_FIELD.match(self.field):
+            raise ValueError(f"condition field {self.field!r} is not input.*, steps.*, session.* or caller.roles")
         if self.matches is not None:
             re.compile(self.matches)
         return self
