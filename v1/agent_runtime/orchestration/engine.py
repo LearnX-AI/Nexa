@@ -144,6 +144,9 @@ def holds(c: wfm.Condition, ctx: dict[str, Any]) -> bool:
         return v == c.equals
     if c.one_of is not None:
         return v in c.one_of
+    if c.any_of is not None:
+        have = v if isinstance(v, (list, tuple, set)) else [v]
+        return bool(set(map(str, have)) & set(c.any_of))
     return v is not None and re.search(c.matches, str(v), re.IGNORECASE) is not None
 
 
@@ -609,6 +612,8 @@ async def advance(run: Run) -> None:
 async def _execute(run: Run, step, remaining) -> tuple[str, dict[str, Any]]:
     ctx = run.template_ctx
     if isinstance(step, wfm.RouteStep):
+        # The initiator's verified roles, for routing only; not a template value.
+        ctx = {**ctx, "caller": {"roles": sorted(run.principal.roles)}}
         for i, rule in enumerate(step.rules):
             if all(holds(c, ctx) for c in rule.when):
                 run.trace("route.decision", step.id, rule=i, goto=rule.goto, reason=rule.reason,

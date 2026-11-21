@@ -1,0 +1,474 @@
+{
+  "map_version": "1.0.0",
+  "task": "NEXA-M3-010",
+  "source": "main.py (NEXA v0)",
+  "decisions": {
+    "retain": "kept as it is, moved into v1",
+    "refactor": "kept in substance, rebuilt on v1 contracts",
+    "replace": "a v1 component does it instead",
+    "deprecate": "not carried over"
+  },
+  "functions": {
+    "classify_intent": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Rules first in v0's order; one-word classifier (curriculum, general, smalltalk) only for the rest, default curriculum as in v0. generate_* intents are decided by rule, not the model."
+    },
+    "quick_reply": {
+      "decision": "retain",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Greetings, thanks and goodbyes answered by rule with no model call (steps greet, thanks, bye). The v0 'what is my name' answers are dropped: v1 does not hold the learner's name."
+    },
+    "looks_like_math": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Intent rules: an arithmetic expression, or a calculation verb with a number (number words count)."
+    },
+    "_is_lesson_request": {
+      "decision": "retain",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Intent rule for lesson-plan requests, routed by caller.roles."
+    },
+    "_is_question_request": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Intent rule needs a generate verb and an assessment term (quiz, MCQ, '10 questions'); a bare 'question' no longer counts."
+    },
+    "_is_explain_request": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Explanation-first rule (from nexa-wf-curriculum-tutor 1.1.0)."
+    },
+    "build_conversational_reply": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/workflows/nexa-wf-assistant.json",
+      "note": "Step chat (nexa-tutor), short reply that offers study help and asks for no personal details."
+    },
+    "solve_simple_reasoning_question": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "A special case for one riddle ('all but N'); the general path answers it."
+    },
+    "build_nexa_faq_answer": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Questions about NEXA itself: publish the FAQ as an approved knowledge source instead of hard-coded matching.",
+      "milestone": "M4"
+    },
+    "infer_chat_status": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "UI status strings; v1 clients read the run status."
+    },
+    "is_chat_turn_cancelled": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/orchestration/engine.py",
+      "note": "Runs are bounded by the workflow budget (steps, agent calls, wall time). A user-initiated cancel is an open item for the client.",
+      "milestone": "M4"
+    },
+    "solve_with_sympy": {
+      "decision": "replace",
+      "v1": "v1/tool_gateway/tools/calculator.json",
+      "note": "Exact arithmetic through the calculator tool (M3-004). Symbolic algebra and calculus are not covered yet.",
+      "milestone": "M4"
+    },
+    "llm_to_sympy": {
+      "decision": "replace",
+      "v1": "v1/tool_gateway/tools/calculator.json",
+      "note": "The model writes only the expression (step extract); the tool computes it; a bad expression is refused and the question goes to the curriculum."
+    },
+    "normalize_math_input": {
+      "decision": "replace",
+      "v1": "v1/tool_gateway/tools/calculator.json",
+      "note": "The calculator tool validates its own input."
+    },
+    "retrieve_curriculum_context": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "Knowledge Service grounded answer with evidence status and citations (M2); the v0 index is deprecated (M2-010)."
+    },
+    "_material_covers_topic": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "Evidence levels (grounded, grounded_weak, no_evidence) from the Knowledge Service decide the route."
+    },
+    "curriculum_answer_is_evasive": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "Grounding check in the Knowledge Service; route evidence."
+    },
+    "strip_curriculum_meta": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "The Knowledge Service writes the cited answer; general answers are labelled instead of hiding their source."
+    },
+    "_clean_pdf_artifacts": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "Cleaning happens at ingestion (M2-002), not at answer time."
+    },
+    "parse_lesson_request_scope": {
+      "decision": "replace",
+      "v1": "v1/knowledge",
+      "note": "Course and grade scope come from the request context and the LMS (M2-005, M2-007)."
+    },
+    "strip_output_format_noise": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Only needed because v0 retrieved on the raw message including 'in PDF format'."
+    },
+    "answer_with_history": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/agents",
+      "note": "Agent steps with a governed prompt per workflow. Conversation history in prompts becomes declared session keys (M3-006) in the M4 tutor.",
+      "milestone": "M4"
+    },
+    "build_role_instruction": {
+      "decision": "refactor",
+      "v1": "v1/agent_runtime/agents",
+      "note": "Audience is part of each agent's manifest and each workflow's prompt."
+    },
+    "wrap_bare_latex": {
+      "decision": "refactor",
+      "v1": null,
+      "note": "Presentation: belongs to the client renderer, not the orchestrator."
+    },
+    "hydrate_session_history": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Session state (M3-006): owner-scoped, declared keys, expiry; no transcript replay from MySQL."
+    },
+    "record_chat_turn": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Session writes declared by the workflow (M3-006)."
+    },
+    "get_recent_turns_text": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Declared session keys instead of raw recent turns.",
+      "milestone": "M4"
+    },
+    "resolve_followup_message": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Follow-up rewriting from raw history; to be rebuilt on session keys in the M4 tutor.",
+      "milestone": "M4"
+    },
+    "_needs_followup_resolution": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As resolve_followup_message.",
+      "milestone": "M4"
+    },
+    "infer_topic_from_history": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As resolve_followup_message.",
+      "milestone": "M4"
+    },
+    "is_conversation_meta_question": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Questions about the conversation need a stored transcript; v1 keeps none by design (M3-006, M3-008)."
+    },
+    "answer_about_conversation": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As is_conversation_meta_question."
+    },
+    "looks_like_new_request": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Multi-turn clarification becomes session state of the M4 agents, not in-memory dicts.",
+      "milestone": "M4"
+    },
+    "capture_user_fact": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Writes learner facts to user_memory.json (learner data, open security item, M2-010)."
+    },
+    "persist_chat_log": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/tracing",
+      "note": "Pseudonymous traces and audit (M3-008); the MySQL chat log with emails and text is not carried over."
+    },
+    "infer_access_role": {
+      "decision": "replace",
+      "v1": "v1/identity",
+      "note": "Role from the signed identity token (M1), not the e-mail domain; caller.roles in routes."
+    },
+    "normalize_email_address": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "v1 does not identify users by e-mail."
+    },
+    "fetch_page_text": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "URL reading is not in M3: it needs a web connector with an allowlist through the Tool Gateway.",
+      "milestone": "M4"
+    },
+    "build_answer_pdf": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "PDF export becomes a tool or a client feature.",
+      "milestone": "M4"
+    },
+    "_generate_lesson_and_finish": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Lesson plans: the M4 lesson-planning agent (course_outline and knowledge_answer tools, teacher review). Until then teachers get the reviewed Lesson explainer.",
+      "milestone": "M4"
+    },
+    "extract_lesson_spec_llm": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Lesson spec as the M4 agent's structured input.",
+      "milestone": "M4"
+    },
+    "next_missing_lesson_slot": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Clarifying questions as session state of the M4 agent.",
+      "milestone": "M4"
+    },
+    "build_lesson_request": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Structured input of the M4 agent.",
+      "milestone": "M4"
+    },
+    "topic_from_material": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "M4, with uploaded material through a governed document tool.",
+      "milestone": "M4"
+    },
+    "generate_lesson_plan_grounded": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Grounded generation in the M4 agent.",
+      "milestone": "M4"
+    },
+    "generate_lesson_plan_from_text": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "M4, with uploaded material through a governed document tool.",
+      "milestone": "M4"
+    },
+    "generate_lesson_plan_direct": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Ungrounded lesson plans are not carried over."
+    },
+    "normalize_lesson_plan_format": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/agents/nexa-lesson-planner.json",
+      "note": "Output contract of the M4 agent.",
+      "milestone": "M4"
+    },
+    "_generate_questions_and_finish": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Assessment questions: the M4 assessment agent, grounded in the syllabus, teacher-reviewed.",
+      "milestone": "M4"
+    },
+    "extract_question_spec_llm": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Structured input of the M4 assessment agent.",
+      "milestone": "M4"
+    },
+    "build_question_request": {
+      "decision": "replace",
+      "v1": null,
+      "note": "As extract_question_spec_llm.",
+      "milestone": "M4"
+    },
+    "generate_questions_grounded": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Grounded generation in the M4 assessment agent.",
+      "milestone": "M4"
+    },
+    "generate_questions_from_text": {
+      "decision": "replace",
+      "v1": null,
+      "note": "M4, with uploaded material through a governed document tool.",
+      "milestone": "M4"
+    },
+    "generate_questions_direct": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Ungrounded question sets are not carried over."
+    },
+    "looks_like_question_set": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Output validation of the M4 assessment agent.",
+      "milestone": "M4"
+    },
+    "looks_like_model_refusal": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/orchestration/engine.py",
+      "note": "Invalid and empty agent answers are errors (M3-009)."
+    },
+    "_handle_image_generation": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Image generation is not carried over: no governed image model, and it served minors without review."
+    },
+    "analyze_image_text_intent": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As _handle_image_generation."
+    },
+    "build_curriculum_image_prompt": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As _handle_image_generation."
+    },
+    "_is_vague_image_subject": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As _handle_image_generation."
+    }
+  },
+  "session_state": {
+    "SESSION_ACCESS_PROFILE": {
+      "decision": "replace",
+      "v1": "v1/identity",
+      "note": "Identity token per request."
+    },
+    "SESSION_PENDING_LESSON": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Session state of the M4 lesson-planning agent.",
+      "milestone": "M4"
+    },
+    "SESSION_PENDING_QUESTION": {
+      "decision": "replace",
+      "v1": "v1/agent_runtime/state",
+      "note": "Session state of the M4 assessment agent.",
+      "milestone": "M4"
+    },
+    "SESSION_PENDING_IMAGE": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Images are not carried over."
+    },
+    "SESSION_DOCUMENT_BUFFER": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Uploaded documents in process memory; uploads come back in M4 through a document tool with data handling.",
+      "milestone": "M4"
+    }
+  },
+  "endpoints": {
+    "POST /chat": {
+      "decision": "replace",
+      "v1": "POST /v1/workflows/nexa-wf-assistant/runs",
+      "note": "The migrated router, authenticated, traced, budgeted."
+    },
+    "POST /chat-status": {
+      "decision": "replace",
+      "v1": "GET /v1/workflow-runs/{run_id}",
+      "note": "Run status."
+    },
+    "POST /api/chat-stop": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Budgets bound every run; a user cancel is an open client item.",
+      "milestone": "M4"
+    },
+    "POST /ingest-material": {
+      "decision": "replace",
+      "v1": "v1/knowledge (LMS sync, M2-007)",
+      "note": "Already replaced in M2."
+    },
+    "POST /upload": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Uploads return in M4 with a document tool and data handling.",
+      "milestone": "M4"
+    },
+    "POST /read-url": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Needs a web connector through the Tool Gateway.",
+      "milestone": "M4"
+    },
+    "POST /api/chat-log": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Chat logs with e-mails and text are not carried over (learner data)."
+    },
+    "POST /api/chat-rating": {
+      "decision": "replace",
+      "v1": null,
+      "note": "Answer feedback as a governed event in M4 (pseudonymous).",
+      "milestone": "M4"
+    },
+    "POST /api/chat-log/pop": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Part of the chat log."
+    },
+    "POST /api/chat-image": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Images are not carried over."
+    },
+    "GET /api/chat-image/{log_id}": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Images are not carried over."
+    },
+    "GET /image-status/{image_id}": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Images are not carried over."
+    },
+    "POST /api/share-chat": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Public share links of learner chats are not carried over."
+    },
+    "GET /api/shared-chat/{share_token}": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As share-chat."
+    },
+    "GET /share/{share_token}": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As share-chat."
+    },
+    "GET /api/chat-history/{session_id}": {
+      "decision": "replace",
+      "v1": "GET /v1/sessions/{session_id} (M3-006)",
+      "note": "Owner-scoped session state."
+    },
+    "GET /api/chat-sessions/{user_email}": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "Listing by e-mail address without authentication."
+    },
+    "GET /api/chat-sessions/{user_email}/search": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "As chat-sessions."
+    },
+    "GET /": {
+      "decision": "deprecate",
+      "v1": null,
+      "note": "v0 web page; clients are the Moodle plugin and EduNeX apps."
+    },
+    "GET /health": {
+      "decision": "replace",
+      "v1": "GET /health, GET /ready",
+      "note": "Per-service health (M1)."
+    }
+  }
+}

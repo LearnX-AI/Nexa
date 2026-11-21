@@ -71,6 +71,8 @@ class Model:
 
     coordinator   the coordinator's replies, in order (dict -> JSON, str as is)
     expression    what the curriculum tutor writes when asked for an expression
+    intent        what the assistant's classifier answers (NEXA-M3-010): a word,
+                  or a callable message -> word
     answer        everything else (an explanation, a worked example)
     faults        call number (1-based) -> "unavailable" | "timeout" | "empty" | "garbage"
     always        a fault applied to every call
@@ -78,6 +80,7 @@ class Model:
     """
     coordinator: list[Any] = field(default_factory=list)
     expression: str = "500*4%*3"
+    intent: Any = "curriculum"
     answer: str = "A clear explanation for Grade 11 students."
     faults: dict[int, str] = field(default_factory=dict)
     always: Optional[str] = None
@@ -88,7 +91,8 @@ class Model:
         n = len(self.calls) + 1
         prompt = messages[-1]["content"]
         role = "coordinator" if "Reply with only one JSON object" in prompt else \
-            "expression" if "Reply with the expression only" in prompt else "answer"
+            "expression" if "Reply with the expression only" in prompt else \
+            "intent" if "Reply with one word: curriculum, general or smalltalk" in prompt else "answer"
         self.calls.append({"n": n, "model": model, "role": role, "prompt": prompt})
         fault = self.faults.get(n) or self.always
         if self.slow_s:
@@ -108,6 +112,9 @@ class Model:
             text = c if isinstance(c, str) else json.dumps(c)
         elif role == "expression":
             text = self.expression
+        elif role == "intent":
+            msg = prompt.rsplit("Message: ", 1)[-1]
+            text = self.intent(msg) if callable(self.intent) else self.intent
         else:
             text = self.answer
         return {"choices": [{"message": {"content": text}}], "x_nexa": {"model": model},

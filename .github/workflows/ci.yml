@@ -117,6 +117,11 @@ jobs:
         # scored against the agreed thresholds; fails the build if they are not met.
         run: python -m v1.tools.resilience_eval --out resilience-report
 
+      - name: v0 orchestrator compatibility (NEXA-M3-010)
+        # The core v0 /chat workflows through the migrated assistant workflow, in
+        # an isolated NEXA; fails the build if any case is not compatible.
+        run: python -m v1.tools.v0_compat --out resilience-report
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published
