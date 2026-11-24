@@ -14,6 +14,10 @@ expectation is the compatibility contract:
   different       questions) or not carried over (images) give a clear answer
                   instead of v0's output; listed with the reason
 
+Live, a curriculum question must go to the curriculum first; whether the
+answer is then cited or a labelled general answer depends on what the indexed
+curriculum covers, which the run reports (live_expect, via).
+
 Offline: run in the isolated NEXA (sandbox.World) with a scripted classifier
 and Knowledge Service, so every case is deterministic. Live: the same
 messages on the DGX with the real model and curriculum (v1/tools/v0_compat.py).
@@ -44,6 +48,8 @@ class Case:
     change: str = ""              # a deliberate difference from v0, and why
     live: bool = True             # also run live on the DGX
     fault: Optional[str] = None   # offline only: knowledge_down | classifier_down | bad_expression
+    live_expect: Optional[tuple[str, ...]] = None  # live: acceptable final steps, if not `expect`
+    via: Optional[str] = None     # live: a step the run must pass through
 
 
 CASES: list[Case] = [
@@ -56,7 +62,8 @@ CASES: list[Case] = [
     Case("greet.bye", "greetings", "Bye", "student", "quick_reply goodbye", ("bye",), no_model=True),
     Case("smalltalk.statement", "greetings", "I am preparing a Grade 11 Biology lesson this week.", "teacher",
          "classify_intent: smalltalk (a statement, not a request) → conversational reply",
-         ("chat",), intent="smalltalk"),
+         ("chat",), intent="curriculum",
+         change="decided by rule: the live classifier called this curriculum (M3 exit suite, 24 Nov)"),
     Case("smalltalk.how_are_you", "greetings", "How are you today?", "student",
          "classify_intent: smalltalk → conversational reply", ("chat",), intent="smalltalk"),
     # ---- W2 maths (v0: looks_like_math → sympy, or the model as tutor)
@@ -73,13 +80,17 @@ CASES: list[Case] = [
     # ---- W3 curriculum questions (v0: classify curriculum → retrieve → answer with history)
     Case("curriculum.photosynthesis", "curriculum", "What is photosynthesis?", "student",
          "classify curriculum → Chroma retrieval → model answer, no citations",
-         ("cited",), knowledge="grounded", cited=True, change="answered with citations to approved sources"),
+         ("cited",), knowledge="grounded", cited=True, change="answered with citations to approved sources",
+         live_expect=("cited", "general"), via="lookup"),
     Case("curriculum.explain", "curriculum", "Explain osmosis.", "student", "classify curriculum → retrieval",
-         ("cited",), knowledge="grounded", cited=True),
+         ("cited",), knowledge="grounded", cited=True,
+         live_expect=("cited", "general"), via="lookup"),
     Case("curriculum.describe", "curriculum", "Describe the water cycle.", "teacher",
-         "classify curriculum → retrieval", ("cited",), knowledge="grounded", cited=True),
+         "classify curriculum → retrieval", ("cited",), knowledge="grounded", cited=True,
+         live_expect=("cited", "general"), via="lookup"),
     Case("curriculum.mitosis", "curriculum", "What are the stages of mitosis?", "student",
-         "classify curriculum → retrieval", ("cited",), knowledge="grounded", cited=True),
+         "classify curriculum → retrieval", ("cited",), knowledge="grounded", cited=True,
+         live_expect=("cited", "general"), via="lookup"),
     Case("curriculum.weak", "curriculum", "What causes tides?", "student", "classify curriculum → retrieval",
          ("cited",), knowledge="grounded_weak", cited=True, live=False),
     # ---- W4 curriculum miss (v0: retrieval misses or is evasive → general knowledge)

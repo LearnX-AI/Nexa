@@ -150,3 +150,16 @@ def test_offline_command_writes_a_report(tmp_path, monkeypatch):
     assert v0_compat.main(["--out", str(tmp_path)]) == 0
     md = [p for p in os.listdir(tmp_path) if p.endswith(".md")]
     assert md and "COMPATIBLE" in (tmp_path / md[0]).read_text()
+
+
+@pytest.mark.parametrize("msg,end", [
+    ("I am preparing a Grade 11 Biology lesson this week.", "chat"),
+    ("My exams start on Monday.", "chat"),
+    ("I'm confused, what is osmosis?", "cited"),
+    ("I am stuck. Explain osmosis.", "cited"),
+    ("My teacher asked: how many legs do 3 spiders have?", "worked"),
+])
+def test_statements_about_the_user_get_a_short_reply_and_questions_do_not(msg, end):
+    with World(Model(intent="curriculum", expression="3*8"), Knowledge(status="grounded")) as w:
+        r = w.start("nexa-wf-assistant", STUDENT, {"message": msg})
+        assert w.path(r["run_id"])[-1] == end

@@ -109,8 +109,12 @@ def live(url: str, school: str, out: str) -> int:
         problems = []
         if run.get("status") != "succeeded":
             problems.append(f"run {run.get('status')}: {run.get('error')}")
-        if end not in k.expect:
-            problems.append(f"ended at {end}, expected {' or '.join(k.expect)}")
+        expect = k.live_expect or k.expect
+        if end not in expect:
+            problems.append(f"ended at {end}, expected {' or '.join(expect)}")
+        if k.via and k.via not in path:
+            problems.append(f"did not go through {k.via}")
+        kstat = next((t["detail"].get("status") for t in trace if t["kind"] == "knowledge.call"), None)
         used_calc = any(t["kind"] == "tool.call" and t["detail"].get("tool") == "calculator"
                         and t["detail"].get("ok") for t in trace)
         if k.calculator and not used_calc:
@@ -133,8 +137,9 @@ def live(url: str, school: str, out: str) -> int:
         ok = not problems
         results.append({"id": k.id, "workflow": k.workflow, "role": k.role, "message": k.message, "ok": ok,
                         "end": end, "path": path, "seconds": round(lat[-1], 1), "calculator": used_calc,
-                        "cited": cited, "labelled": labelled, "problems": problems, "run_id": rid})
+                        "cited": cited, "labelled": labelled, "knowledge": kstat, "problems": problems, "run_id": rid})
         print(f"  {'✔' if ok else '✘'} {k.id:<26} {k.role:<7} {lat[-1]:5.1f} s  {' → '.join(path)}"
+              + (f"   [curriculum: {kstat}]" if kstat else "")
               + (f"   ({'; '.join(problems)})" if problems else "")
               + ("" if labelled else "   [general answer not labelled]"))
 

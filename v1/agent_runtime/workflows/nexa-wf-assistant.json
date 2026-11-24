@@ -2,9 +2,9 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-assistant",
   "name": "NEXA assistant (v0 chat routing, migrated)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
-  "description": "The v1 replacement for the v0 /chat intent router (NEXA-M3-010). Rules first, in v0's order: greetings, image requests, teacher-only lesson plans and assessment questions, explanations, calculations. Then one classifier call for the rest (curriculum, general or smalltalk), defaulting to the curriculum as v0 does. A curriculum question is answered from the approved curriculum with citations; when the curriculum does not cover it, a labelled general explanation. Calculations are computed exactly by the calculator tool, not by the model.",
+  "description": "The v1 replacement for the v0 /chat intent router (NEXA-M3-010). Rules first, in v0's order: greetings, images, teacher-only lesson plans and assessment questions, explanations, calculations, statements about the user. One classifier call for the rest (curriculum, general or smalltalk), curriculum by default as in v0. Curriculum answers are cited; a miss gets a labelled general answer. Calculations are computed by the calculator tool.",
   "pattern": "deterministic",
   "state": "active",
   "allowed_roles": ["student", "teacher", "school_admin", "ai_engineer", "admin", "platform_admin"],
@@ -36,6 +36,9 @@
         {"when": [{"field": "input.message", "matches": "\\b(calculate|work out|evaluate|how (many|much)|find the (average|total|sum|mean)|what (do|will) (i|we|you) have)\\b"},
                   {"field": "input.message", "matches": "(\\d|\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)\\b)"}],
          "goto": "extract", "reason": "the message asks for a calculation with numbers (v0 maths first)"}
+,
+        {"when": [{"field": "input.message", "matches": "^(?!.*(\\?|\\b(explain|describe|define|what|how|why|when|where|who|which|help|can you|could you|tell me|give|show|teach|calculate|work out)\\b))\\s*(i am|i'm|im|we are|we're|my)\\b"}],
+         "goto": "chat", "reason": "a statement about the user, with no question or request (v0 smalltalk)"}
       ],
       "default": "classify"
     },
