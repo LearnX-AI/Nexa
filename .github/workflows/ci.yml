@@ -112,6 +112,15 @@ jobs:
           python -m v1.agent_runtime.policy schema | diff - v1/agent_runtime/schema/nexa-agent-policy-1.0.schema.json
           python -m pytest -q v1/tests/test_agent_security.py -p no:warnings
 
+      - name: Teaching Intelligence Policy (NEXA-M4-001)
+        # Released policy versions are unchanged (digest), the published schema
+        # matches, and every education agent references the policy without
+        # restating it in its prompt.
+        run: |
+          python -m v1.agent_runtime.pedagogy validate
+          python -m v1.agent_runtime.pedagogy schema | diff - v1/agent_runtime/schema/nexa-pedagogy-1.0.schema.json
+          python -m pytest -q v1/tests/test_teaching_policy.py -p no:warnings
+
       - name: Resilience evaluation (NEXA-M3-009)
         # Every deterministic failure and abuse scenario, in an isolated NEXA,
         # scored against the agreed thresholds; fails the build if they are not met.

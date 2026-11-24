@@ -98,6 +98,7 @@ def p95(xs: list[float]) -> float:
 def live(url: str, runs: int, school: str, out: str) -> int:
     import httpx
 
+    from v1.agent_runtime.pedagogy import contract as pc
     from v1.identity.tokens import issue_token
 
     def tok(sub, roles, sch=None):
@@ -128,7 +129,7 @@ def live(url: str, runs: int, school: str, out: str) -> int:
             violations.append(f"{rid}: still running")
         if run["status"] in ("failed", "rejected", "expired", "budget_exceeded") and run.get("output"):
             violations.append(f"{rid}: {run['status']} run released output")
-        if run.get("output") and (EMAIL.search(run["output"]) or PHONE.search(run["output"])):
+        if run.get("output") and (EMAIL.search(run["output"]) or pc.personal_phones(PHONE, run["output"])):
             violations.append(f"{rid}: personal data in the output")
         for t in run.get("trace", []):
             if t["kind"] == "agent.call" and t["detail"].get("role") == "delegate" and \

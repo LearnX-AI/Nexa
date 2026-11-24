@@ -1,0 +1,508 @@
+{
+  "$defs": {
+    "Change": {
+      "additionalProperties": false,
+      "properties": {
+        "change": {
+          "title": "Change",
+          "type": "string"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "date",
+        "change"
+      ],
+      "title": "Change",
+      "type": "object"
+    },
+    "DecisionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "current": {
+          "title": "Current",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Z]+-D\\d+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "needs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Needs"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Options",
+          "type": "array"
+        },
+        "owner": {
+          "title": "Owner",
+          "type": "string"
+        },
+        "question": {
+          "title": "Question",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "proposed",
+            "decided"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "question",
+        "options",
+        "current",
+        "owner",
+        "status"
+      ],
+      "title": "DecisionPoint",
+      "type": "object"
+    },
+    "Governance": {
+      "additionalProperties": false,
+      "properties": {
+        "framework": {
+          "const": "NEXA-GOV-001",
+          "title": "Framework",
+          "type": "string"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
+        },
+        "review": {
+          "enum": [
+            "provisional",
+            "reviewed"
+          ],
+          "title": "Review",
+          "type": "string"
+        }
+      },
+      "required": [
+        "framework",
+        "review",
+        "note"
+      ],
+      "title": "Governance",
+      "type": "object"
+    },
+    "GradeBand": {
+      "additionalProperties": false,
+      "properties": {
+        "grades": {
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 1,
+          "title": "Grades",
+          "type": "array"
+        },
+        "id": {
+          "pattern": "^g\\d+_\\d+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "minItems": 1,
+          "title": "Rules",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "grades",
+        "label",
+        "rules"
+      ],
+      "title": "GradeBand",
+      "type": "object"
+    },
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "grade_style": {
+          "default": true,
+          "title": "Grade Style",
+          "type": "boolean"
+        },
+        "sections": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Sections",
+          "type": "array"
+        }
+      },
+      "required": [
+        "description",
+        "sections"
+      ],
+      "title": "Profile",
+      "type": "object"
+    },
+    "PublicContact": {
+      "additionalProperties": false,
+      "description": "A published service number the policy tells people to call. It is not\npersonal data, so output checks and redaction leave it in place.",
+      "properties": {
+        "checked_on": {
+          "format": "date",
+          "title": "Checked On",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "phone": {
+          "pattern": "^[0-9 +]{6,20}$",
+          "title": "Phone",
+          "type": "string"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "phone",
+        "purpose",
+        "checked_on",
+        "source"
+      ],
+      "title": "PublicContact",
+      "type": "object"
+    },
+    "Rule": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "student",
+                  "teacher"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Who the rule applies to; absent: everyone.",
+          "title": "Audience"
+        },
+        "id": {
+          "pattern": "^TP-[A-Z]+-\\d{2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 600,
+          "minLength": 20,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Rule",
+      "type": "object"
+    },
+    "Section": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z_]{3,30}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/Rule"
+          },
+          "minItems": 1,
+          "title": "Rules",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "rules"
+      ],
+      "title": "Section",
+      "type": "object"
+    },
+    "Trigger": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z_]{3,30}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Patterns",
+          "type": "array"
+        },
+        "rule": {
+          "pattern": "^TP-[A-Z]+-\\d{2}$",
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "rule",
+        "patterns"
+      ],
+      "title": "Trigger",
+      "type": "object"
+    }
+  },
+  "$id": "https://nexa.learnx.ai/schema/nexa-pedagogy-1.0.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "agent_prompt_must_not_restate": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Agent Prompt Must Not Restate",
+      "type": "array"
+    },
+    "approved_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved By"
+    },
+    "approved_on": {
+      "anyOf": [
+        {
+          "format": "date",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved On"
+    },
+    "approver": {
+      "title": "Approver",
+      "type": "string"
+    },
+    "changelog": {
+      "items": {
+        "$ref": "#/$defs/Change"
+      },
+      "minItems": 1,
+      "title": "Changelog",
+      "type": "array"
+    },
+    "decision_points": {
+      "items": {
+        "$ref": "#/$defs/DecisionPoint"
+      },
+      "title": "Decision Points",
+      "type": "array"
+    },
+    "default_band": {
+      "title": "Default Band",
+      "type": "string"
+    },
+    "escalation_response": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "enum": [
+          "student",
+          "teacher"
+        ]
+      },
+      "title": "Escalation Response",
+      "type": "object"
+    },
+    "escalation_triggers": {
+      "items": {
+        "$ref": "#/$defs/Trigger"
+      },
+      "title": "Escalation Triggers",
+      "type": "array"
+    },
+    "governance": {
+      "$ref": "#/$defs/Governance"
+    },
+    "grade_bands": {
+      "items": {
+        "$ref": "#/$defs/GradeBand"
+      },
+      "minItems": 1,
+      "title": "Grade Bands",
+      "type": "array"
+    },
+    "id": {
+      "const": "nexa-teaching-policy",
+      "title": "Id",
+      "type": "string"
+    },
+    "language_markers": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Language Markers",
+      "type": "object"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "owner": {
+      "title": "Owner",
+      "type": "string"
+    },
+    "policy_version": {
+      "const": "nexa.pedagogy/1.0",
+      "title": "Policy Version",
+      "type": "string"
+    },
+    "profiles": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Profile"
+      },
+      "minProperties": 1,
+      "title": "Profiles",
+      "type": "object"
+    },
+    "public_contacts": {
+      "items": {
+        "$ref": "#/$defs/PublicContact"
+      },
+      "title": "Public Contacts",
+      "type": "array"
+    },
+    "released_on": {
+      "format": "date",
+      "title": "Released On",
+      "type": "string"
+    },
+    "sections": {
+      "items": {
+        "$ref": "#/$defs/Section"
+      },
+      "minItems": 1,
+      "title": "Sections",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "approved",
+        "retired"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "title": "Summary",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "policy_version",
+    "id",
+    "name",
+    "version",
+    "status",
+    "owner",
+    "approver",
+    "released_on",
+    "governance",
+    "summary",
+    "grade_bands",
+    "default_band",
+    "sections",
+    "profiles",
+    "escalation_response",
+    "changelog"
+  ],
+  "title": "nexa.pedagogy/1.0: NEXA Teaching Intelligence Policy",
+  "type": "object"
+}

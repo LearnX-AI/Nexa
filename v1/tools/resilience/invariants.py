@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from v1.agent_runtime.pedagogy import contract as pc
+
 from .sandbox import EMAIL, PHONE
 
 UNSAFE_TO_RELEASE = {"failed", "rejected", "expired", "budget_exceeded", "interrupted"}
@@ -63,7 +65,7 @@ def check(run_id: str) -> list[str]:
         review = run.ctx.get("review") or {}
         if not (run.error or review.get("decision") == "reject"):
             problems.append(f"V5 explained: {run.status} without a reason")
-    if run.output and (EMAIL.search(run.output) or PHONE.search(run.output)):
+    if run.output and (EMAIL.search(run.output) or pc.personal_phones(PHONE, run.output)):
         problems.append("V6 no personal data: the released output contains an email address or phone number")
     for c in tool_gateway.AUDIT.query(run_id=run_id, limit=500) if tool_gateway.AUDIT else []:
         if c["agent"] == "nexa-curriculum-tutor" and "curriculum.teacher" in (c.get("scopes") or []):

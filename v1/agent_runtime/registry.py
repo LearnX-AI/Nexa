@@ -77,6 +77,9 @@ class AgentSpec:
     backoff_s: float = 0.0
     retry_on: tuple = ()
     fingerprint: Optional[str] = None
+    # The Teaching Intelligence Policy it runs under (NEXA-M4-001).
+    pedagogy_version: Optional[str] = None
+    pedagogy_profile: Optional[str] = None
     # From the registry (NEXA-M3-002).
     enabled: bool = True
     disabled_reason: Optional[str] = None
@@ -112,6 +115,8 @@ def spec_from_manifest(m: mf.AgentManifest, *, enabled: bool = True,
         max_output_tokens=m.model.max_output_tokens, timeout_s=m.runtime.timeout_s,
         max_attempts=m.runtime.retry.max_attempts, backoff_s=m.runtime.retry.backoff_s,
         retry_on=tuple(m.runtime.retry.retry_on), fingerprint=m.fingerprint(),
+        pedagogy_version=m.pedagogy.version if m.pedagogy else None,
+        pedagogy_profile=m.pedagogy.profile if m.pedagogy else None,
         enabled=enabled, disabled_reason=disabled_reason,
     )
 
@@ -212,6 +217,7 @@ class Registry:
                 "required_permission": spec.required_permission, "allowed_roles": list(spec.allowed_roles),
                 "model": spec.model, "fallbacks": list(spec.fallbacks), "tools": list(spec.tools),
                 "depends_on": list(m.health.requires), "fingerprint": spec.fingerprint,
+                "pedagogy": m.pedagogy.model_dump() if m.pedagogy else None,
                 "versions": [v["version"] for v in self.versions(agent_id)],
                 "deployments": self.deployments(agent_id, spec.version)}
 
@@ -303,6 +309,9 @@ class Registry:
                         "state": existing["state"], "fingerprint": fp}
             raise RegistryError(409, f"{m.id} {m.identity.version} is already registered with different content "
                                      f"(versions are immutable): raise the version")
+        problems = mf.pedagogy_problems(m)
+        if problems:
+            raise RegistryError(422, problems)
         latest = [v["version"] for v in self.versions(m.id)]
         if latest and not _newer(m.identity.version, max(latest, key=lambda v: _semver(v)[:3])):
             raise RegistryError(409, f"{m.id} {m.identity.version} is not newer than the latest registered "
@@ -316,7 +325,7 @@ class Registry:
             db.execute("INSERT INTO agent_versions (agent_id, version, major, minor, patch, state, fingerprint, "
                        "manifest, registered_by, registered_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (m.id, m.identity.version, a, b, c, m.lifecycle.state.value, fp,
-                        json.dumps(m.model_dump(mode="json"), sort_keys=True), actor, now))
+                        json.dumps(m.canonical(), sort_keys=True), actor, now))
             for cap in m.capabilities:
                 db.execute("INSERT INTO capabilities VALUES (?,?,?)", (m.id, m.identity.version, cap.value))
             Store.event(db, actor, "version.registered", m.id, m.identity.version, state=m.lifecycle.state.value,
@@ -368,13 +377,15 @@ class Registry:
             raise RegistryError(422, str(exc)) from None
         others = {i: self.manifest(i) for i in self.agent_ids()}
         problems = mf.validate_platform(m, others=others)
+        if m.runnable:
+            problems += mf.pedagogy_problems(m)      # e.g. its policy version was retired
         if problems:
             # e.g. activating an agent whose tools are not built yet
             raise RegistryError(422, problems)
         with self.store.tx() as db:
             db.execute("UPDATE agent_versions SET state = ?, manifest = ?, state_changed_by = ?, "
                        "state_changed_at = ? WHERE agent_id = ? AND version = ?",
-                       (new.value, json.dumps(m.model_dump(mode="json"), sort_keys=True), actor, time.time(),
+                       (new.value, json.dumps(m.canonical(), sort_keys=True), actor, time.time(),
                         agent_id, version))
             Store.event(db, actor, "version.state", agent_id, version, old=old.value, new=new.value,
                         reason=reason, approved_by=lc.get("approved_by"), sunset_on=lc.get("sunset_on"),
@@ -473,6 +484,11 @@ class Registry:
         results = []
         for m in sorted(manifests.values(), key=lambda x: x.id):
             results.append(self.register(m.model_dump(mode="json"), SEED_ACTOR, also_known=manifests))
+        # Versions submitted for review (NEXA-M4-001): registered as draft or
+        # review, so they run only once approved and activated.
+        if directory == mf.AGENTS_DIR:
+            for m in sorted(mf.load_proposals(current=manifests).values(), key=lambda x: x.id):
+                results.append(self.register(m.model_dump(mode="json"), SEED_ACTOR, also_known=manifests))
         return results
 
 

@@ -44,6 +44,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 MANIFEST_VERSION = "nexa.agent/1.0"
 AGENTS_DIR = os.path.join(os.path.dirname(__file__), "agents")
+# Versions submitted for review (NEXA-M4-001): registered as draft or review
+# next to the current versions; they run only after approval and activation.
+PROPOSALS_DIR = os.path.join(AGENTS_DIR, "proposed")
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$")
 AGENT_ID = re.compile(r"^nexa-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -227,6 +230,16 @@ class Prompt(Strict):
     system: str = Field(min_length=20, max_length=8000)
 
 
+class PedagogyRef(Strict):
+    """The NEXA Teaching Intelligence Policy the agent runs under
+    (nexa.pedagogy/1.0, NEXA-M4-001). The Agent Runtime adds the named profile
+    to the agent's system prompt on every call; the agent's own prompt states
+    only its identity and task."""
+    policy: Literal["nexa-teaching-policy"]
+    version: str = Field(pattern=r"^\d+\.\d+\.\d+$", description="A released policy version.")
+    profile: str = Field(pattern=r"^[a-z_]{3,30}$", description="A profile of that version, e.g. tutor.")
+
+
 class AgentManifest(Strict):
     manifest_version: Literal["nexa.agent/1.0"]
     identity: Identity
@@ -242,6 +255,7 @@ class AgentManifest(Strict):
     health: Health = Field(default_factory=Health)
     lifecycle: Lifecycle
     prompt: Prompt
+    pedagogy: Optional[PedagogyRef] = None
 
     @model_validator(mode="after")
     def _structural_rules(self) -> "AgentManifest":
@@ -278,16 +292,25 @@ class AgentManifest(Strict):
     def runnable(self) -> bool:
         return self.lifecycle.state in RUNNABLE
 
+    def canonical(self) -> dict[str, Any]:
+        """The manifest as stored and fingerprinted. Optional sections added to
+        the contract later (pedagogy, NEXA-M4-001) are left out when absent, so
+        a version registered before them keeps its fingerprint."""
+        raw = self.model_dump(mode="json")
+        if raw.get("pedagogy") is None:
+            raw.pop("pedagogy", None)
+        return raw
+
     def fingerprint(self) -> str:
         """sha256 of the canonical manifest: what was approved is what runs."""
-        raw = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        raw = json.dumps(self.canonical(), sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
 
     def content_fingerprint(self) -> str:
         """sha256 of the manifest without its lifecycle record (state, approval,
         deprecation): what identifies a version. Approving or deprecating a
         version changes its state, not what it is (NEXA-M3-002)."""
-        raw = self.model_dump(mode="json")
+        raw = self.canonical()
         raw["lifecycle"] = {k: v for k, v in raw["lifecycle"].items() if k not in LIFECYCLE_RECORD}
         text = json.dumps(raw, sort_keys=True, separators=(",", ":"))
         return "sha256:" + hashlib.sha256(text.encode()).hexdigest()
@@ -428,10 +451,81 @@ def load_dir(directory: str = AGENTS_DIR, *, check_platform: bool = True) -> dic
         found[m.id] = m
     if check_platform:
         for m in found.values():
-            problems = validate_platform(m, others=found)
+            problems = validate_platform(m, others=found) + pedagogy_problems(m)
             if problems:
                 raise ManifestError(os.path.join(directory, f"{m.id}.json"), problems)
     return found
+
+
+# ---------------------------------------------------------------- teaching policy (NEXA-M4-001)
+
+EDUCATION_CAPABILITIES = {Capability.chat, Capability.curriculum_answer, Capability.general_answer,
+                          Capability.explanation, Capability.calculation, Capability.lesson_planning,
+                          Capability.assessment_generation, Capability.course_outline, Capability.summarisation,
+                          Capability.translation}
+# Agent versions released before the Teaching Intelligence Policy. Closed: a
+# new version of any education agent must reference the policy.
+LEGACY_WITHOUT_PEDAGOGY = frozenset({("nexa-tutor", "1.0.0"), ("nexa-precise", "1.0.0"),
+                                     ("nexa-curriculum-tutor", "0.1.0"), ("nexa-curriculum-tutor", "0.2.0"),
+                                     ("nexa-lesson-planner", "0.1.0")})
+AGENT_PROFILES = {"tutor", "concise", "planning", "assessment"}   # "internal" is for engine calls only
+
+
+def is_education_agent(m: AgentManifest) -> bool:
+    serves = {Audience.student, Audience.teacher} & set(m.purpose.audience)
+    return bool(serves) and bool(EDUCATION_CAPABILITIES & set(m.capabilities))
+
+
+def pedagogy_problems(m: AgentManifest) -> list[str]:
+    """An education agent references a released Teaching Intelligence Policy
+    and a profile of it, and its own prompt does not restate the policy."""
+    from v1.agent_runtime import pedagogy
+    if m.pedagogy is None:
+        if is_education_agent(m) and (m.id, m.identity.version) not in LEGACY_WITHOUT_PEDAGOGY:
+            return ["an education agent must reference the NEXA Teaching Intelligence Policy "
+                    "(pedagogy: policy, version, profile)"]
+        return []
+    try:
+        policy = pedagogy.get(m.pedagogy.version)
+    except pedagogy.PedagogyError as exc:
+        return [f"pedagogy: {exc}"]
+    problems = []
+    if m.pedagogy.profile not in policy.profiles or m.pedagogy.profile not in AGENT_PROFILES:
+        problems.append(f"pedagogy: profile {m.pedagogy.profile!r} is not an agent profile of "
+                        f"{policy.id} {policy.version} ({', '.join(sorted(AGENT_PROFILES & set(policy.profiles)))})")
+    if policy.status == "retired":
+        problems.append(f"pedagogy: {policy.id} {policy.version} is retired")
+    again = pedagogy.contract.restated(policy, m.prompt.system)
+    if again:
+        problems.append(f"prompt.system restates the teaching policy ({', '.join(again)}): "
+                        f"state only the agent's identity and task")
+    return problems
+
+
+def load_proposals(directory: str = PROPOSALS_DIR, *, current: Optional[dict[str, AgentManifest]] = None
+                   ) -> dict[str, AgentManifest]:
+    """Versions submitted for review: draft or review, newer than the current
+    file, with every platform and teaching-policy rule applied."""
+    if not os.path.isdir(directory):
+        return {}
+    current = load_dir() if current is None else current
+    found = load_dir(directory, check_platform=False)
+    for m in found.values():
+        path = os.path.join(directory, f"{m.id}.json")
+        problems = validate_platform(m, others={**current, **found}) + pedagogy_problems(m)
+        if m.lifecycle.state not in (LifecycleState.draft, LifecycleState.review):
+            problems.append("a proposed version is draft or review; it is approved through the registry")
+        cur = current.get(m.id)
+        if cur is not None and _semver_key(m.identity.version) <= _semver_key(cur.identity.version):
+            problems.append(f"version {m.identity.version} is not newer than the current {cur.identity.version}")
+        if problems:
+            raise ManifestError(path, problems)
+    return found
+
+
+def _semver_key(v: str) -> tuple[int, int, int]:
+    a, b, c = (int(x) for x in v.split("-")[0].split("."))
+    return a, b, c
 
 
 def json_schema() -> dict[str, Any]:
@@ -468,6 +562,17 @@ def main(argv: list[str]) -> int:
                     print(f"  - {x}")
             else:
                 print(f"valid   {p}  {m.id} {m.identity.version} [{m.lifecycle.state.value}] {m.fingerprint()[:19]}")
+        if not argv[1:]:
+            try:
+                for m in load_proposals(current=others).values():
+                    ped = f"{m.pedagogy.policy} {m.pedagogy.version}/{m.pedagogy.profile}" if m.pedagogy else "-"
+                    print(f"valid   proposed/{m.id}.json  {m.id} {m.identity.version} [{m.lifecycle.state.value}] "
+                          f"pedagogy {ped}")
+            except ManifestError as exc:
+                bad += 1
+                print(f"INVALID {exc.path}")
+                for x in exc.problems:
+                    print(f"  - {x}")
         return 1 if bad else 0
     print(__doc__)
     return 2

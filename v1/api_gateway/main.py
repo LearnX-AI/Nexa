@@ -283,6 +283,18 @@ async def policy_proxy(request: Request, rest: str = Path(..., pattern=r"^[A-Za-
     return await _forward("GET", f"/v1/policy/{rest}{query}", authorization, getattr(request.state, "trace_id", None))
 
 
+# The Teaching Intelligence Policy (NEXA-M4-001): served by the Agent Runtime.
+@app.get("/v1/teaching-policy", responses=_ERRORS)
+@app.get("/v1/teaching-policy/{rest:path}", responses=_ERRORS)
+async def teaching_policy_proxy(request: Request, principal: Principal = Depends(require_principal),
+                                authorization: str = Header(...)):
+    path = request.url.path
+    if ".." in path or not re.match(r"^/v1/teaching-policy(/\d+\.\d+\.\d+(/compose)?)?$", path):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    query = f"?{request.url.query}" if request.url.query else ""
+    return await _forward("GET", f"{path}{query}", authorization, getattr(request.state, "trace_id", None))
+
+
 # Observability (NEXA-M3-008): reconstruction of agent executions, for
 # operators; the Agent Runtime decides who may see which view.
 @app.get("/v1/observability/{rest:path}", responses=_ERRORS)

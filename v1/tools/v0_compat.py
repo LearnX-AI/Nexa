@@ -72,6 +72,7 @@ def p95(xs: list[float]) -> float:
 def live(url: str, school: str, out: str) -> int:
     import httpx
 
+    from v1.agent_runtime.pedagogy import contract as pc
     from v1.identity.tokens import issue_token
     from v1.tools.resilience.compat import ASSISTANT_WF, CASES
 
@@ -132,7 +133,7 @@ def live(url: str, school: str, out: str) -> int:
             violations.append(f"{rid}: conversation invalid")
         if run.get("status") in ("failed", "rejected", "expired", "budget_exceeded") and output:
             violations.append(f"{rid}: {run.get('status')} run released output")
-        if EMAIL.search(output) or PHONE.search(output):
+        if EMAIL.search(output) or pc.personal_phones(PHONE, output):
             violations.append(f"{rid}: personal data in the output")
         ok = not problems
         results.append({"id": k.id, "workflow": k.workflow, "role": k.role, "message": k.message, "ok": ok,

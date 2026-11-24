@@ -15,6 +15,7 @@ import asyncio
 import contextvars
 
 from . import registry, gateway_client
+from . import pedagogy
 from .policy import pdp
 from .schemas import RunResponse
 
@@ -45,9 +46,12 @@ async def run_agent(
     max_tokens: Optional[int] = None,
     trace_id: Optional[str] = None,
     caller: Optional[dict[str, Any]] = None,
+    teaching: Optional[dict[str, Any]] = None,
 ) -> RunResponse:
     """Run one agent. caller: who is running it, recorded in the trace (the
-    orchestration engine passes the workflow, run and step)."""
+    orchestration engine passes the workflow, run and step). teaching: the
+    learner's grade and whether the output is internal to the orchestration
+    ({"grade": "11", "internal": True}), for the Teaching Intelligence Policy."""
     trace_id = trace_id or new_trace_id()
     outer = _ACTIVE_RUN.get()
     if outer is not None:
@@ -57,12 +61,28 @@ async def run_agent(
                                      f"composed only by the orchestration engine")
     token = _ACTIVE_RUN.set(name)
     try:
-        return await _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller)
+        return await _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller,
+                                teaching or {})
     finally:
         _ACTIVE_RUN.reset(token)
 
 
-async def _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller) -> RunResponse:
+def teaching_block(agent, principal: Principal, messages: list[dict[str, Any]], teaching: dict[str, Any]):
+    """(screen, composed) for an agent under the Teaching Intelligence Policy
+    (NEXA-M4-001), or (None, None). The policy text is added to the agent's
+    system prompt; an escalation replaces the model call."""
+    if not agent.pedagogy_version:
+        return None, None
+    policy = pedagogy.get(agent.pedagogy_version)
+    internal = bool(teaching.get("internal"))
+    last_user = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+    scr = {} if internal else pedagogy.screen(policy, last_user)
+    composed = pedagogy.compose(policy, profile="internal" if internal else agent.pedagogy_profile,
+                                roles=principal.roles, grade=teaching.get("grade"), language=scr.get("language"))
+    return scr, composed
+
+
+async def _run_agent(name, principal, messages, temperature, max_tokens, trace_id, caller, teaching) -> RunResponse:
     agent = registry.get_agent(name)
     if agent is None:
         raise AgentRuntimeError(404, f"Unknown agent: {name}")
@@ -94,7 +114,22 @@ async def _run_agent(name, principal, messages, temperature, max_tokens, trace_i
     )
 
     started = time.time()
-    full = [{"role": "system", "content": agent.system_prompt}] + messages
+    scr, composed = teaching_block(agent, principal, messages, teaching)
+    if scr and scr.get("escalation"):
+        # A learner in distress or danger gets the policy's response and a
+        # person to talk to, never a model's answer (TP-ESC-01). Ids only.
+        audit_event(action=f"pedagogy.escalation:{name}", decision="allow", principal=principal.subject,
+                    trigger=scr["escalation"], rule=scr["rule"], policy=composed.record["version"],
+                    trace_id=trace_id, **({"run_id": caller.get("run_id")} if caller else {}))
+        policy = pedagogy.get(agent.pedagogy_version)
+        return RunResponse(agent=name, agent_version=agent.version, model="none",
+                           output=policy.escalation_response[composed.record["audience"]], trace_id=trace_id,
+                           x_nexa={"runtime": "agent-runtime", "agent": name, "agent_version": agent.version,
+                                   "trace_id": trace_id, "attempts": 0, "pedagogy": composed.record,
+                                   "escalation": scr["escalation"], **({"caller": caller} if caller else {}),
+                                   **({"manifest": agent.fingerprint} if agent.fingerprint else {})})
+    system = agent.system_prompt + ("\n\n" + composed.text if composed else "")
+    full = [{"role": "system", "content": system}] + messages
     temperature = agent.temperature if temperature is None else temperature
     if agent.max_output_tokens:
         max_tokens = min(max_tokens or agent.max_output_tokens, agent.max_output_tokens)
@@ -122,6 +157,8 @@ async def _run_agent(name, principal, messages, temperature, max_tokens, trace_i
         x_nexa["caller"] = caller
     if agent.fingerprint:
         x_nexa["manifest"] = agent.fingerprint
+    if composed:
+        x_nexa["pedagogy"] = composed.record
     if agent.state == "deprecated" or agent.deprecated:
         x_nexa["deprecation"] = {"deprecated_on": agent.deprecated_since, "sunset_on": agent.sunset_on,
                                  "replaced_by": agent.replaced_by}

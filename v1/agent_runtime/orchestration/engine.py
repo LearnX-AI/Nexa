@@ -437,6 +437,8 @@ async def start(workflow_id: str, principal: Principal, inputs: dict[str, Any], 
               budget=wf.budget.model_dump(), location=presence.location())
     audit_event(action=f"workflow.run:{workflow_id}", decision="allow", principal=principal.subject,
                 run_id=run_id, trace_id=trace_id)
+    if _escalate(run, inputs):
+        return view(load_run(run_id))
     if wait:
         await advance(run)
     else:
@@ -531,6 +533,32 @@ def _write_session(run: Run) -> None:
             run.trace("session.write_refused", None, session=ref["id"], status=exc.status_code,
                       reason=str(exc.detail)[:300])
             return
+
+
+def _escalate(run: Run, inputs: dict[str, Any]) -> bool:
+    """A message from someone in distress or danger is answered with the
+    Teaching Intelligence Policy's response and a person to talk to, before any
+    step runs (TP-ESC-01, NEXA-M4-001). Only trigger ids are recorded."""
+    from v1.agent_runtime import pedagogy
+    try:
+        policy = pedagogy.get(pedagogy.versions()[-1])
+    except (pedagogy.PedagogyError, IndexError):
+        return False
+    for text in inputs.values():
+        hit = pedagogy.screen(policy, str(text)).get("escalation")
+        if hit:
+            audience = pedagogy.contract._audience(run.principal.roles)
+            run.status, run.error, run.current = "succeeded", None, None
+            run.output = policy.escalation_response[audience]
+            run.save()
+            run.trace("pedagogy.escalation", None, trigger=hit, policy=policy.version, audience=audience)
+            audit_event(action=f"pedagogy.escalation:{run.workflow_id}", decision="allow",
+                        principal=run.principal.subject, trigger=hit, policy=policy.version, run_id=run.run_id,
+                        trace_id=run.trace_id)
+            run.trace("run.succeeded", None, error=None, counters=run.counters, output_chars=len(run.output))
+            obs.run_finished(run, "succeeded")
+            return True
+    return False
 
 
 def _finish(run: Run, status: str, error: Optional[str]) -> None:
@@ -701,7 +729,7 @@ def _deadline(timeout: float) -> float:
 
 async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temperature=None, max_tokens=None,
                       timeout: float, role: str = "agent", key: Optional[str] = None, max_attempts: int = 1,
-                      cause: Optional[str] = None) -> dict[str, Any]:
+                      cause: Optional[str] = None, teaching: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """One agent call, as a nexa.message/1.0 request from the orchestrator to the
     agent and its result or error back (NEXA-M3-005)."""
     if run.counters["agent_calls"] + 1 > run.wf.budget.max_agent_calls:
@@ -722,11 +750,14 @@ async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temper
     caller = {"workflow": run.workflow_id, "workflow_version": run.workflow_version, "run_id": run.run_id,
               "step": step_id, "as": role, "message_id": req.message_id}
     t0 = time.monotonic()
+    # The coordinator's choice is read by the engine, not shown to anyone.
+    teaching = {**(teaching or {}), **({"internal": True} if role == "coordinator" else {})}
+    seen: dict[str, Any] = {}
 
     async def deliver(msg: mc.Message, left: float) -> bus.Delivered:
         try:
             resp = await runtime.run_agent(agent, run.principal, [{"role": "user", "content": prompt}], temperature,
-                                           max_tokens, run.trace_id, caller=caller)
+                                           max_tokens, run.trace_id, caller=caller, teaching=teaching)
         except runtime.AgentRuntimeError as exc:
             return bus.Delivered(error=_error(_AGENT_ERRORS.get(exc.status_code, "internal"), str(exc.detail),
                                               exc.status_code))
@@ -736,6 +767,10 @@ async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temper
             return bus.Delivered(error=_error("invalid", f"{agent} returned an empty response"))
         x = resp.x_nexa or {}
         u = resp.usage or {}
+        if x.get("pedagogy"):
+            seen["pedagogy"] = x["pedagogy"]
+        if x.get("escalation"):
+            seen["escalation"] = x["escalation"]
         return bus.Delivered(sender_version=x.get("agent_version"), payload=mc.AgentResultV2(
             output=resp.output or "", agent_version=x.get("agent_version"), manifest=x.get("manifest"),
             model=x.get("model") or resp.model, attempts=x.get("attempts"),
@@ -760,6 +795,11 @@ async def _call_agent(run: Run, step_id: str, agent: str, prompt: str, *, temper
            "attempts": p.get("attempts"), "latency_ms": int((time.monotonic() - t0) * 1000),
            "trace_id": run.trace_id, "request": req.message_id, "reply": reply.message_id}
     rec.update(prompt_tokens=p.get("prompt_tokens"), completion_tokens=p.get("completion_tokens"))
+    if seen.get("pedagogy"):
+        ped = seen["pedagogy"]
+        rec["pedagogy"] = {k: ped.get(k) for k in ("version", "profile", "audience", "band", "digest")}
+    if seen.get("escalation"):
+        rec["escalation"] = seen["escalation"]
     run.trace("agent.call", step_id, role=role, ok=True, output_chars=len(p.get("output", "")), **rec)
     return {"output": p.get("output", ""), **rec}
 
@@ -772,9 +812,10 @@ async def _agent_step(run: Run, step: wfm.AgentStep, ctx, remaining) -> dict[str
         if i:
             run.trace("agent.fallback", step.id, to=agent, after=candidates[i - 1], reason=errors[-1])
         try:
+            teaching = {"grade": render(step.grade, ctx) if step.grade else None, "internal": step.internal}
             res = await _with_policy(run, step, remaining, lambda t, a=agent: _call_agent(
                 run, step.id, a, prompt, temperature=step.temperature, max_tokens=step.max_tokens, timeout=t,
-                max_attempts=step.policy.max_attempts))
+                max_attempts=step.policy.max_attempts, teaching=teaching))
             return res | {"fallback_used": i > 0}
         except StepError as exc:
             errors.append(str(exc))
@@ -870,7 +911,8 @@ async def _delegate(run: Run, step: wfm.DelegateStep, ctx, remaining) -> dict[st
             res = await _with_policy(run, step, remaining, lambda t: _call_agent(
                 run, step.id, agent, render(step.delegate_prompt, {**ctx, "task": task}), timeout=t,
                 role="delegate", key=f"{run.run_id}/{step.id}/delegate/{len(done) + 1}",
-                max_attempts=step.policy.max_attempts, cause=decided.message_id))
+                max_attempts=step.policy.max_attempts, cause=decided.message_id,
+                teaching={"grade": render(step.grade, ctx) if step.grade else None}))
         except StepError as exc:
             if not done:
                 raise

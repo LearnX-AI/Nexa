@@ -88,6 +88,26 @@
           "default": null,
           "title": "Max Tokens"
         },
+        "grade": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The learner's grade, a template such as {{input.grade}}: the Teaching Intelligence Policy uses its grade band (NEXA-M4-001).",
+          "title": "Grade"
+        },
+        "internal": {
+          "default": false,
+          "description": "The output is used by the workflow only (a classification, an expression), never shown to the user: the policy's internal profile applies.",
+          "title": "Internal",
+          "type": "boolean"
+        },
         "next": {
           "default": "end",
           "title": "Next",
@@ -379,6 +399,20 @@
           ],
           "default": 0.0,
           "title": "Temperature"
+        },
+        "grade": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The learner's grade, a template, for the delegates' teaching policy.",
+          "title": "Grade"
         },
         "next": {
           "default": "end",

@@ -207,7 +207,8 @@ TYPES: dict[str, tuple[str, str]] = {
 }
 # Earlier payload versions a type may still carry in recorded conversations.
 COMPATIBLE: dict[str, set[str]] = {"agent.result": {"nexa.payload.agent.result/1"}}
-EVENT_PREFIXES = ("run.", "step.", "route.", "checkpoint.", "delegate.", "agent.", "tool.", "knowledge.", "session.")
+EVENT_PREFIXES = ("run.", "step.", "route.", "checkpoint.", "delegate.", "agent.", "tool.", "knowledge.", "session.",
+                  "pedagogy.")
 
 
 def event_type_ok(t: str) -> bool:
