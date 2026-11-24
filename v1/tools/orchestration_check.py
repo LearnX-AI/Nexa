@@ -41,7 +41,9 @@ def wait_for(c, run_id, h, until=("succeeded", "failed", "rejected", "budget_exc
         if body.get("status") in until:
             return body
         time.sleep(3)
-    raise SystemExit(f"run {run_id} did not finish in {timeout}s")
+    # Report it as a failed check (with the run's state) instead of stopping the whole check.
+    print(f"run {run_id} did not finish in {timeout}s: status {body.get('status')}", file=sys.stderr, flush=True)
+    return body
 
 
 def show_trace(run, width=110):

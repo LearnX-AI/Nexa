@@ -56,7 +56,10 @@ def main(argv=None) -> int:
     check("query by capability lesson_planning", by_cap == [PROBE], ", ".join(by_cap))
     runnable = sorted(x["agent_id"] for x in c.get("/v1/registry/agents", params={"runnable": "true"},
                                                    headers=teacher).json()["agents"])
-    check("query runnable", runnable == ["nexa-precise", "nexa-tutor"], ", ".join(runnable))
+    # Which agents are active depends on what has been approved on this host (nexa-curriculum-tutor
+    # since M3-004), so: the baseline agents are runnable, and the draft probe is not.
+    check("query runnable", {"nexa-precise", "nexa-tutor"} <= set(runnable) and PROBE not in runnable,
+          ", ".join(runnable))
 
     # 2. Discovery
     loc = reg_info.get("location")

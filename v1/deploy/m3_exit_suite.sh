@@ -30,6 +30,11 @@ mkdir -p "$OUT"
 SUM="$OUT/SUMMARY.md"
 
 sudo -v || exit 2
+# The suite runs longer than sudo's 15-minute timestamp, and check 7 restarts the
+# Agent Runtime with sudo -n: keep the timestamp fresh until the suite ends.
+( while sleep 60; do sudo -n -v 2>/dev/null || exit; done ) &
+KEEP=$!
+trap 'kill "$KEEP" 2>/dev/null' EXIT
 set -a
 # shellcheck disable=SC1090
 . <(sudo cat /etc/nexa/identity.env /etc/nexa/agent-runtime.env)
