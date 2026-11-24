@@ -37,7 +37,13 @@ def wait_for(c, run_id, h, until=("succeeded", "failed", "rejected", "budget_exc
                                   "waiting_approval"), timeout=900):
     t0 = time.time()
     while time.time() - t0 < timeout:
-        body = c.get(f"/v1/workflow-runs/{run_id}", headers=h).json()
+        r = c.get(f"/v1/workflow-runs/{run_id}", headers=h)
+        body = r.json()
+        if r.status_code != 200:
+            # e.g. a reviewer once the run has left review (M3-007: only the initiator and
+            # oversight roles see a finished run). Report it, do not poll for 15 minutes.
+            print(f"run {run_id}: GET {r.status_code} {body.get('detail')}", file=sys.stderr, flush=True)
+            return {**body, "status": f"unreadable ({r.status_code})", "trace": []}
         if body.get("status") in until:
             return body
         time.sleep(3)
@@ -151,7 +157,8 @@ def main(argv=None) -> int:
             r2 = c.post(f"/v1/workflow-runs/{run_id}/decision?wait=false",
                         json={"decision": "approve", "comment": "NEXA-M3-003 live check"}, headers=t2)
             check("second teacher approves", r2.status_code == 200, f"{r2.status_code}")
-            run = wait_for(c, run_id, t2, until=("succeeded", "failed", "rejected", "budget_exceeded"))
+            # Poll as the initiator: the approver no longer sees the run once it leaves review.
+            run = wait_for(c, run_id, t1, until=("succeeded", "failed", "rejected", "budget_exceeded"))
             check("run completes", run["status"] == "succeeded", run["status"])
         show_trace(run)
         if a.show_output and run.get("output"):
