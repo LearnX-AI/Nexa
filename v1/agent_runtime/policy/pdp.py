@@ -209,10 +209,14 @@ def redact(agent: str, version: Optional[str], text: str, principal: Principal, 
     p = _policy(agent)
     if not text or p is None or not p.sensitive.redact_personal_data:
         return text
-    found = len(EMAIL.findall(text)) + len(PHONE.findall(text))
+    # Public service numbers of the Teaching Intelligence Policy (a helpline) are
+    # not personal data and stay (NEXA-M4-001).
+    from v1.agent_runtime.pedagogy import contract as pc
+    found = len(EMAIL.findall(text)) + len(pc.personal_phones(PHONE, text))
     if not found:
         return text
-    out = PHONE.sub("[phone removed]", EMAIL.sub("[email removed]", text))
+    out = PHONE.sub(lambda m: m.group(0) if pc.is_public_number(m.group(0)) else "[phone removed]",
+                    EMAIL.sub("[email removed]", text))
     _record("redact", agent, version, principal, "output", Decision(True, "sensitive", f"{found} item(s) of "
                                                                     "personal data removed from the output",
                                                                     detail={"items": found}), trace_id, run_id)

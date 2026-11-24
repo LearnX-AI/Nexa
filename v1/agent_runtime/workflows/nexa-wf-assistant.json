@@ -2,159 +2,397 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-assistant",
   "name": "NEXA assistant (v0 chat routing, migrated)",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "The v1 replacement for the v0 /chat intent router (NEXA-M3-010). Rules first, in v0's order: greetings, images, teacher-only lesson plans and assessment questions, explanations, calculations, statements about the user. One classifier call for the rest (curriculum, general or smalltalk), curriculum by default as in v0. Curriculum answers are cited; a miss gets a labelled general answer. Calculations are computed by the calculator tool.",
   "pattern": "deterministic",
   "state": "active",
-  "allowed_roles": ["student", "teacher", "school_admin", "ai_engineer", "admin", "platform_admin"],
+  "allowed_roles": [
+    "student",
+    "teacher",
+    "school_admin",
+    "ai_engineer",
+    "admin",
+    "platform_admin"
+  ],
   "run_permission": "model.invoke",
-  "input": {"message": "text"},
-  "budget": {"max_steps": 8, "max_agent_calls": 3, "max_wall_s": 300},
+  "input": {
+    "message": "text"
+  },
+  "budget": {
+    "max_steps": 8,
+    "max_agent_calls": 3,
+    "max_wall_s": 300
+  },
   "start": "intent",
   "steps": [
     {
-      "id": "intent", "type": "route", "title": "Intent by rule (v0 order)",
+      "id": "intent",
+      "type": "route",
+      "title": "Intent by rule (v0 order)",
       "rules": [
-        {"when": [{"field": "input.message", "matches": "^\\s*(hi|hello|hey|yo|greetings|morning|afternoon|good (morning|afternoon|evening))(\\s+(there|nexa|everyone))?[\\s!.?,]*$"}],
-         "goto": "greet", "reason": "a greeting (v0 quick_reply)"},
-        {"when": [{"field": "input.message", "matches": "^\\s*(thanks|thank you|thankyou|cheers|tenkyu|ta|thx)(\\s+(so much|a lot|nexa))*[\\s!.]*$"}],
-         "goto": "thanks", "reason": "thanks (v0 quick_reply)"},
-        {"when": [{"field": "input.message", "matches": "^\\s*(bye|goodbye|see you|later|gotta go)(\\s+nexa)?[\\s!.]*$"}],
-         "goto": "bye", "reason": "goodbye (v0 quick_reply)"},
-        {"when": [{"field": "input.message", "matches": "\\b(draw|generate|create|make|design|produce|show me)\\b.*\\b(image|picture|photo|illustration|diagram|drawing|sketch|poster|graphic)s?\\b"}],
-         "goto": "no_images", "reason": "an image request (v0 generate_image)"},
-        {"when": [{"field": "input.message", "matches": "\\b(lesson plan|teaching plan|create (a )?lesson|make (a )?lesson|plan (a|my) lesson)\\b"}],
-         "goto": "lesson_gate", "reason": "a lesson-plan request (v0 generate_lesson, teachers only)"},
-        {"when": [{"field": "input.message", "matches": "\\b(generate|create|make|write|give me|prepare|set|produce|draft|come up with)\\b"},
-                  {"field": "input.message", "matches": "\\b(quiz(zes)?|mcqs?|multiple[- ]choice|fill[- ]in[- ]the[- ]blanks?|true[/ ]false|short[- ]answer|worksheets?|test items?|\\d+\\s+(\\w+\\s+)?questions|(practice|assessment|exam|test|quiz|revision|review|essay) questions)\\b"}],
-         "goto": "questions_gate", "reason": "an assessment-question request (v0 generate_questions, teachers only)"},
-        {"when": [{"field": "input.message", "matches": "^\\s*(explain|describe|define|why|compare|discuss)\\b|\\b(differ|difference between|meaning of)\\b"}],
-         "goto": "lookup", "reason": "the message asks for an explanation, so the curriculum answers it"},
-        {"when": [{"field": "input.message", "matches": "\\d+(\\.\\d+)?\\s*[-+*/x×÷^]\\s*\\d+"}],
-         "goto": "extract", "reason": "the message contains an arithmetic expression (v0 maths first)"},
-        {"when": [{"field": "input.message", "matches": "\\b(calculate|work out|evaluate|how (many|much)|find the (average|total|sum|mean)|what (do|will) (i|we|you) have)\\b"},
-                  {"field": "input.message", "matches": "(\\d|\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)\\b)"}],
-         "goto": "extract", "reason": "the message asks for a calculation with numbers (v0 maths first)"}
-,
-        {"when": [{"field": "input.message", "matches": "^(?!.*(\\?|\\b(explain|describe|define|what|how|why|when|where|who|which|help|can you|could you|tell me|give|show|teach|calculate|work out)\\b))\\s*(i am|i'm|im|we are|we're|my)\\b"}],
-         "goto": "chat", "reason": "a statement about the user, with no question or request (v0 smalltalk)"}
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "^\\s*(hi|hello|hey|yo|greetings|morning|afternoon|good (morning|afternoon|evening))(\\s+(there|nexa|everyone))?[\\s!.?,]*$"
+            }
+          ],
+          "goto": "greet",
+          "reason": "a greeting (v0 quick_reply)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "^\\s*(thanks|thank you|thankyou|cheers|tenkyu|ta|thx)(\\s+(so much|a lot|nexa))*[\\s!.]*$"
+            }
+          ],
+          "goto": "thanks",
+          "reason": "thanks (v0 quick_reply)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "^\\s*(bye|goodbye|see you|later|gotta go)(\\s+nexa)?[\\s!.]*$"
+            }
+          ],
+          "goto": "bye",
+          "reason": "goodbye (v0 quick_reply)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "\\b(draw|generate|create|make|design|produce|show me)\\b.*\\b(image|picture|photo|illustration|diagram|drawing|sketch|poster|graphic)s?\\b"
+            }
+          ],
+          "goto": "no_images",
+          "reason": "an image request (v0 generate_image)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "\\b(lesson plan|teaching plan|create (a )?lesson|make (a )?lesson|plan (a|my) lesson)\\b"
+            }
+          ],
+          "goto": "lesson_gate",
+          "reason": "a lesson-plan request (v0 generate_lesson, teachers only)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "\\b(generate|create|make|write|give me|prepare|set|produce|draft|come up with)\\b"
+            },
+            {
+              "field": "input.message",
+              "matches": "\\b(quiz(zes)?|mcqs?|multiple[- ]choice|fill[- ]in[- ]the[- ]blanks?|true[/ ]false|short[- ]answer|worksheets?|test items?|\\d+\\s+(\\w+\\s+)?questions|(practice|assessment|exam|test|quiz|revision|review|essay) questions)\\b"
+            }
+          ],
+          "goto": "questions_gate",
+          "reason": "an assessment-question request (v0 generate_questions, teachers only)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "^\\s*(explain|describe|define|why|compare|discuss)\\b|\\b(differ|difference between|meaning of)\\b"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "the message asks for an explanation, so the curriculum answers it"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "\\d+(\\.\\d+)?\\s*[-+*/x×÷^]\\s*\\d+"
+            }
+          ],
+          "goto": "extract",
+          "reason": "the message contains an arithmetic expression (v0 maths first)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "\\b(calculate|work out|evaluate|how (many|much)|find the (average|total|sum|mean)|what (do|will) (i|we|you) have)\\b"
+            },
+            {
+              "field": "input.message",
+              "matches": "(\\d|\\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundred|thousand)\\b)"
+            }
+          ],
+          "goto": "extract",
+          "reason": "the message asks for a calculation with numbers (v0 maths first)"
+        },
+        {
+          "when": [
+            {
+              "field": "input.message",
+              "matches": "^(?!.*(\\?|\\b(explain|describe|define|what|how|why|when|where|who|which|help|can you|could you|tell me|give|show|teach|calculate|work out)\\b))\\s*(i am|i'm|im|we are|we're|my)\\b"
+            }
+          ],
+          "goto": "chat",
+          "reason": "a statement about the user, with no question or request (v0 smalltalk)"
+        }
       ],
       "default": "classify"
     },
     {
-      "id": "classify", "type": "agent", "title": "Classify the rest (v0 classify_intent)",
-      "agent": "nexa-precise", "temperature": 0.0, "max_tokens": 8,
+      "id": "classify",
+      "type": "agent",
+      "title": "Classify the rest (v0 classify_intent)",
+      "agent": "nexa-precise",
+      "temperature": 0.0,
+      "max_tokens": 8,
       "prompt": "Classify the message into exactly one category. Reply with one word: curriculum, general or smalltalk.\n\n- curriculum: a question about a topic a secondary school curriculum would cover (sciences, mathematics, and other school subjects).\n- general: a factual or general-knowledge question that is not a school subject (people, places, current events, everyday facts, computing).\n- smalltalk: greetings, thanks, chit-chat, or a statement about the user's own situation, with no request for information.\n\nMessage: {{input.message}}",
-      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2, "on_error": "lookup"},
-      "next": "by_intent"
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "lookup"
+      },
+      "next": "by_intent",
+      "internal": true
     },
     {
-      "id": "by_intent", "type": "route", "title": "Route by the classifier's answer",
+      "id": "by_intent",
+      "type": "route",
+      "title": "Route by the classifier's answer",
       "rules": [
-        {"when": [{"field": "steps.classify.output", "matches": "^\\W*smalltalk\\b"}],
-         "goto": "chat", "reason": "the classifier says smalltalk"},
-        {"when": [{"field": "steps.classify.output", "matches": "^\\W*general\\b"}],
-         "goto": "general", "reason": "the classifier says general knowledge"}
+        {
+          "when": [
+            {
+              "field": "steps.classify.output",
+              "matches": "^\\W*smalltalk\\b"
+            }
+          ],
+          "goto": "chat",
+          "reason": "the classifier says smalltalk"
+        },
+        {
+          "when": [
+            {
+              "field": "steps.classify.output",
+              "matches": "^\\W*general\\b"
+            }
+          ],
+          "goto": "general",
+          "reason": "the classifier says general knowledge"
+        }
       ],
       "default": "lookup"
     },
     {
-      "id": "chat", "type": "agent", "title": "Short friendly reply (v0 smalltalk)",
-      "agent": "nexa-tutor", "fallback_agents": ["nexa-precise"], "max_tokens": 120,
+      "id": "chat",
+      "type": "agent",
+      "title": "Short friendly reply (v0 smalltalk)",
+      "agent": "nexa-tutor",
+      "fallback_agents": [
+        "nexa-precise"
+      ],
+      "max_tokens": 120,
       "prompt": "You are NEXA, a learning assistant for secondary school students and teachers in Papua New Guinea. Reply to the message below in one or two friendly sentences, then offer to help with their studies. Do not ask for personal details.\n\nMessage: {{input.message}}",
-      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2}
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2
+      }
     },
     {
-      "id": "lookup", "type": "knowledge", "title": "Grounded answer from the approved curriculum",
-      "question": "{{input.message}}", "general": false,
-      "policy": {"timeout_s": 180, "max_attempts": 2, "backoff_s": 2, "on_error": "general"},
+      "id": "lookup",
+      "type": "knowledge",
+      "title": "Grounded answer from the approved curriculum",
+      "question": "{{input.message}}",
+      "general": false,
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "general"
+      },
       "next": "evidence"
     },
     {
-      "id": "evidence", "type": "route", "title": "Is the answer grounded?",
+      "id": "evidence",
+      "type": "route",
+      "title": "Is the answer grounded?",
       "rules": [
-        {"when": [{"field": "steps.lookup.status", "in": ["grounded", "grounded_weak"]}],
-         "goto": "cited", "reason": "the curriculum evidence supports an answer"}
+        {
+          "when": [
+            {
+              "field": "steps.lookup.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "cited",
+          "reason": "the curriculum evidence supports an answer"
+        }
       ],
       "default": "general"
     },
     {
-      "id": "cited", "type": "respond", "title": "Return the cited curriculum answer",
+      "id": "cited",
+      "type": "respond",
+      "title": "Return the cited curriculum answer",
       "output": "{{steps.lookup.answer}}"
     },
     {
-      "id": "general", "type": "agent", "title": "Labelled general explanation (v0 general knowledge)",
-      "capability": "explanation", "fallback_agents": ["nexa-precise"],
+      "id": "general",
+      "type": "agent",
+      "title": "Labelled general explanation (v0 general knowledge)",
+      "capability": "explanation",
+      "fallback_agents": [
+        "nexa-precise"
+      ],
       "prompt": "A secondary school student or teacher in Papua New Guinea asks the question below. The approved curriculum does not answer it. Give a short, clear answer and say at the start that it is general knowledge, not from the curriculum. If you are not sure of a fact, say so rather than guessing.\n\nQuestion: {{input.message}}",
-      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+      "policy": {
+        "timeout_s": 90,
+        "max_attempts": 2,
+        "backoff_s": 2
+      }
     },
     {
-      "id": "extract", "type": "agent", "title": "Write the calculation as an expression",
-      "agent": "nexa-curriculum-tutor", "temperature": 0.0, "max_tokens": 60,
+      "id": "extract",
+      "type": "agent",
+      "title": "Write the calculation as an expression",
+      "agent": "nexa-curriculum-tutor",
+      "temperature": 0.0,
+      "max_tokens": 60,
       "prompt": "Write the single arithmetic expression that computes the answer to the question below. Use only numbers, + - * / ^ ( ) and %. Reply with the expression only: no words, no units, no equals sign.\n\nQuestion: {{input.message}}",
-      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2},
-      "next": "compute"
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "compute",
+      "internal": true
     },
     {
-      "id": "compute", "type": "tool", "title": "Compute it exactly (calculator tool)",
-      "agent": "nexa-curriculum-tutor", "tool": "calculator",
-      "arguments": {"expression": "{{steps.extract.output}}"},
-      "policy": {"timeout_s": 10, "max_attempts": 1, "on_error": "lookup"},
+      "id": "compute",
+      "type": "tool",
+      "title": "Compute it exactly (calculator tool)",
+      "agent": "nexa-curriculum-tutor",
+      "tool": "calculator",
+      "arguments": {
+        "expression": "{{steps.extract.output}}"
+      },
+      "policy": {
+        "timeout_s": 10,
+        "max_attempts": 1,
+        "on_error": "lookup"
+      },
       "next": "worked"
     },
     {
-      "id": "worked", "type": "agent", "title": "Explain the working",
+      "id": "worked",
+      "type": "agent",
+      "title": "Explain the working",
       "agent": "nexa-curriculum-tutor",
       "prompt": "A student asked: {{input.message}}\n\nThe calculator tool computed {{steps.compute.result.text}}. Explain the working step by step in simple English and state the final answer using exactly this result. Say that this is a worked answer, not a passage from the curriculum.",
-      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+      "policy": {
+        "timeout_s": 90,
+        "max_attempts": 2,
+        "backoff_s": 2
+      }
     },
     {
-      "id": "greet", "type": "respond", "title": "Greeting",
+      "id": "greet",
+      "type": "respond",
+      "title": "Greeting",
       "output": "Hello! I'm NEXA. What would you like to learn about today?"
     },
     {
-      "id": "thanks", "type": "respond", "title": "Thanks",
+      "id": "thanks",
+      "type": "respond",
+      "title": "Thanks",
       "output": "You're welcome! Ask me anything else."
     },
     {
-      "id": "bye", "type": "respond", "title": "Goodbye",
+      "id": "bye",
+      "type": "respond",
+      "title": "Goodbye",
       "output": "Goodbye! Come back anytime you need help with your studies."
     },
     {
-      "id": "no_images", "type": "respond", "title": "Image generation is not in v1",
+      "id": "no_images",
+      "type": "respond",
+      "title": "Image generation is not in v1",
       "output": "I can't create images yet. I can explain the topic in words, or describe what a diagram of it would show."
     },
     {
-      "id": "lesson_gate", "type": "route", "title": "Lesson plans are for teachers",
+      "id": "lesson_gate",
+      "type": "route",
+      "title": "Lesson plans are for teachers",
       "rules": [
-        {"when": [{"field": "caller.roles", "any_of": ["teacher", "school_admin", "platform_admin"]}],
-         "goto": "lesson_next", "reason": "the user is a teacher"}
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "teacher",
+                "school_admin",
+                "platform_admin"
+              ]
+            }
+          ],
+          "goto": "lesson_next",
+          "reason": "the user is a teacher"
+        }
       ],
       "default": "teachers_only_lesson"
     },
     {
-      "id": "lesson_next", "type": "respond", "title": "Lesson plans move to the lesson-planning agent (M4)",
+      "id": "lesson_next",
+      "type": "respond",
+      "title": "Lesson plans move to the lesson-planning agent (M4)",
       "output": "Full lesson plans are moving to NEXA's lesson-planning agent. For now, use the Lesson explainer workflow: it prepares an explanation and a worked example for your topic, and a second teacher reviews it before it is released."
     },
     {
-      "id": "teachers_only_lesson", "type": "respond", "title": "Not for students (v0 wording)",
+      "id": "teachers_only_lesson",
+      "type": "respond",
+      "title": "Not for students (v0 wording)",
       "output": "Only teachers can create full lesson plans. Please sign in with a teacher EduNex account."
     },
     {
-      "id": "questions_gate", "type": "route", "title": "Assessment questions are for teachers",
+      "id": "questions_gate",
+      "type": "route",
+      "title": "Assessment questions are for teachers",
       "rules": [
-        {"when": [{"field": "caller.roles", "any_of": ["teacher", "school_admin", "platform_admin"]}],
-         "goto": "questions_next", "reason": "the user is a teacher"}
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "teacher",
+                "school_admin",
+                "platform_admin"
+              ]
+            }
+          ],
+          "goto": "questions_next",
+          "reason": "the user is a teacher"
+        }
       ],
       "default": "teachers_only_questions"
     },
     {
-      "id": "questions_next", "type": "respond", "title": "Assessment questions move to the assessment agent (M4)",
+      "id": "questions_next",
+      "type": "respond",
+      "title": "Assessment questions move to the assessment agent (M4)",
       "output": "Assessment questions are moving to NEXA's assessment agent, where they will be grounded in the syllabus and reviewed by a teacher before use. Until then, I can explain the topic or work through example problems with you."
     },
     {
-      "id": "teachers_only_questions", "type": "respond", "title": "Not for students (v0 wording)",
+      "id": "teachers_only_questions",
+      "type": "respond",
+      "title": "Not for students (v0 wording)",
       "output": "Only teachers can generate assessment questions. Please sign in with a teacher EduNex account."
     }
   ],

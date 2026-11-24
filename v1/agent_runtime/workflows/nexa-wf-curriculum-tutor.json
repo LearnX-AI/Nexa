@@ -2,7 +2,7 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-curriculum-tutor",
   "name": "Curriculum tutor with tools",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "Deterministic, with tools through the Tool & Connector Gateway (NEXA-M3-004): a calculation is computed exactly by the calculator tool and explained by the curriculum tutor; any other question is answered from the curriculum by the knowledge_answer tool, as the student.",
   "pattern": "deterministic",
@@ -78,7 +78,8 @@
         "max_attempts": 2,
         "backoff_s": 2
       },
-      "next": "compute"
+      "next": "compute",
+      "internal": true
     },
     {
       "id": "compute",

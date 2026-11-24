@@ -372,6 +372,36 @@
       "title": "ModelRequirements",
       "type": "object"
     },
+    "PedagogyRef": {
+      "additionalProperties": false,
+      "description": "The NEXA Teaching Intelligence Policy the agent runs under\n(nexa.pedagogy/1.0, NEXA-M4-001). The Agent Runtime adds the named profile\nto the agent's system prompt on every call; the agent's own prompt states\nonly its identity and task.",
+      "properties": {
+        "policy": {
+          "const": "nexa-teaching-policy",
+          "title": "Policy",
+          "type": "string"
+        },
+        "version": {
+          "description": "A released policy version.",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        },
+        "profile": {
+          "description": "A profile of that version, e.g. tutor.",
+          "pattern": "^[a-z_]{3,30}$",
+          "title": "Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy",
+        "version",
+        "profile"
+      ],
+      "title": "PedagogyRef",
+      "type": "object"
+    },
     "Permissions": {
       "additionalProperties": false,
       "properties": {
@@ -662,6 +692,17 @@
     },
     "prompt": {
       "$ref": "#/$defs/Prompt"
+    },
+    "pedagogy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PedagogyRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

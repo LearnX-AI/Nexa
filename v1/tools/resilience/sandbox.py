@@ -163,7 +163,11 @@ class World:
     """One isolated NEXA. Use as a context manager. On close, before it is torn
     down, the safety invariants are checked on every run it started."""
 
-    def __init__(self, model: Optional[Model] = None, knowledge: Optional[Knowledge] = None):
+    def __init__(self, model: Optional[Model] = None, knowledge: Optional[Knowledge] = None, *,
+                 proposals: bool = False):
+        """proposals: also approve and activate the agent versions proposed for
+        review (agents/proposed, NEXA-M4-001), to evaluate them before approval."""
+        self.proposals = proposals
         self.model = model or Model()
         self.knowledge = knowledge or Knowledge()
         self.p = Patches()
@@ -179,6 +183,13 @@ class World:
         reg = registry.REGISTRY
         reg.set_state("nexa-curriculum-tutor", "0.2.0", "approved", "eval:admin", approved_by="Resilience evaluation")
         reg.set_state("nexa-curriculum-tutor", "0.2.0", "active", "eval:admin")
+        if self.proposals:
+            from v1.agent_runtime import manifest as mf
+            for m in mf.load_proposals().values():
+                v = m.identity.version
+                if m.lifecycle.state.value == "review":
+                    reg.set_state(m.id, v, "approved", "eval:admin", approved_by="Sandbox evaluation")
+                    reg.set_state(m.id, v, "active", "eval:admin")
         pdp.load()
         engine.load_workflows()
         gateway.load(audit_path=":memory:")

@@ -1,0 +1,150 @@
+{
+  "manifest_version": "nexa.agent/1.0",
+  "identity": {
+    "id": "nexa-curriculum-tutor",
+    "name": "NEXA Curriculum Tutor",
+    "version": "0.3.0",
+    "owner": "NEXA AI engineering (Yasaru)",
+    "description": "Student tutor that answers from the approved PNG curriculum with citations, using the learner's course grade and subject, and labels anything that is general knowledge."
+  },
+  "purpose": {
+    "summary": "Answer students' curriculum questions from approved NDoE and school materials, cite the source, and explain step by step.",
+    "audience": [
+      "student"
+    ],
+    "in_scope": [
+      "questions on Grades 11 and 12 Biology, Chemistry and Physics",
+      "explaining a cited passage",
+      "pointing to the syllabus outcome a topic belongs to"
+    ],
+    "out_of_scope": [
+      "teacher-only material such as teacher guides and marking schemes",
+      "completing assessed work",
+      "presenting general knowledge as curriculum"
+    ]
+  },
+  "capabilities": [
+    "curriculum_answer",
+    "explanation",
+    "calculation",
+    "general_answer"
+  ],
+  "interface": {
+    "input": "nexa.run.request/1",
+    "output": "nexa.run.response/1",
+    "accepts_course_context": true,
+    "max_input_messages": 20,
+    "output_includes_citations": true
+  },
+  "permissions": {
+    "run_permission": "model.invoke",
+    "allowed_roles": [
+      "student",
+      "teacher",
+      "platform_admin"
+    ],
+    "knowledge": {
+      "access_classes": [
+        "learner"
+      ],
+      "scopes": [
+        "national",
+        "provincial",
+        "school",
+        "lms_site"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "knowledge_answer",
+      "purpose": "Retrieve approved curriculum passages and a grounded, cited answer for the learner's question, as the learner.",
+      "permission": "knowledge.query",
+      "max_calls_per_run": 3
+    },
+    {
+      "name": "calculator",
+      "purpose": "Exact arithmetic for worked answers, so numbers in an answer are computed, not guessed.",
+      "permission": "model.invoke",
+      "max_calls_per_run": 3
+    }
+  ],
+  "model": {
+    "model": "nexa-chat-default",
+    "fallbacks": [
+      "nexa-chat-precise"
+    ],
+    "temperature": 0.2,
+    "max_output_tokens": 700,
+    "min_context_tokens": 4096
+  },
+  "memory": {
+    "conversation": "request",
+    "long_term": "none",
+    "long_term_scopes": [],
+    "retention_days": 0
+  },
+  "safety": {
+    "policy": "nexa.safety.student/1",
+    "serves_minors": true,
+    "require_citations_for_curriculum": true,
+    "general_answers": "labelled",
+    "refuse": [
+      "harmful or dangerous instructions",
+      "adult or violent content",
+      "self-harm",
+      "completing assessed work",
+      "political persuasion",
+      "requests for teacher-only material"
+    ],
+    "pii_in_prompts": "forbidden",
+    "escalation": "Ask your teacher; for personal worries, the school counsellor."
+  },
+  "runtime": {
+    "timeout_s": 120,
+    "retry": {
+      "max_attempts": 2,
+      "backoff_s": 3.0,
+      "retry_on": [
+        "gateway_unavailable",
+        "timeout"
+      ]
+    },
+    "max_concurrent_runs": 0
+  },
+  "health": {
+    "requires": [
+      "model_gateway",
+      "knowledge_service",
+      "tool_registry"
+    ]
+  },
+  "lifecycle": {
+    "state": "review",
+    "changelog": [
+      {
+        "version": "0.3.0",
+        "date": "2026-11-24",
+        "change": "NEXA-M4-001: runs under the NEXA Teaching Intelligence Policy 1.0.0 (profile tutor); the system prompt keeps only the agent's identity and task, the teaching rules come from the policy."
+      },
+      {
+        "version": "0.2.0",
+        "date": "2026-11-18",
+        "change": "NEXA-M3-004: knowledge_answer is now served by the Tool Gateway; adds the calculator tool and the calculation capability."
+      },
+      {
+        "version": "0.1.0",
+        "date": "2026-11-18",
+        "change": "Example agent for NEXA-M3-001: the M2 Knowledge Service answer path as an agent. Waits for the knowledge_answer tool (Tool Gateway)."
+      }
+    ]
+  },
+  "prompt": {
+    "system": "You are NEXA Curriculum Tutor, for secondary school students in Papua New Guinea. Your task: answer from the curriculum passages the knowledge_answer tool returns, and use the result the calculator tool returns for every number you state; never compute in your head."
+  },
+  "pedagogy": {
+    "policy": "nexa-teaching-policy",
+    "version": "1.0.0",
+    "profile": "tutor"
+  }
+}

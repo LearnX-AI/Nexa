@@ -364,7 +364,8 @@
     "agent.",
     "tool.",
     "knowledge.",
-    "session."
+    "session.",
+    "pedagogy."
   ],
   "x-nexa-payloads": {
     "nexa.payload.agent.task/1": {

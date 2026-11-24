@@ -2,7 +2,7 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-lesson-explainer",
   "name": "Lesson explainer for teachers",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "Bounded multi-agent: a coordinating agent prepares teaching material by delegating, at most twice, to an allowlisted explainer and a worked-example agent. A second teacher or school administrator approves the material before it is released. With a session, it remembers the last topic it prepared for this teacher and builds on it (NEXA-M3-006).",
   "pattern": "bounded_multi_agent",
@@ -44,7 +44,8 @@
         "max_attempts": 2,
         "backoff_s": 2
       },
-      "next": "review"
+      "next": "review",
+      "grade": "{{input.grade}}"
     },
     {
       "id": "review",

@@ -16,9 +16,15 @@ from v1.identity.principal import Principal
 
 
 @pytest.fixture(autouse=True)
-def fresh_registry():
-    """Each test gets a registry seeded from the shipped manifests."""
-    registry.reload(":memory:")
+def fresh_registry(tmp_path_factory):
+    """Each test gets a registry seeded from the shipped current manifests
+    (without the versions proposed for review, NEXA-M4-001)."""
+    import shutil
+    d = tmp_path_factory.mktemp("agents")
+    for f in os.listdir(mf.AGENTS_DIR):
+        if f.endswith(".json"):
+            shutil.copy(os.path.join(mf.AGENTS_DIR, f), d / f)
+    registry.reload(":memory:", directory=str(d))
     yield
     registry.reload(":memory:")
 
@@ -37,7 +43,9 @@ def tutor_raw(version="1.1.0", change="Shorter answers.", state="draft"):
     with open(os.path.join(mf.AGENTS_DIR, "nexa-tutor.json")) as fh:
         raw = json.load(fh)
     raw["identity"]["version"] = version
-    raw["prompt"]["system"] += " Keep answers short."
+    # A new version of an education agent runs under the teaching policy (NEXA-M4-001).
+    raw["prompt"]["system"] = "You are NEXA Tutor, for secondary school students in Papua New Guinea. Keep answers short."
+    raw["pedagogy"] = {"policy": "nexa-teaching-policy", "version": "1.0.0", "profile": "tutor"}
     lc = raw["lifecycle"]
     lc.update(state=state, approved_by=None, approved_on=None)
     lc["changelog"] = [{"version": version, "date": "2026-11-18", "change": change}] + lc["changelog"]
@@ -72,8 +80,11 @@ def test_seed_registers_every_manifest_once():
     events = reg.history("nexa-tutor")
     assert [e["action"] for e in reversed(events)] == ["agent.created", "version.registered"]
     assert events[0]["actor"] == registry.SEED_ACTOR
+    reg.seed()                       # the shipped files, and the versions proposed for review (NEXA-M4-001)
     assert {r["result"] for r in reg.seed()} == {"unchanged"}       # idempotent
-    assert len(reg.history("nexa-tutor")) == 2
+    assert [e["action"] for e in reversed(reg.history("nexa-tutor"))] == [
+        "agent.created", "version.registered", "version.registered"]
+    assert registry.AGENTS["nexa-tutor"].version == "1.0.0"           # the proposal is in review: 1.0.0 serves
 
 
 def test_registry_state_survives_a_restart_and_the_file_does_not_override_it(tmp_path):
@@ -82,7 +93,7 @@ def test_registry_state_survives_a_restart_and_the_file_does_not_override_it(tmp
     reg.set_state("nexa-tutor", "1.0.0", "suspended", "user:admin", reason="incident 42")
     reg.set_enabled("nexa-precise", False, "user:admin", "model drift")
     reg = registry.reload(db)                                         # restart: the seed runs again
-    assert registry.AGENTS["nexa-tutor"].state == "suspended"           # the file still says active
+    assert reg.spec("nexa-tutor", "1.0.0").state == "suspended"         # the file still says active
     assert registry.AGENTS["nexa-precise"].enabled is False
     assert reg.history("nexa-tutor")[0]["detail"]["reason"] == "incident 42"
 

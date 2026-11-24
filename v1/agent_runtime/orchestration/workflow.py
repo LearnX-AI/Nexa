@@ -140,6 +140,12 @@ class AgentStep(_Step):
     prompt: str = Field(min_length=3, max_length=6000)
     temperature: Optional[float] = Field(None, ge=0.0, le=1.0)
     max_tokens: Optional[int] = Field(None, ge=1, le=4096)
+    grade: Optional[str] = Field(None, max_length=200,
+                                 description="The learner's grade, a template such as {{input.grade}}: the "
+                                             "Teaching Intelligence Policy uses its grade band (NEXA-M4-001).")
+    internal: bool = Field(False, description="The output is used by the workflow only (a classification, an "
+                                              "expression), never shown to the user: the policy's internal "
+                                              "profile applies.")
     next: str = END
 
     @model_validator(mode="after")
@@ -173,6 +179,8 @@ class DelegateStep(_Step):
                                  description="Sent to the delegate; {{task}} is the coordinator's instruction.")
     max_delegations: int = Field(2, ge=1, le=5)
     temperature: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    grade: Optional[str] = Field(None, max_length=200,
+                                 description="The learner's grade, a template, for the delegates' teaching policy.")
     next: str = END
 
     @field_validator("delegates")

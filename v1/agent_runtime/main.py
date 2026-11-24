@@ -26,6 +26,7 @@ from .policy.api import router as policy_router
 from .state import purge as state_purge
 from .state.api import router as state_router
 from .tracing.api import router as tracing_router
+from .pedagogy.api import router as pedagogy_router
 from .auth import require_principal
 from .runtime import run_agent, AgentRuntimeError
 from .schemas import RunRequest, RunResponse
@@ -38,6 +39,7 @@ app.include_router(orchestration_router)
 app.include_router(state_router)
 app.include_router(tracing_router)
 app.include_router(policy_router)
+app.include_router(pedagogy_router)
 # Agent policies (NEXA-M3-007), validated against the manifests and tool
 # contracts; then workflows, validated against the registry and the policies.
 pdp.load()
