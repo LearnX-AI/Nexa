@@ -16,8 +16,9 @@ problems found (empty: the invariant holds).
      data out
   V7 least         tools used for the student tutor never carry teacher-only scopes,
      privilege     and every tool call is on the agent's policy
-  V8 human gate    a run that passed a checkpoint was decided by an approver who was
-                   not its initiator
+  V8 human gate    a run that passed a four-eyes checkpoint was decided by an approver
+                   who was not its initiator (a checkpoint without four eyes, such as
+                   a teacher reviewing their own draft, may be decided by the initiator)
 """
 from __future__ import annotations
 
@@ -76,7 +77,9 @@ def check(run_id: str) -> list[str]:
         if pol is not None and tool not in pol.invoke:
             problems.append(f"V7 least privilege: {d['agent']} was allowed {tool}, not in its policy")
     review = run.ctx.get("review") or {}
-    if review.get("decision") and review.get("by") == run.principal.subject:
+    four_eyes = any(t["kind"] == "checkpoint.waiting" and t["detail"].get("four_eyes")
+                    for t in engine.trace_of(run_id))
+    if review.get("decision") and four_eyes and review.get("by") == run.principal.subject:
         problems.append("V8 human gate: the initiator decided their own run")
     return problems
 

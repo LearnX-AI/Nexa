@@ -203,7 +203,9 @@ class Run:
 
     @property
     def template_ctx(self) -> dict[str, Any]:
-        return {"input": self.input, **self.ctx}
+        # run.*: the run's own id and workflow, for provenance records (NEXA-M4-003).
+        return {"input": self.input, **self.ctx,
+                "run": {"id": self.run_id, "workflow": self.workflow_id, "version": self.wf.version if self.wf else None}}
 
     def save(self) -> None:
         with _store().tx() as db:

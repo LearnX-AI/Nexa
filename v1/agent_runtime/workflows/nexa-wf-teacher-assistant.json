@@ -1,0 +1,442 @@
+{
+  "workflow_version": "nexa.workflow/1.0",
+  "id": "nexa-wf-teacher-assistant",
+  "name": "NEXA Teacher Assistant",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "The Teacher Assistant Agent (NEXA-M4-003), for teachers. Drafts lesson plans, differentiated activities, quizzes with answer keys, rubrics, resource suggestions, curriculum alignment checks and student-support suggestions, grounded in the approved curriculum (teacher material included). Every draft waits for the teacher's review; approved drafts become a document with sources and provenance. Never marks, ranks or disciplines students; refuses contact details.",
+  "pattern": "deterministic",
+  "state": "active",
+  "allowed_roles": [
+    "teacher",
+    "school_admin"
+  ],
+  "run_permission": "model.invoke",
+  "input": {
+    "task": "short_text",
+    "topic": "short_text",
+    "grade": "short_text",
+    "details": "text"
+  },
+  "budget": {
+    "max_steps": 10,
+    "max_agent_calls": 2,
+    "max_wall_s": 400
+  },
+  "start": "intent",
+  "steps": [
+    {
+      "id": "intent",
+      "type": "route",
+      "title": "What the teacher asks for, and what the assistant must not do",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.details",
+              "matches": "\\b(grade|mark|score) (this|these|his|her|their|my students'?|the students'?) (essay|work|paper|script|answers?|test|exam)s?\\b|\\b(which|what) students? (should )?(fail|pass|be held back|repeat)|\\brank (my|the|these) students\\b|\\b(suspend|expel|punish|discipline)\\b"
+            }
+          ],
+          "goto": "high_stakes",
+          "reason": "grading, ranking or disciplining students: a teacher's decision, not the assistant's"
+        },
+        {
+          "when": [
+            {
+              "field": "input.topic",
+              "matches": "\\b(grade|mark|score) (this|these|his|her|their|my students'?|the students'?) (essay|work|paper|script|answers?|test|exam)s?\\b|\\b(suspend|expel|punish|discipline)\\b"
+            }
+          ],
+          "goto": "high_stakes",
+          "reason": "grading or disciplining students: a teacher's decision"
+        },
+        {
+          "when": [
+            {
+              "field": "input.details",
+              "matches": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|(?<!\\d)(\\+?675[ -]?)?7\\d{3}[ -]?\\d{4}(?!\\d)"
+            }
+          ],
+          "goto": "personal_data",
+          "reason": "the notes contain contact details"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "lesson_plan"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task lesson_plan"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "differentiation"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task differentiation"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "quiz"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task quiz"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "rubric"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task rubric"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "resources"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task resources"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "alignment"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task alignment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "student_support"
+            }
+          ],
+          "goto": "lookup",
+          "reason": "task student_support"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "lookup",
+      "type": "knowledge",
+      "title": "The curriculum for the topic and grade (teacher material included)",
+      "question": "{{input.topic}} (Grade {{input.grade}})",
+      "general": false,
+      "audience": "teacher",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "evidence"
+    },
+    {
+      "id": "evidence",
+      "type": "route",
+      "title": "Grounded in the curriculum?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.lookup.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "task",
+          "reason": "the curriculum covers the topic"
+        }
+      ],
+      "default": "not_grounded"
+    },
+    {
+      "id": "task",
+      "type": "route",
+      "title": "Which draft",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "lesson_plan"
+            }
+          ],
+          "goto": "lesson_plan",
+          "reason": "lesson_plan"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "differentiation"
+            }
+          ],
+          "goto": "differentiation",
+          "reason": "differentiation"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "quiz"
+            }
+          ],
+          "goto": "quiz",
+          "reason": "quiz"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "rubric"
+            }
+          ],
+          "goto": "rubric",
+          "reason": "rubric"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "resources"
+            }
+          ],
+          "goto": "resources",
+          "reason": "resources"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "alignment"
+            }
+          ],
+          "goto": "alignment",
+          "reason": "alignment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "student_support"
+            }
+          ],
+          "goto": "student_support",
+          "reason": "student_support"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "lesson_plan",
+      "type": "agent",
+      "title": "Draft: lesson plan",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a lesson plan for one lesson (about 40 minutes unless the notes say otherwise) with these sections: ## Learning objectives (2 to 4, from the curriculum), ## Materials (low-cost, available in PNG schools), ## Lesson steps (numbered, each with minutes), ## Differentiation (support and extension), ## Check for understanding, ## Curriculum links.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "differentiation",
+      "type": "agent",
+      "title": "Draft: differentiation",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft differentiated activities for this topic with these sections: ## Support (for students who need more help), ## Core (for most students), ## Extension (for students ready for more). Each section gives one or two activities with a short reason. Do not label students; describe the activities.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "quiz",
+      "type": "agent",
+      "title": "Draft: quiz",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a quiz with these sections: ## Questions (the number the notes ask for, otherwise 10; a mix of multiple choice, short answer and one longer question; numbered) and ## Answer key (for each question: the answer, a one-line reason and its source marker). The answer key is for the teacher only.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "rubric",
+      "type": "agent",
+      "title": "Draft: rubric",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft an assessment rubric for the task the notes describe (otherwise a short written response on the topic) with these sections: ## Rubric (a table: one row per criterion from the curriculum; columns Beginning, Developing, Proficient, Advanced, each describing what the work shows) and ## How to use it. Do not assign marks to any student's work.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "resources",
+      "type": "agent",
+      "title": "Draft: resources",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nSuggest teaching resources with these sections: ## Resources (5 to 8 items, each starting 'Suggestion:', with what it is, how to use it in class, and its cost: prefer free, local and low-cost materials found in PNG schools and communities) and ## Curriculum links.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "alignment",
+      "type": "agent",
+      "title": "Draft: alignment",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes contain their existing lesson or material. Check it against the curriculum, with these sections: ## Covered (what in their material matches the curriculum, with source markers), ## Gaps (what the curriculum expects that is missing), ## Suggestions (specific changes). If the notes contain no material, say what you need.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "student_support",
+      "type": "agent",
+      "title": "Draft: student support",
+      "agent": "nexa-teacher-assistant",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 1800,
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes describe a learning difficulty, without names. Suggest support with these sections: ## Suggested strategies (3 to 5 classroom strategies for this topic, each with how to try it), ## Check progress (how the teacher can see whether it helps), ## When to involve others (the school's support process, the head teacher, a specialist). Do not diagnose or label the student, and do not decide anything about them.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "document",
+      "type": "tool",
+      "title": "The draft as a document with sources and provenance",
+      "agent": "nexa-teacher-assistant",
+      "tool": "teaching_document",
+      "arguments": {
+        "title": "{{input.topic}}",
+        "kind": "{{input.task}}",
+        "grade": "{{input.grade}}",
+        "body": "{{steps.lesson_plan.output}}{{steps.differentiation.output}}{{steps.quiz.output}}{{steps.rubric.output}}{{steps.resources.output}}{{steps.alignment.output}}{{steps.student_support.output}}",
+        "sources": "{{steps.lookup.answer}}",
+        "run_id": "{{run.id}}",
+        "agent": "NEXA Teacher Assistant (nexa-teacher-assistant)",
+        "policy": "the NEXA Teaching Intelligence Policy"
+      },
+      "policy": {
+        "timeout_s": 10,
+        "max_attempts": 1
+      },
+      "next": "review"
+    },
+    {
+      "id": "review",
+      "type": "checkpoint",
+      "title": "The teacher reviews the draft",
+      "approver_roles": [
+        "teacher",
+        "school_admin"
+      ],
+      "four_eyes": false,
+      "expires_after_s": 604800,
+      "show": "Draft {{input.task}} on {{input.topic}} (Grade {{input.grade}}). Read and check it. Approve to receive it; reject to discard it.\n\n{{steps.document.result.document}}",
+      "on_approve": "deliver",
+      "on_reject": "discarded"
+    },
+    {
+      "id": "deliver",
+      "type": "respond",
+      "title": "Return the document",
+      "output": "{{steps.document.result.document}}\n## Approval\n\n- Reviewed and approved by: {{review.by}}.\n- Reviewer's note: {{review.comment}}\n"
+    },
+    {
+      "id": "discarded",
+      "type": "respond",
+      "title": "Rejected: nothing kept",
+      "output": "The draft was rejected and discarded. Nothing was saved."
+    },
+    {
+      "id": "not_grounded",
+      "type": "respond",
+      "title": "Not in the curriculum: no draft",
+      "output": "I couldn't find this topic in the approved curriculum for that grade, so I won't draft material that may not match it. Check the topic name and grade, or ask for the syllabus to be added to NEXA."
+    },
+    {
+      "id": "unavailable",
+      "type": "respond",
+      "title": "The curriculum cannot be reached",
+      "output": "I can't reach the curriculum right now, so I won't draft anything that might not match it. Please try again in a few minutes."
+    },
+    {
+      "id": "high_stakes",
+      "type": "respond",
+      "title": "Grading and discipline stay with teachers",
+      "output": "I can't mark students' work, rank students, or decide promotion or discipline: those decisions are yours and your school's. I can draft a rubric or marking guide for you to use, or suggest support strategies."
+    },
+    {
+      "id": "personal_data",
+      "type": "respond",
+      "title": "No contact details",
+      "output": "Please remove names and contact details. Describe the learning need instead (for example, 'a Grade 9 student who finds fractions hard'), and I'll suggest support."
+    },
+    {
+      "id": "unknown_task",
+      "type": "respond",
+      "title": "Unknown task",
+      "output": "I can draft: lesson_plan, differentiation, quiz, rubric, resources, alignment (check your material against the curriculum) or student_support. Set the task to one of these."
+    }
+  ],
+  "output": "{{last.output}}"
+}

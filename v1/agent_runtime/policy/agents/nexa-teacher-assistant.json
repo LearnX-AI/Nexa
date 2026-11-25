@@ -1,0 +1,28 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-teacher-assistant",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Teacher-facing assistant (NEXA-M4-003): learner and teacher-only curriculum material through knowledge_answer, and documents through teaching_document. No learner records, no memory, no delegation. Students cannot run it.",
+  "read": {
+    "knowledge_classes": [
+      "learner",
+      "teacher_only"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "knowledge_answer": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
+    "teaching_document": [
+      "render"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}

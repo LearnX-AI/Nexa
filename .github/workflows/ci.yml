@@ -136,6 +136,11 @@ jobs:
         # across subjects and grades, in an isolated NEXA; fails on any case.
         run: python -m v1.tools.tutor_eval --out resilience-report
 
+      - name: Teacher Assistant evaluation (NEXA-M4-003)
+        # Role boundaries, curriculum grounding, usefulness, safety and
+        # integration, in an isolated NEXA; fails on any case.
+        run: python -m v1.tools.teacher_eval --out resilience-report
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published
