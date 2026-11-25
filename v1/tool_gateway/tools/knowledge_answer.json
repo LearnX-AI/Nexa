@@ -64,6 +64,9 @@
     "nexa-lesson-planner": [
       "curriculum.learner",
       "curriculum.teacher"
+    ],
+    "nexa-student-tutor": [
+      "curriculum.learner"
     ]
   },
   "timeout_s": 170,

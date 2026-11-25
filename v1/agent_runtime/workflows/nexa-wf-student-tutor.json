@@ -1,0 +1,146 @@
+{
+  "workflow_version": "nexa.workflow/1.0",
+  "id": "nexa-wf-student-tutor",
+  "name": "NEXA Student Tutor",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "The Student Tutor Agent's tutoring loop (NEXA-M4-002), for students only. Grounded explanations from the approved curriculum, adaptive re-explanation, practice questions, hints, feedback on the student's answers with misconception checks, and follow-ups on the same topic, using the student's session. Never marks or grades; teacher-only requests are refused; when the curriculum cannot be reached it says so instead of guessing.",
+  "pattern": "deterministic",
+  "state": "active",
+  "allowed_roles": ["student"],
+  "run_permission": "model.invoke",
+  "input": {"message": "text", "grade": "short_text"},
+  "session": {
+    "read": ["topic", "explanation", "practice", "last_hint"],
+    "write": {
+      "topic": "{{steps.question.output}}",
+      "explanation": "{{steps.explain.output}}",
+      "practice": "{{steps.practice.output}}",
+      "last_hint": "{{steps.hint.output}}"
+    }
+  },
+  "budget": {"max_steps": 9, "max_agent_calls": 4, "max_wall_s": 300},
+  "start": "intent",
+  "steps": [
+    {
+      "id": "intent", "type": "route", "title": "What the student is asking for",
+      "rules": [
+        {"when": [{"field": "input.message", "matches": "\\b(answer keys?|marking (guide|scheme|key)|memo for|teacher'?s? (guide|notes|copy|edition)|exam (paper|answers)|test answers|(do|finish|complete|write) my (homework|assignment|test|exam|project|essay|report)|lesson plan|(mark|grade|score) (my|this)|what (mark|grade|score) (would|will|do|did) i get|give me (a|my) (mark|grade|score))\\b"}],
+         "goto": "boundary", "reason": "teacher-only material, assessed work or a mark: not for the tutor (role boundary)"},
+        {"when": [{"field": "session.practice", "exists": true},
+                  {"field": "input.message", "matches": "\\b(hint|clue|i'?m stuck|i am stuck|help me (start|with this)|where do i start)\\b"}],
+         "goto": "hint", "reason": "a hint for the current practice question"},
+        {"when": [{"field": "session.practice", "exists": true},
+                  {"field": "input.message", "matches": "^\\s*(my answer|answer:|answer is|i got|i get|i think (it|the answer) (is|'s)|is it|it'?s|it is|=|[-+]?\\d)"}],
+         "goto": "extract_check", "reason": "the student answers the practice question"},
+        {"when": [{"field": "input.message", "matches": "\\d+(\\.\\d+)?\\s*[-+*/x×÷^]\\s*\\d+"}],
+         "goto": "extract", "reason": "an arithmetic expression: computed by the calculator"},
+        {"when": [{"field": "input.message", "matches": "\\b(calculate|work out|evaluate|how (many|much))\\b"},
+                  {"field": "input.message", "matches": "(\\d|\\b(one|two|three|four|five|six|seven|eight|nine|ten|twenty|hundred|thousand)\\b)"}],
+         "goto": "extract", "reason": "a calculation with numbers"}
+      ],
+      "default": "question"
+    },
+    {
+      "id": "question", "type": "agent", "title": "The question, standalone (follow-ups resolved)",
+      "agent": "nexa-student-tutor", "internal": true, "temperature": 0.0, "max_tokens": 80,
+      "prompt": "Previous topic in this conversation: {{session.topic}}\nStudent's new message: {{input.message}}\n\nWrite the topic question the student needs taught, as one standalone question of at most 25 words. If the new message is a follow-up, a request to explain again or more simply, or a request for practice, the question is about the previous topic (or the topic the message names). If it is a new question, return it unchanged. Reply with the question only.",
+      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2},
+      "next": "lookup"
+    },
+    {
+      "id": "lookup", "type": "knowledge", "title": "Grounded answer from the approved curriculum",
+      "question": "{{steps.question.output}}", "general": false, "audience": "student",
+      "policy": {"timeout_s": 180, "max_attempts": 2, "backoff_s": 2, "on_error": "unavailable"},
+      "next": "evidence"
+    },
+    {
+      "id": "evidence", "type": "route", "title": "Grounded, and what kind of help",
+      "rules": [
+        {"when": [{"field": "steps.lookup.status", "in": ["grounded", "grounded_weak"]},
+                  {"field": "input.message", "matches": "\\b(practi[cs]e|quiz me|test me|exercise|(give|ask) me (a|another|some) (question|problem)|another (question|problem|one))\\b"}],
+         "goto": "practice", "reason": "practice on a grounded topic"},
+        {"when": [{"field": "steps.lookup.status", "in": ["grounded", "grounded_weak"]}],
+         "goto": "explain", "reason": "the curriculum supports an answer"}
+      ],
+      "default": "general"
+    },
+    {
+      "id": "explain", "type": "agent", "title": "Teach it, from the curriculum answer",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "cite_from": "lookup", "max_tokens": 700,
+      "prompt": "The student (Grade {{input.grade}}) wrote: {{input.message}}\n\nThe approved curriculum answer, with its source markers:\n{{steps.lookup.answer}}\n\nWhat you explained before on this topic, if anything:\n{{session.explanation}}\n\nTeach this to the student using only the curriculum answer above, and keep its source markers ([S1], [S2] …) after the statements they support. If the student asked to have it explained again, more simply, or another way, explain it differently from before: simpler words, shorter steps, and a new everyday example from Papua New Guinea. If the student's message states something that is not correct, say so kindly and correct it. End with one short question that checks their understanding.",
+      "policy": {"timeout_s": 120, "max_attempts": 2, "backoff_s": 2, "on_error": "cited"}
+    },
+    {
+      "id": "cited", "type": "respond", "title": "The curriculum answer as it is (the teaching step failed)",
+      "output": "{{steps.lookup.answer}}"
+    },
+    {
+      "id": "practice", "type": "agent", "title": "One practice question on the topic",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "max_tokens": 300,
+      "prompt": "Write ONE practice question for a Grade {{input.grade}} student on: {{steps.question.output}}\n\nBase it only on this approved curriculum answer:\n{{steps.lookup.answer}}\n\nUse a short everyday example from Papua New Guinea where it fits. Give the question only: no answer, no hints, no marks. End by telling the student they can ask for a hint or send their answer.",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "hint", "type": "agent", "title": "The next hint, not the answer",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "max_tokens": 250,
+      "prompt": "Practice question the student is working on:\n{{session.practice}}\n\nThe last hint you gave (ignore it if it was for a different question):\n{{session.last_hint}}\n\nThe student says: {{input.message}}\n\nGive the next hint in this order, one step further than the last hint: (1) a question that points to what to notice; (2) the idea or formula to use; (3) the first step worked; (4) the full worked solution with the reasoning. Give only the next level, and do not state the final answer before level 4.",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "extract_check", "type": "agent", "title": "The practice question's calculation, as an expression",
+      "agent": "nexa-student-tutor", "internal": true, "temperature": 0.0, "max_tokens": 60,
+      "prompt": "Write the single arithmetic expression that computes the answer to this question. Use only numbers, + - * / ^ ( ) and %. Reply with the expression only. If the question needs no calculation, reply NONE.\n\nQuestion: {{session.practice}}",
+      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2, "on_error": "check"},
+      "next": "compute_check"
+    },
+    {
+      "id": "compute_check", "type": "tool", "title": "Compute the practice answer exactly",
+      "agent": "nexa-student-tutor", "tool": "calculator",
+      "arguments": {"expression": "{{steps.extract_check.output}}"},
+      "policy": {"timeout_s": 10, "max_attempts": 1, "on_error": "check"},
+      "next": "check"
+    },
+    {
+      "id": "check", "type": "agent", "title": "Feedback on the student's answer (no mark)",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "max_tokens": 500,
+      "prompt": "Practice question:\n{{session.practice}}\n\nWhat was taught on this topic:\n{{session.explanation}}\n\nCalculator result for the question, if it needed one: {{steps.compute_check.result.text}}\n\nThe student's answer: {{input.message}}\n\nTell the student whether their answer is right, partly right, or not yet right, and why. If it shows a misconception, name it kindly, explain why it seems reasonable, and give the correct idea. If it is not yet right, give a hint toward the next step instead of the final answer. Never give a mark, score, grade or percentage.",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "extract", "type": "agent", "title": "Write the calculation as an expression",
+      "agent": "nexa-student-tutor", "internal": true, "temperature": 0.0, "max_tokens": 60,
+      "prompt": "Write the single arithmetic expression that computes the answer to the question below. Use only numbers, + - * / ^ ( ) and %. Reply with the expression only: no words, no units, no equals sign.\n\nQuestion: {{input.message}}",
+      "policy": {"timeout_s": 60, "max_attempts": 2, "backoff_s": 2},
+      "next": "compute"
+    },
+    {
+      "id": "compute", "type": "tool", "title": "Compute it exactly (calculator tool)",
+      "agent": "nexa-student-tutor", "tool": "calculator",
+      "arguments": {"expression": "{{steps.extract.output}}"},
+      "policy": {"timeout_s": 10, "max_attempts": 1, "on_error": "question"},
+      "next": "worked"
+    },
+    {
+      "id": "worked", "type": "agent", "title": "Explain the working",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "max_tokens": 600,
+      "prompt": "A Grade {{input.grade}} student asked: {{input.message}}\n\nThe calculator computed {{steps.compute.result.text}}. Explain the working step by step and state the final answer using exactly this result. Say that this is a worked answer, not a passage from the curriculum.",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "general", "type": "agent", "title": "Not in the curriculum: say so, then a careful general answer",
+      "agent": "nexa-student-tutor", "grade": "{{input.grade}}", "max_tokens": 500,
+      "prompt": "A Grade {{input.grade}} student asked: {{steps.question.output}}\n\nThe approved curriculum does not cover this. Start by saying so plainly. Then, only if it is a school-learning question you are sure about, give a short general explanation labelled as general knowledge, not from the curriculum; if you are not sure, say you are not sure and suggest asking their teacher. Do not cite any source.",
+      "policy": {"timeout_s": 90, "max_attempts": 2, "backoff_s": 2}
+    },
+    {
+      "id": "unavailable", "type": "respond", "title": "The curriculum cannot be reached: no guessing",
+      "output": "I can't check the curriculum right now, so I won't guess an answer. Please try again in a few minutes, or ask your teacher."
+    },
+    {
+      "id": "boundary", "type": "respond", "title": "Not for the tutor (role boundary)",
+      "output": "I can't give marks, answer keys, teacher material, or do work that will be assessed. Your teacher decides marks. I can explain the topic, give you a practice question, or look at your working and help you find the next step."
+    }
+  ],
+  "output": "{{last.output}}"
+}

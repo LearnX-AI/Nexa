@@ -512,7 +512,14 @@ def _write_session(run: Run) -> None:
     ref = run.ctx.get("_session")
     if not (ref and run.wf.session and run.wf.session.write):
         return
-    updates = {k: render(t, run.template_ctx)[:2000] for k, t in run.wf.session.write.items()}
+    # A key whose template names a step that did not run on this path keeps
+    # its value (NEXA-M4-002: a hint does not overwrite the topic).
+    ran = set((run.template_ctx.get("steps") or {}).keys())
+    updates = {k: render(t, run.template_ctx)[:2000] for k, t in run.wf.session.write.items()
+               if all(r.split(".")[1] in ran for r in wfm.TEMPLATE.findall(t)
+                      if r.startswith("steps.") and len(r.split(".")) > 1)}
+    if not updates:
+        return
     expected = ref["version"]
     for attempt in (1, 2):
         try:
@@ -813,13 +820,39 @@ async def _agent_step(run: Run, step: wfm.AgentStep, ctx, remaining) -> dict[str
             run.trace("agent.fallback", step.id, to=agent, after=candidates[i - 1], reason=errors[-1])
         try:
             teaching = {"grade": render(step.grade, ctx) if step.grade else None, "internal": step.internal}
-            res = await _with_policy(run, step, remaining, lambda t, a=agent: _call_agent(
-                run, step.id, a, prompt, temperature=step.temperature, max_tokens=step.max_tokens, timeout=t,
-                max_attempts=step.policy.max_attempts, teaching=teaching))
+
+            async def attempt(t, a=agent):
+                r = await _call_agent(run, step.id, a, prompt, temperature=step.temperature,
+                                      max_tokens=step.max_tokens, timeout=t, max_attempts=step.policy.max_attempts,
+                                      teaching=teaching)
+                if step.cite_from:
+                    _check_citations(run, step, r.get("output", ""), ctx)
+                return r
+            res = await _with_policy(run, step, remaining, attempt)
             return res | {"fallback_used": i > 0}
         except StepError as exc:
             errors.append(str(exc))
     raise StepError("; ".join(errors), retry=False)
+
+
+CITE = re.compile(r"\[S\d+\]")
+
+
+def _check_citations(run: Run, step: wfm.AgentStep, output: str, ctx) -> None:
+    """A step that teaches from a cited curriculum answer (cite_from) must cite,
+    and only the passages that answer cited: an attempt that invents or drops
+    every source is refused (NEXA-M4-002, TP-CITE-01/02)."""
+    source = (lookup(f"steps.{step.cite_from}", ctx) or {})
+    allowed = set(CITE.findall(source.get("answer", "") if isinstance(source, dict) else ""))
+    used = set(CITE.findall(output or ""))
+    unknown = sorted(used - allowed)
+    ok = not unknown and (bool(used) or not allowed)
+    run.trace("agent.grounding", step.id, source=step.cite_from, allowed=sorted(allowed), used=sorted(used),
+              unknown=unknown, ok=ok)
+    if unknown:
+        raise StepError(f"cited passages the curriculum answer does not have: {', '.join(unknown)}", retry=True)
+    if allowed and not used:
+        raise StepError("dropped the curriculum citations", retry=True)
 
 
 # ---------------------------------------------------------------- bounded autonomy
@@ -1031,7 +1064,8 @@ async def _knowledge(run: Run, step: wfm.KnowledgeStep, ctx, timeout: float) -> 
     if data.get("_status", 200) != 200:
         raise StepError(f"knowledge service answered {data['_status']}", retry=data["_status"] >= 500)
     ev = data.get("evidence") or []
-    rec = {"output": data.get("answer", ""), "answer": data.get("answer", ""), "status": data.get("status"),
+    rec = {"output": data.get("answer", ""), "answer": data.get("answer", ""), "question": body["question"],
+           "status": data.get("status"),
            "confidence": data.get("confidence"), "citations": len(data.get("citations") or ev),
            "latency_ms": int((time.monotonic() - t0) * 1000)}
     run.trace("knowledge.call", step.id, status=rec["status"], confidence=rec["confidence"],

@@ -1,0 +1,26 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-student-tutor",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Student-facing tutor (NEXA-M4-002): learner material only (never teacher-only), through knowledge_answer, and exact arithmetic through the calculator. It neither delegates nor accepts delegated work, and holds no marks. Serves minors: output redacted.",
+  "read": {
+    "knowledge_classes": [
+      "learner"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "knowledge_answer": [
+      "curriculum.learner"
+    ],
+    "calculator": [
+      "compute"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}
