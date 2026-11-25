@@ -65,7 +65,7 @@ def p95(xs):
     return xs[min(len(xs) - 1, int(round(0.95 * (len(xs) - 1))))] if xs else 0.0
 
 
-def live(url: str, school: str, out: str) -> int:
+def live(url: str, school: str, out_dir: str) -> int:
     import httpx
 
     from v1.agent_runtime.policy import pdp
@@ -127,12 +127,16 @@ def live(url: str, school: str, out: str) -> int:
         r = draft(task, "Photosynthesis", "11", notes.get(task, "Class of 40, no projector."))
         out = r.get("output") or ""
         have = [s for s in SECTIONS[task] if f"## {s}".lower() in out.lower()]
-        row = {"task": task, "status": r.get("status"), "reached_review": r["reached_review"],
+        kstat = next((t["detail"].get("status") for t in r.get("trace", []) if t["kind"] == "knowledge.call"), None)
+        end = next((s for s in r["path"] if s in ("high_stakes", "personal_data", "not_grounded", "unavailable",
+                                                  "unknown_task")), None)
+        row = {"task": task, "status": r.get("status"), "reached_review": r["reached_review"], "curriculum": kstat,
+               "stopped_at": end,
                "sections": len(have) / len(SECTIONS[task]), "cited": bool(CITE.search(out)),
                "provenance": "## Provenance" in out and "Reviewed and approved by" in out}
         rows.append(row)
         print(f"  {task:<16} {r.get('status'):<17} sections {len(have)}/{len(SECTIONS[task])}  cited {row['cited']}  "
-              f"provenance {row['provenance']}")
+              f"provenance {row['provenance']}  curriculum {kstat}" + (f"  STOPPED at {end}" if end else ""))
     print("\n2. Lesson plans across subjects and grades")
     bands = []
     for subject, grade, topic in SUBJECTS:
@@ -142,7 +146,9 @@ def live(url: str, school: str, out: str) -> int:
         end = r["path"][-1] if r["path"] else None
         if r["reached_review"]:
             bands.append(band == BAND[grade])
-        print(f"  {subject:<12} G{grade:<3} {r.get('status'):<17} {end or '-':<14} band {band}")
+        kstat = next((t["detail"].get("status") for t in r.get("trace", []) if t["kind"] == "knowledge.call"), None)
+        print(f"  {subject:<12} G{grade:<3} {r.get('status'):<17} {end or '-':<14} band {band}  curriculum {kstat}"
+              + ("  (not in the indexed curriculum: no draft, as required)" if end == "not_grounded" else ""))
         if r["reached_review"]:
             c.post(f"/v1/workflow-runs/{r.get('run_id')}/decision", json={"decision": "reject", "comment": "evaluation only"},
                    headers=teacher)
@@ -184,8 +190,8 @@ def live(url: str, school: str, out: str) -> int:
         print(f"  {'✔' if ok else '✘'} {name:<42} {shown:>6}   (threshold {op} {lim})")
     for v in violations:
         print(f"    violation: {v}")
-    os.makedirs(out, exist_ok=True)
-    path = os.path.join(out, f"nexa-teacher-eval-live-{_stamp()}.json")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"nexa-teacher-eval-live-{_stamp()}.json")
     with open(path, "w") as fh:
         json.dump({"metrics": m, "thresholds": LIVE, "tasks": rows, "violations": violations}, fh, indent=2)
     print(f"\nTeacher Assistant (live): {'MET' if ok_all else 'NOT MET'}\nreport: {path}")
