@@ -108,6 +108,19 @@
           "title": "Internal",
           "type": "boolean"
         },
+        "cite_from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A knowledge step whose cited answer this step teaches from (NEXA-M4-002): the output must cite, and cite only markers that answer has, or the attempt is refused.",
+          "title": "Cite From"
+        },
         "next": {
           "default": "end",
           "title": "Next",

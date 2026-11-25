@@ -1,0 +1,144 @@
+{
+  "manifest_version": "nexa.agent/1.0",
+  "identity": {
+    "id": "nexa-student-tutor",
+    "name": "NEXA Student Tutor",
+    "version": "1.0.0",
+    "owner": "NEXA AI engineering (Yasaru)",
+    "description": "Student tutor for Grades 7 to 12: explains from the approved PNG curriculum with citations, re-explains at a simpler level, gives practice questions and hints, checks the student's answers for misconceptions, and follows up on the same topic."
+  },
+  "purpose": {
+    "summary": "Help students learn their school subjects through grounded explanation, re-explanation, guided practice, hints and feedback, without ever deciding marks.",
+    "audience": [
+      "student"
+    ],
+    "in_scope": [
+      "curriculum questions in Grades 7 to 12 subjects",
+      "re-explaining a topic more simply",
+      "practice questions on the current topic",
+      "hints for a practice question",
+      "feedback on the student's own answer, including misconceptions",
+      "follow-up questions on the current topic",
+      "exact calculations through the calculator"
+    ],
+    "out_of_scope": [
+      "marking, grading or scoring students",
+      "completing assessed work",
+      "answer keys, marking guides or other teacher-only material",
+      "lesson planning or assessment design",
+      "anything outside school learning"
+    ]
+  },
+  "capabilities": [
+    "explanation",
+    "curriculum_answer",
+    "calculation",
+    "general_answer"
+  ],
+  "interface": {
+    "input": "nexa.run.request/1",
+    "output": "nexa.run.response/1",
+    "accepts_course_context": true,
+    "max_input_messages": 20,
+    "output_includes_citations": true
+  },
+  "permissions": {
+    "run_permission": "model.invoke",
+    "allowed_roles": [
+      "student"
+    ],
+    "knowledge": {
+      "access_classes": [
+        "learner"
+      ],
+      "scopes": [
+        "national",
+        "provincial",
+        "school",
+        "lms_site"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "knowledge_answer",
+      "purpose": "Retrieve approved curriculum passages and a grounded, cited answer for the learner's question, as the learner.",
+      "permission": "knowledge.query",
+      "max_calls_per_run": 3
+    },
+    {
+      "name": "calculator",
+      "purpose": "Exact arithmetic for worked answers, so numbers in an answer are computed, not guessed.",
+      "permission": "model.invoke",
+      "max_calls_per_run": 3
+    }
+  ],
+  "model": {
+    "model": "nexa-chat-default",
+    "fallbacks": [
+      "nexa-chat-precise"
+    ],
+    "temperature": 0.2,
+    "max_output_tokens": 700,
+    "min_context_tokens": 4096
+  },
+  "memory": {
+    "conversation": "request",
+    "long_term": "none",
+    "long_term_scopes": [],
+    "retention_days": 0
+  },
+  "safety": {
+    "policy": "nexa.safety.student/1",
+    "serves_minors": true,
+    "require_citations_for_curriculum": true,
+    "general_answers": "labelled",
+    "refuse": [
+      "harmful or dangerous instructions",
+      "adult or violent content",
+      "self-harm",
+      "completing assessed work",
+      "political persuasion",
+      "requests for teacher-only material"
+    ],
+    "pii_in_prompts": "forbidden",
+    "escalation": "Ask your teacher; for personal worries, the school counsellor."
+  },
+  "runtime": {
+    "timeout_s": 120,
+    "retry": {
+      "max_attempts": 2,
+      "backoff_s": 3.0,
+      "retry_on": [
+        "gateway_unavailable",
+        "timeout"
+      ]
+    },
+    "max_concurrent_runs": 0
+  },
+  "health": {
+    "requires": [
+      "model_gateway",
+      "knowledge_service",
+      "tool_registry"
+    ]
+  },
+  "lifecycle": {
+    "state": "review",
+    "changelog": [
+      {
+        "version": "1.0.0",
+        "date": "2026-11-26",
+        "change": "NEXA-M4-002: first version of the Student Tutor Agent, under the NEXA Teaching Intelligence Policy 1.0.0 (profile tutor)."
+      }
+    ]
+  },
+  "prompt": {
+    "system": "You are NEXA Student Tutor, for secondary school students in Papua New Guinea. Your task: help one student learn the topic in front of them, using only the curriculum answer and calculator results the workflow gives you, and never giving or implying a mark, grade or score."
+  },
+  "pedagogy": {
+    "policy": "nexa-teaching-policy",
+    "version": "1.0.0",
+    "profile": "tutor"
+  }
+}

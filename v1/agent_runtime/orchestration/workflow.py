@@ -146,6 +146,9 @@ class AgentStep(_Step):
     internal: bool = Field(False, description="The output is used by the workflow only (a classification, an "
                                               "expression), never shown to the user: the policy's internal "
                                               "profile applies.")
+    cite_from: Optional[str] = Field(None, description="A knowledge step whose cited answer this step teaches from "
+                                                       "(NEXA-M4-002): the output must cite, and cite only markers "
+                                                       "that answer has, or the attempt is refused.")
     next: str = END
 
     @model_validator(mode="after")
@@ -348,6 +351,14 @@ class Workflow(Strict):
 
     def step(self, sid: str) -> Step:
         return next(s for s in self.steps if s.id == sid)
+
+    @model_validator(mode="after")
+    def _cites(self) -> "Workflow":
+        knowledge = {s.id for s in self.steps if isinstance(s, KnowledgeStep)}
+        for s in self.steps:
+            if isinstance(s, AgentStep) and s.cite_from and s.cite_from not in knowledge:
+                raise ValueError(f"step {s.id!r}: cite_from {s.cite_from!r} is not a knowledge step")
+        return self
 
     def agents(self) -> set[str]:
         out: set[str] = set()

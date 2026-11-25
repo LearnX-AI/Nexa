@@ -33,7 +33,7 @@ def problems_of(raw, others=None):
 def test_every_shipped_manifest_is_valid_and_loaded():
     found = mf.load_dir(AGENTS)
     assert {"nexa-tutor", "nexa-precise", "nexa-curriculum-tutor", "nexa-lesson-planner"} <= set(found)
-    assert set(registry.AGENTS) == set(found)
+    assert set(registry.AGENTS) == set(found) | set(mf.load_proposals(current=found))   # new agents proposed (M4)
     states = {k: v.lifecycle.state.value for k, v in found.items()}
     assert states["nexa-tutor"] == states["nexa-precise"] == "active"
     assert states["nexa-curriculum-tutor"] == "review" and states["nexa-lesson-planner"] == "draft"

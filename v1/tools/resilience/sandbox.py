@@ -73,6 +73,8 @@ class Model:
     expression    what the curriculum tutor writes when asked for an expression
     intent        what the assistant's classifier answers (NEXA-M3-010): a word,
                   or a callable message -> word
+    script        (prompt substring, reply) pairs checked first, in order; a
+                  reply is a string or a callable prompt -> string (NEXA-M4-002)
     answer        everything else (an explanation, a worked example)
     faults        call number (1-based) -> "unavailable" | "timeout" | "empty" | "garbage"
     always        a fault applied to every call
@@ -81,6 +83,7 @@ class Model:
     coordinator: list[Any] = field(default_factory=list)
     expression: str = "500*4%*3"
     intent: Any = "curriculum"
+    script: list[Any] = field(default_factory=list)
     answer: str = "A clear explanation for Grade 11 students."
     faults: dict[int, str] = field(default_factory=dict)
     always: Optional[str] = None
@@ -90,7 +93,9 @@ class Model:
     async def chat(self, model, messages, temperature=None, max_tokens=None, trace_id=None):
         n = len(self.calls) + 1
         prompt = messages[-1]["content"]
-        role = "coordinator" if "Reply with only one JSON object" in prompt else \
+        scripted = next((r for k, r in self.script if k in prompt), None)
+        role = "scripted" if scripted is not None else \
+            "coordinator" if "Reply with only one JSON object" in prompt else \
             "expression" if "Reply with the expression only" in prompt else \
             "intent" if "Reply with one word: curriculum, general or smalltalk" in prompt else "answer"
         self.calls.append({"n": n, "model": model, "role": role, "prompt": prompt})
@@ -106,6 +111,8 @@ class Model:
             text = ""
         elif fault == "garbage":
             text = "I think maybe something like the explain thing would be good?"
+        elif role == "scripted":
+            text = scripted(prompt) if callable(scripted) else scripted
         elif role == "coordinator":
             k = prompt.count("\nTask: ")
             c = self.coordinator[k] if k < len(self.coordinator) else {"action": "done"}
@@ -133,6 +140,7 @@ class Knowledge:
     """
     status: Any = "grounded"
     fail: Optional[str] = None
+    answer: Any = "From the curriculum: chloroplasts capture light [S1]."   # or question -> text
     calls: list[str] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -147,7 +155,7 @@ class Knowledge:
         grounded = st in ("grounded", "grounded_weak")
         return httpx.Response(200, json={
             "status": st, "confidence": "high" if st == "grounded" else ("low" if grounded else "none"),
-            "answer": "From the curriculum: chloroplasts capture light [S1]." if grounded else
+            "answer": (self.answer(q) if callable(self.answer) else self.answer) if grounded else
             "The approved curriculum does not cover this question.",
             "evidence": {"level": "strong" if st == "grounded" else ("weak" if grounded else "none")},
             "citations": [{"marker": "S1", "used": True, "provenance": {
@@ -252,6 +260,17 @@ class World:
         r = asyncio.run(engine.start(wf_id, who, inputs, auth=f"Bearer {token(who)}", **kw))
         self.runs.append(r["run_id"])
         return r
+
+    def session(self, who: Principal, *workflows: str) -> str:
+        """A session the user owns, for the named workflows (M3-006)."""
+        from v1.agent_runtime.state import store as state
+        from v1.agent_runtime.orchestration import engine
+        return state.create_session(who, list(workflows), 3600, known_workflows=set(engine.WORKFLOWS)).id
+
+    def session_data(self, session_id: str) -> dict[str, Any]:
+        from v1.agent_runtime.state import store as state
+        rec = state.load_session_raw(session_id)
+        return dict(rec.data) if rec else {}
 
     def decide(self, run_id: str, who: Principal, decision: str = "approve", comment: str = "") -> dict[str, Any]:
         from v1.agent_runtime.orchestration import engine
