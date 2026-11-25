@@ -73,7 +73,7 @@ def _sentence_len(text: str) -> float:
     return sum(len(p.split()) for p in parts) / max(1, len(parts))
 
 
-def live(url: str, school: str, out: str) -> int:
+def live(url: str, school: str, out_dir: str) -> int:
     import httpx
 
     from v1.agent_runtime.pedagogy import contract as pc
@@ -212,8 +212,8 @@ def live(url: str, school: str, out: str) -> int:
     for v in violations:
         print(f"    violation: {v}")
     print(f"  ({len(grounded)} grounded, {len(general)} outside the curriculum, of {len(rows)} subject questions)")
-    os.makedirs(out, exist_ok=True)
-    path = os.path.join(out, f"nexa-tutor-eval-live-{_stamp()}.json")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"nexa-tutor-eval-live-{_stamp()}.json")
     with open(path, "w") as fh:
         json.dump({"metrics": m, "thresholds": LIVE, "subjects": rows, "violations": violations}, fh, indent=2)
     print(f"\nStudent Tutor (live): {'MET' if ok_all else 'NOT MET'}\nreport: {path}")
