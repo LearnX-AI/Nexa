@@ -1,0 +1,107 @@
+{
+  "tool_version": "nexa.tool/1.0",
+  "id": "teaching_document",
+  "name": "Teaching document",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "Turns a teacher-facing draft (a lesson plan, quiz, rubric, resource list, alignment check or support plan) into a document with its curriculum sources and a provenance record: which run, agent and policy made it, and a content digest. The workflow adds the teacher's approval. Stores nothing.",
+  "state": "active",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "title",
+      "kind",
+      "grade",
+      "body",
+      "run_id"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 200
+      },
+      "kind": {
+        "type": "string",
+        "enum": [
+          "lesson_plan",
+          "differentiation",
+          "quiz",
+          "rubric",
+          "resources",
+          "alignment",
+          "student_support"
+        ]
+      },
+      "grade": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+      },
+      "body": {
+        "type": "string",
+        "minLength": 20,
+        "maxLength": 20000
+      },
+      "sources": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "reviewed_by": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 200
+      },
+      "run_id": {
+        "type": "string",
+        "minLength": 6,
+        "maxLength": 80
+      },
+      "agent": {
+        "type": "string",
+        "maxLength": 120
+      },
+      "policy": {
+        "type": "string",
+        "maxLength": 120
+      }
+    }
+  },
+  "permission": "model.invoke",
+  "scopes": {
+    "render": {
+      "description": "Formats approved material into a document; reads and writes no data.",
+      "roles": [
+        "teacher",
+        "school_admin",
+        "ai_engineer",
+        "admin",
+        "platform_admin"
+      ]
+    }
+  },
+  "default_scopes": [
+    "render"
+  ],
+  "allowed_agents": {
+    "nexa-teacher-assistant": [
+      "render"
+    ]
+  },
+  "timeout_s": 5,
+  "rate_limit": {
+    "per_user_per_minute": 30,
+    "per_tool_per_minute": 600
+  },
+  "max_output_bytes": 131072,
+  "side_effects": "read",
+  "data": {
+    "returns": "teacher_only",
+    "leaves_nexa": false
+  },
+  "implementation": {
+    "kind": "builtin",
+    "handler": "teaching_document"
+  }
+}

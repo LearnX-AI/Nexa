@@ -1,0 +1,143 @@
+{
+  "manifest_version": "nexa.agent/1.0",
+  "identity": {
+    "id": "nexa-teacher-assistant",
+    "name": "NEXA Teacher Assistant",
+    "version": "1.0.0",
+    "owner": "NEXA AI engineering (Yasaru)",
+    "description": "Teacher assistant for Grades 7 to 12: drafts lesson plans, differentiated activities, quizzes with answer keys, rubrics, resource lists, curriculum alignment checks and student-support suggestions from the approved curriculum, for the teacher to review before anything is used."
+  },
+  "purpose": {
+    "summary": "Save teachers time on planning and assessment design with drafts grounded in the PNG curriculum, which the teacher reviews, edits and approves.",
+    "audience": [
+      "teacher"
+    ],
+    "in_scope": [
+      "lesson plans and differentiation",
+      "quiz and question generation with answer keys",
+      "rubrics and assessment drafts",
+      "teaching-resource suggestions",
+      "curriculum alignment checks of the teacher's material",
+      "student-support suggestions from what the teacher describes",
+      "documents of approved material through the teaching_document tool"
+    ],
+    "out_of_scope": [
+      "marking or grading students' work",
+      "ranking students or deciding promotion, placement or discipline",
+      "reading learner records or conversations",
+      "diagnosing a student",
+      "material not grounded in the curriculum"
+    ]
+  },
+  "capabilities": [
+    "lesson_planning",
+    "assessment_generation",
+    "curriculum_answer",
+    "explanation"
+  ],
+  "interface": {
+    "input": "nexa.run.request/1",
+    "output": "nexa.run.response/1",
+    "accepts_course_context": true,
+    "max_input_messages": 20,
+    "output_includes_citations": true
+  },
+  "permissions": {
+    "run_permission": "model.invoke",
+    "allowed_roles": [
+      "teacher",
+      "school_admin"
+    ],
+    "knowledge": {
+      "access_classes": [
+        "learner",
+        "teacher_only"
+      ],
+      "scopes": [
+        "national",
+        "provincial",
+        "school",
+        "lms_site"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "knowledge_answer",
+      "purpose": "Retrieve cited passages from syllabi, student books and teacher guides for the topic and grade.",
+      "permission": "knowledge.query",
+      "max_calls_per_run": 2
+    },
+    {
+      "name": "teaching_document",
+      "purpose": "Turn the teacher-approved draft into a document with its sources and provenance.",
+      "permission": "model.invoke",
+      "max_calls_per_run": 1
+    }
+  ],
+  "model": {
+    "model": "nexa-chat-default",
+    "fallbacks": [],
+    "temperature": 0.4,
+    "max_output_tokens": 1500,
+    "min_context_tokens": 8192
+  },
+  "memory": {
+    "conversation": "request",
+    "long_term": "none",
+    "long_term_scopes": [],
+    "retention_days": 0
+  },
+  "safety": {
+    "policy": "nexa.safety.teacher/1",
+    "serves_minors": false,
+    "require_citations_for_curriculum": true,
+    "general_answers": "labelled",
+    "refuse": [
+      "harmful or dangerous instructions",
+      "content unsuitable for a school setting",
+      "assessing, ranking or disciplining named students",
+      "diagnosing students",
+      "identifying students by name or contact details"
+    ],
+    "pii_in_prompts": "forbidden",
+    "escalation": "Refer to the head teacher, the school's support process or a specialist."
+  },
+  "runtime": {
+    "timeout_s": 180,
+    "retry": {
+      "max_attempts": 2,
+      "backoff_s": 3.0,
+      "retry_on": [
+        "gateway_unavailable",
+        "timeout"
+      ]
+    },
+    "max_concurrent_runs": 0
+  },
+  "health": {
+    "requires": [
+      "model_gateway",
+      "knowledge_service",
+      "tool_registry"
+    ]
+  },
+  "lifecycle": {
+    "state": "review",
+    "changelog": [
+      {
+        "version": "1.0.0",
+        "date": "2026-11-26",
+        "change": "NEXA-M4-003: first version of the Teacher Assistant Agent, under the NEXA Teaching Intelligence Policy 1.0.0 (profile planning)."
+      }
+    ]
+  },
+  "prompt": {
+    "system": "You are NEXA Teacher Assistant, a colleague for secondary school teachers in Papua New Guinea. Your task: draft planning and assessment material from the curriculum answer the workflow gives you, for the teacher to review and change; you never mark, rank or make decisions about students."
+  },
+  "pedagogy": {
+    "policy": "nexa-teaching-policy",
+    "version": "1.0.0",
+    "profile": "planning"
+  }
+}

@@ -175,3 +175,46 @@ async def course_outline(args: dict[str, Any], call: Call) -> dict[str, Any]:
     if "curriculum.teacher" in call.scopes:
         body["audience"] = "teacher"
     return await _answer(call, body) | {"asked": q}
+
+
+# ---------------------------------------------------------------- teaching documents (NEXA-M4-003)
+
+_KINDS = {"lesson_plan": "Lesson plan", "differentiation": "Differentiated lesson", "quiz": "Quiz with answer key",
+          "rubric": "Assessment rubric", "resources": "Teaching resources", "alignment": "Curriculum alignment check",
+          "student_support": "Student support suggestions"}
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE = re.compile(r"(?<!\d)(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?!\d)")
+# Public service numbers the Teaching Intelligence Policy names (a test keeps
+# this equal to the policy's public_contacts): not personal data.
+PUBLIC_NUMBERS = {"71508000"}
+
+
+@handler("teaching_document")
+async def teaching_document(args: dict[str, Any], call: Call) -> dict[str, Any]:
+    """A teacher-approved draft as a document with its sources and provenance.
+    Personal contact details are refused: documents describe students, never
+    identify them. Nothing is stored; the caller keeps the document."""
+    import hashlib
+    body, sources = args["body"].strip(), (args.get("sources") or "").strip()
+    phones = [m.group(0) for m in _PHONE.finditer(body)
+              if not any(re.sub(r"\D", "", m.group(0)).endswith(n) for n in PUBLIC_NUMBERS)]
+    if _EMAIL.search(body) or phones:
+        raise HandlerError(422, "the document contains personal contact details; remove them and try again")
+    digest = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+    kind = _KINDS[args["kind"]]
+    reviewed = (args.get("reviewed_by") or "").strip()
+    status = f"reviewed and approved by {reviewed}" if reviewed else "draft for teacher review"
+    lines = [f"# {args['title'].strip()}", "", f"{kind} · Grade {args['grade'].strip()} · {status}", "", body, ""]
+    if sources:
+        lines += ["## Curriculum sources", "", sources, ""]
+    lines += ["## Provenance", "",
+              f"- Drafted by {args.get('agent') or 'NEXA Teacher Assistant'} under "
+              f"{args.get('policy') or 'the NEXA Teaching Intelligence Policy'}; AI-assisted.",
+              *([f"- Reviewed and approved by: {reviewed}."] if reviewed else []),
+              f"- NEXA run: {args['run_id'].strip()}.",
+              f"- Content digest: {digest}.",
+              "- The teacher decides how this material is used. NEXA does not mark, rank or make decisions about "
+              "students."]
+    doc = "\n".join(lines) + "\n"
+    return {"document": doc, "digest": digest, "kind": args["kind"], "chars": len(doc),
+            "text": f"{kind}, {len(doc)} characters, {digest[:19]}"}

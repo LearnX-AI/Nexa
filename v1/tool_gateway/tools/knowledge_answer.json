@@ -67,6 +67,10 @@
     ],
     "nexa-student-tutor": [
       "curriculum.learner"
+    ],
+    "nexa-teacher-assistant": [
+      "curriculum.learner",
+      "curriculum.teacher"
     ]
   },
   "timeout_s": 170,

@@ -323,7 +323,7 @@ class Workflow(Strict):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} names an unknown step")
                     if head == "session" and rest.split(".")[0] not in (self.session.read if self.session else []):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not a session key the workflow reads")
-                    if head not in ("input", "steps", "task", "last", "review", "session"):
+                    if head not in ("input", "steps", "task", "last", "review", "session", "run"):
                         raise ValueError(f"step {s.id!r}: {{{{{ref}}}}} is not a known template value")
         # Knowledge and tool steps use the user's own session, which is never
         # stored; after a checkpoint the run continues without it.
@@ -341,7 +341,7 @@ class Workflow(Strict):
         for k, t in (self.session.write.items() if self.session else []):
             for ref in TEMPLATE.findall(t):
                 head, _, rest = ref.partition(".")
-                if head not in ("input", "steps", "last", "review", "session"):
+                if head not in ("input", "steps", "last", "review", "session", "run"):
                     raise ValueError(f"session.write.{k}: {{{{{ref}}}}} is not a known template value")
                 if head == "steps" and rest.split(".")[0] not in ids:
                     raise ValueError(f"session.write.{k}: {{{{{ref}}}}} names an unknown step")
