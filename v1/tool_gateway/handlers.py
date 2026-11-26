@@ -183,7 +183,7 @@ _KINDS = {"lesson_plan": "Lesson plan", "differentiation": "Differentiated lesso
           "rubric": "Assessment rubric", "resources": "Teaching resources", "alignment": "Curriculum alignment check",
           "student_support": "Student support suggestions"}
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-_PHONE = re.compile(r"(?<!\d)(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?!\d)")
+_PHONE = re.compile(r"(?<![\w.])(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?![\w])")
 # Public service numbers the Teaching Intelligence Policy names (a test keeps
 # this equal to the policy's public_contacts): not personal data.
 PUBLIC_NUMBERS = {"71508000"}

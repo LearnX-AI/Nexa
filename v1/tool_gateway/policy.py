@@ -85,7 +85,7 @@ def validate_args(schema: dict[str, Any], args: Any, path: str = "arguments") ->
 
 PII = {
     "email address": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
-    "phone number": re.compile(r"(?<!\d)(?:\+?675[ -]?)?(?:7\d{3}[ -]?\d{4}|\d{3}[ -]?\d{4})(?!\d)"),
+    "phone number": re.compile(r"(?<![\w.])(?:\+?675[ -]?)?(?:7\d{3}[ -]?\d{4}|\d{3}[ -]?\d{4})(?![\w])"),
     "card number": re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)"),
 }
 
