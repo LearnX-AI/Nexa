@@ -126,7 +126,8 @@ def live(url: str, school: str, out_dir: str) -> int:
     for task in TASKS:
         r = draft(task, "Photosynthesis", "11", notes.get(task, "Class of 40, no projector."))
         out = r.get("output") or ""
-        have = [s for s in SECTIONS[task] if f"## {s}".lower() in out.lower()]
+        have = [s for s in SECTIONS[task]
+                if re.search(r"(^|\n)\s*(#{1,4}\s*|\*\*)" + re.escape(s), out, re.I)]
         kstat = next((t["detail"].get("status") for t in r.get("trace", []) if t["kind"] == "knowledge.call"), None)
         end = next((s for s in r["path"] if s in ("high_stakes", "personal_data", "not_grounded", "unavailable",
                                                   "unknown_task")), None)

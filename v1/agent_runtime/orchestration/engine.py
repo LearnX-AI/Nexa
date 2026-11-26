@@ -823,12 +823,21 @@ async def _agent_step(run: Run, step: wfm.AgentStep, ctx, remaining) -> dict[str
         try:
             teaching = {"grade": render(step.grade, ctx) if step.grade else None, "internal": step.internal}
 
+            note: list[str] = []
+
             async def attempt(t, a=agent):
-                r = await _call_agent(run, step.id, a, prompt, temperature=step.temperature,
+                # After a refused attempt, the next one is told why (NEXA-M4-003).
+                p = prompt + (f"\n\nYour previous reply was refused: {note[-1]}. Use only the source markers that "
+                              f"appear in the curriculum answer above, and keep them." if note else "")
+                r = await _call_agent(run, step.id, a, p, temperature=step.temperature,
                                       max_tokens=step.max_tokens, timeout=t, max_attempts=step.policy.max_attempts,
-                                      teaching=teaching)
+                                      teaching=teaching, key=None if not note else f"{run.run_id}/{step.id}/{len(note)}")
                 if step.cite_from:
-                    _check_citations(run, step, r.get("output", ""), ctx)
+                    try:
+                        _check_citations(run, step, r.get("output", ""), ctx)
+                    except StepError as exc:
+                        note.append(str(exc))
+                        raise
                 return r
             res = await _with_policy(run, step, remaining, attempt)
             return res | {"fallback_used": i > 0}
@@ -1053,18 +1062,28 @@ async def _knowledge(run: Run, step: wfm.KnowledgeStep, ctx, timeout: float) -> 
     if not run.auth:
         raise StepError("a knowledge step needs the user's own session", retry=False)
     url = os.environ.get("NEXA_KNOWLEDGE_URL", "http://127.0.0.1:8103").rstrip("/") + "/v1/knowledge/answer"
-    body = {"question": render(step.question, ctx)[:2000], "general": bool(step.general)}
-    if step.audience:
-        body["audience"] = step.audience
     t0 = time.monotonic()
-    try:
-        data = await knowledge_answer(url, body, run.auth, run.trace_id, timeout)
-    except httpx.TimeoutException:
-        raise StepError("knowledge service timed out", retry=True)
-    except httpx.HTTPError as exc:
-        raise StepError(f"knowledge service unreachable: {type(exc).__name__}", retry=True)
-    if data.get("_status", 200) != 200:
-        raise StepError(f"knowledge service answered {data['_status']}", retry=data["_status"] >= 500)
+
+    async def ask(question: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        body = {"question": question[:2000], "general": bool(step.general)}
+        if step.audience:
+            body["audience"] = step.audience
+        try:
+            data = await knowledge_answer(url, body, run.auth, run.trace_id, timeout)
+        except httpx.TimeoutException:
+            raise StepError("knowledge service timed out", retry=True)
+        except httpx.HTTPError as exc:
+            raise StepError(f"knowledge service unreachable: {type(exc).__name__}", retry=True)
+        if data.get("_status", 200) != 200:
+            raise StepError(f"knowledge service answered {data['_status']}", retry=data["_status"] >= 500)
+        return body, data
+
+    body, data = await ask(render(step.question, ctx))
+    if step.fallback_question and data.get("status") not in ("grounded", "grounded_weak"):
+        run.trace("knowledge.retry", step.id, first_status=data.get("status"), reason="not grounded; asked again")
+        body2, data2 = await ask(render(step.fallback_question, ctx))
+        if data2.get("status") in ("grounded", "grounded_weak"):
+            body, data = body2, data2
     ev = data.get("evidence") or []
     rec = {"output": data.get("answer", ""), "answer": data.get("answer", ""), "question": body["question"],
            "status": data.get("status"),

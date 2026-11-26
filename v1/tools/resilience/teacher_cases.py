@@ -54,7 +54,7 @@ def _draft(prompt: str) -> str:
 
 
 def teacher_model(**kw) -> Model:
-    return Model(script=kw.pop("script", []) + [("Start with the line 'DRAFT for teacher review'", _draft)], **kw)
+    return Model(script=kw.pop("script", []) + [("start with the line 'DRAFT for teacher review'", _draft)], **kw)
 
 
 def _start(w: World, task: str, topic: str = "Photosynthesis", grade: str = "11", details: str = "none", who=TEACHER):
@@ -143,11 +143,37 @@ def task_grounded(task):
 
 
 def invented_citation_stops_the_draft():
-    m = teacher_model(script=[("Start with the line", "DRAFT for teacher review\n## Learning objectives\n- x [S7]")])
+    m = teacher_model(script=[("start with the line", "DRAFT for teacher review\n## Learning objectives\n- x [S7]")])
     with World(m, Knowledge(), proposals=True) as w:
         r = _start(w, "lesson_plan")
         return r["status"] == "failed" and not r.get("output") and "review" not in w.path(r["run_id"]), \
             f"{r['status']}: {r.get('error', '')[:80]}"
+
+
+def asks_again_when_not_grounded():
+    kn = Knowledge(status=lambda q: "no_evidence" if q.startswith("What are") else "grounded")
+    with World(teacher_model(), kn, proposals=True) as w:
+        r = _start(w, "quiz")
+        kinds = w.kinds(r["run_id"])
+        ok = r["status"] == "waiting_approval" and kn.calls == [
+            "What are the key ideas, terms and learning outcomes for Photosynthesis in Grade 11?", "Photosynthesis"] \
+            and "knowledge.retry" in kinds
+        return ok, f"{r['status']}; asked {kn.calls}"
+
+
+def refused_draft_is_told_why_and_retried():
+    seen = []
+
+    def draft(p):
+        seen.append(p)
+        return "DRAFT for teacher review\n## Questions\n1. x [S9]\n## Answer key\n1. y [S9]" if len(seen) == 1 \
+            else _draft(p)
+    m = teacher_model(script=[("start with the line", draft)])
+    with World(m, Knowledge(), proposals=True) as w:
+        r = _start(w, "quiz")
+        ok = r["status"] == "waiting_approval" and len(seen) == 2 and \
+            "Your previous reply was refused: cited passages the curriculum answer does not have: [S9]" in seen[1]
+        return ok, f"{r['status']} after {len(seen)} attempts"
 
 
 def not_in_curriculum_no_draft():
@@ -167,7 +193,8 @@ def teacher_material_is_searched():
         _start(w, "lesson_plan", topic="Fractions", grade="9")
         from v1.agent_runtime.orchestration import engine
         look = next(s for s in engine.WORKFLOWS[WF].steps if s.id == "lookup")
-        return look.audience == "teacher" and w.knowledge.calls == ["Fractions (Grade 9)"], str(w.knowledge.calls)
+        return look.audience == "teacher" and w.knowledge.calls == [
+            "What are the key ideas, terms and learning outcomes for Fractions in Grade 9?"], str(w.knowledge.calls)
 
 
 # ---------------------------------------------------------------- usefulness
@@ -235,7 +262,7 @@ def distress_in_notes_goes_to_child_protection():
 
 
 def personal_data_removed_from_drafts():
-    m = teacher_model(script=[("Start with the line", "DRAFT for teacher review\n## Learning objectives\n"
+    m = teacher_model(script=[("start with the line", "DRAFT for teacher review\n## Learning objectives\n"
                                                       "- Ask Mary on 7123 4567 [S1].")])
     with World(m, Knowledge(), proposals=True) as w:
         r = _start(w, "lesson_plan")
@@ -319,6 +346,8 @@ CASES: list[Case] = (
      Case("boundary.other_school_cannot_review", "role_boundary", another_school_cannot_review)]
     + [Case(f"grounding.{t}", "grounding", task_grounded(t)) for t in TASKS]
     + [Case("grounding.invented_citation_stops", "grounding", invented_citation_stops_the_draft),
+       Case("grounding.asks_again_when_not_grounded", "grounding", asks_again_when_not_grounded),
+       Case("grounding.refused_draft_told_why", "grounding", refused_draft_is_told_why_and_retried),
        Case("grounding.not_in_curriculum", "grounding", not_in_curriculum_no_draft),
        Case("grounding.curriculum_down", "grounding", curriculum_down_no_draft),
        Case("grounding.teacher_material_searched", "grounding", teacher_material_is_searched)]

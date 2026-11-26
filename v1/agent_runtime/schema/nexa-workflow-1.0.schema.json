@@ -472,6 +472,21 @@
           "title": "Question",
           "type": "string"
         },
+        "fallback_question": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 3,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Asked once more, worded differently, when the first answer is not grounded (NEXA-M4-003); the step's result is the grounded one, and both are traced.",
+          "title": "Fallback Question"
+        },
         "audience": {
           "anyOf": [
             {
