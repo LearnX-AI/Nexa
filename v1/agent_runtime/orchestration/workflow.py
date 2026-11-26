@@ -161,6 +161,10 @@ class AgentStep(_Step):
 class KnowledgeStep(_Step):
     type: Literal["knowledge"]
     question: str = Field(min_length=3, max_length=2000)
+    fallback_question: Optional[str] = Field(
+        None, min_length=3, max_length=2000,
+        description="Asked once more, worded differently, when the first answer is not grounded (NEXA-M4-003); "
+                    "the step's result is the grounded one, and both are traced.")
     audience: Optional[Literal["student", "teacher"]] = None
     general: Optional[bool] = False
     next: str = END
@@ -391,7 +395,7 @@ def templates_of(s: Step) -> list[str]:
     if isinstance(s, AgentStep):
         return [s.prompt]
     if isinstance(s, KnowledgeStep):
-        return [s.question]
+        return [s.question] + ([s.fallback_question] if s.fallback_question else [])
     if isinstance(s, ToolStep):
         return list(s.arguments.values())
     if isinstance(s, DelegateStep):

@@ -19,10 +19,10 @@ returned as a document with its curriculum sources and a provenance record.
 |---|---|
 | Agent | `v1/agent_runtime/agents/proposed/nexa-teacher-assistant.json` (1.0.0, review) |
 | Agent policy | `v1/agent_runtime/policy/agents/nexa-teacher-assistant.json`: learner and teacher-only curriculum; `knowledge_answer` and `teaching_document`; no learner records, no memory, no delegation; output redacted |
-| Workflow | `v1/agent_runtime/workflows/nexa-wf-teacher-assistant.json` (1.0.0, teachers and school admins) |
+| Workflow | `v1/agent_runtime/workflows/nexa-wf-teacher-assistant.json` (1.1.0, teachers and school admins) |
 | New tool | `teaching_document` (Tool Gateway, built in): the draft as a document with sources and provenance; refuses contact details; stores nothing |
 | Runtime | `{{run.id}}` and `{{run.workflow}}` in templates, for provenance |
-| Evaluation | `v1/tools/resilience/teacher_cases.py` (41 cases); `v1/tools/teacher_eval.py` (offline in CI; `--live` on the DGX) |
+| Evaluation | `v1/tools/resilience/teacher_cases.py` (43 cases); `v1/tools/teacher_eval.py` (offline in CI; `--live` on the DGX) |
 | Tests | `v1/tests/test_teacher_assistant.py` |
 
 **How a client calls it:** `POST /v1/workflows/nexa-wf-teacher-assistant/runs`
@@ -92,7 +92,7 @@ every task, and lesson plans for:
 | Safety | 4 | Everything waits for the teacher, and reject discards. Distress in the notes goes to child protection with no model call. Contact details are removed from drafts. The policy is on every call. |
 | Integration | 5 | End to end: the document has sources, provenance and the approval. The audit trail is complete. Another teacher may review. Runs work through the Agent Runtime's HTTP API, and students are refused there too. Unknown tasks are explained. |
 
-**Result (offline, this change): 41/41, 0 safety invariant violations.**
+**Result (offline): 43/43, 0 safety invariant violations.**
 
 The M3-009 invariant V8 (the initiator never decides their own run) now
 applies to four-eyes checkpoints only. Here, a teacher reviewing their own
@@ -113,6 +113,30 @@ thresholds:
 | Role boundary and safety probes held | 100% |
 | p95 time to a draft | ≤ 180 s |
 | Safety violations | 0 |
+
+## First live run on the DGX (26 Nov 2026) and the fixes
+
+The agent was activated and `teacher_eval --live` run.
+
+**What passed:**
+
+- role boundary and safety: 5/5 (students refused, no grading, no discipline, no contact details, distress to child protection);
+- grade bands: 100%;
+- safety violations: 0;
+- p95: 24.5 s.
+
+**What did not pass:** only 3 of the 7 task drafts completed.
+
+| Problem | Cause | Fix (workflow 1.1.0) |
+|---|---|---|
+| differentiation, quiz and alignment: "not grounded" | The same lookup ("Photosynthesis (Grade 11)") came back `grounded`, `grounded_weak` or `no_evidence` from run to run. A bare topic is a weak query. | The lookup asks a full question ("What are the key ideas, terms and learning outcomes for … in Grade …?"). If that is not grounded, it asks once more with the plain topic (`fallback_question`). Both answers are traced. |
+| rubric: failed | The grounding guard refused the draft. Its retry used the same idempotency key, so it **replayed the refused reply** instead of asking again. This affected every `cite_from` retry, the Student Tutor's included. | Each retry after a refusal has its own key and **tells the model why it was refused** (the markers it may use). Drafts get 3 attempts. |
+| resources: sections not found | The model wrote its own headings, because the prompts mixed headings with descriptions. | Each prompt lists the exact headings to use. The live check also accepts `###` and bold headings. |
+| Lesson plans for mathematics (Grade 9), geography (Grade 8) and English (Grade 7) | Those grades and subjects are not in the indexed curriculum. | None: no draft without the curriculum is the required behaviour. They are reported as such. |
+
+The lookup's variance on an identical query is reported to the Knowledge
+Service owners (M2): the same topic should not move between `grounded` and
+`no_evidence`.
 
 ## To go live
 

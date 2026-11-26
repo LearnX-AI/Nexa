@@ -2,7 +2,7 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-teacher-assistant",
   "name": "NEXA Teacher Assistant",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "The Teacher Assistant Agent (NEXA-M4-003), for teachers. Drafts lesson plans, differentiated activities, quizzes with answer keys, rubrics, resource suggestions, curriculum alignment checks and student-support suggestions, grounded in the approved curriculum (teacher material included). Every draft waits for the teacher's review; approved drafts become a document with sources and provenance. Never marks, ranks or disciplines students; refuses contact details.",
   "pattern": "deterministic",
@@ -20,7 +20,7 @@
   },
   "budget": {
     "max_steps": 10,
-    "max_agent_calls": 2,
+    "max_agent_calls": 3,
     "max_wall_s": 400
   },
   "start": "intent",
@@ -137,7 +137,7 @@
       "id": "lookup",
       "type": "knowledge",
       "title": "The curriculum for the topic and grade (teacher material included)",
-      "question": "{{input.topic}} (Grade {{input.grade}})",
+      "question": "What are the key ideas, terms and learning outcomes for {{input.topic}} in Grade {{input.grade}}?",
       "general": false,
       "audience": "teacher",
       "policy": {
@@ -146,7 +146,8 @@
         "backoff_s": 2,
         "on_error": "unavailable"
       },
-      "next": "evidence"
+      "next": "evidence",
+      "fallback_question": "{{input.topic}}"
     },
     {
       "id": "evidence",
@@ -255,10 +256,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a lesson plan for one lesson (about 40 minutes unless the notes say otherwise) with these sections: ## Learning objectives (2 to 4, from the curriculum), ## Materials (low-cost, available in PNG schools), ## Lesson steps (numbered, each with minutes), ## Differentiation (support and extension), ## Check for understanding, ## Curriculum links.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a lesson plan for one lesson (about 40 minutes unless the notes say otherwise). Under Learning objectives: 2 to 4, from the curriculum. Under Materials: low-cost, available in PNG schools. Under Lesson steps: numbered, each with minutes. Under Differentiation: support and extension. Under Check for understanding: 2 or 3 quick checks.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Learning objectives, ## Materials, ## Lesson steps, ## Differentiation, ## Check for understanding, ## Curriculum links. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -271,10 +272,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft differentiated activities for this topic with these sections: ## Support (for students who need more help), ## Core (for most students), ## Extension (for students ready for more). Each section gives one or two activities with a short reason. Do not label students; describe the activities.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft differentiated activities for this topic. Under Support: activities for students who need more help. Under Core: for most students. Under Extension: for students ready for more. Each section gives one or two activities with a short reason. Do not label students; describe the activities.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Support, ## Core, ## Extension. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -287,10 +288,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a quiz with these sections: ## Questions (the number the notes ask for, otherwise 10; a mix of multiple choice, short answer and one longer question; numbered) and ## Answer key (for each question: the answer, a one-line reason and its source marker). The answer key is for the teacher only.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft a quiz. Under Questions: the number the notes ask for, otherwise 10; a mix of multiple choice, short answer and one longer question; numbered. Under Answer key: for each question, the answer, a one-line reason and its source marker. The answer key is for the teacher only.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Questions, ## Answer key. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -303,10 +304,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft an assessment rubric for the task the notes describe (otherwise a short written response on the topic) with these sections: ## Rubric (a table: one row per criterion from the curriculum; columns Beginning, Developing, Proficient, Advanced, each describing what the work shows) and ## How to use it. Do not assign marks to any student's work.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nDraft an assessment rubric for the task the notes describe (otherwise a short written response on the topic). Under Rubric: a table with one row per criterion from the curriculum and the columns Criterion, Beginning, Developing, Proficient, Advanced, each describing what the work shows; put the source marker in the Criterion cell. Under How to use it: 3 or 4 short points. Do not assign marks to any student's work.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Rubric, ## How to use it. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -319,10 +320,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nSuggest teaching resources with these sections: ## Resources (5 to 8 items, each starting 'Suggestion:', with what it is, how to use it in class, and its cost: prefer free, local and low-cost materials found in PNG schools and communities) and ## Curriculum links.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nSuggest teaching resources. Under Resources: 5 to 8 items, each starting 'Suggestion:', with what it is, how to use it in class, and its cost; prefer free, local and low-cost materials found in PNG schools and communities. Under Curriculum links: what each resource teaches, with source markers.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Resources, ## Curriculum links. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -335,10 +336,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes contain their existing lesson or material. Check it against the curriculum, with these sections: ## Covered (what in their material matches the curriculum, with source markers), ## Gaps (what the curriculum expects that is missing), ## Suggestions (specific changes). If the notes contain no material, say what you need.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes contain their existing lesson or material. Check it against the curriculum. Under Covered: what in their material matches the curriculum, with source markers. Under Gaps: what the curriculum expects that is missing. Under Suggestions: specific changes. If the notes contain no material, say what you need under Gaps.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Covered, ## Gaps, ## Suggestions. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
@@ -351,10 +352,10 @@
       "grade": "{{input.grade}}",
       "cite_from": "lookup",
       "max_tokens": 1800,
-      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes describe a learning difficulty, without names. Suggest support with these sections: ## Suggested strategies (3 to 5 classroom strategies for this topic, each with how to try it), ## Check progress (how the teacher can see whether it helps), ## When to involve others (the school's support process, the head teacher, a specialist). Do not diagnose or label the student, and do not decide anything about them.\n\nUse only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support. Start with the line 'DRAFT for teacher review'. Do not name or identify any student.",
+      "prompt": "Topic: {{input.topic}}\nGrade: {{input.grade}}\nThe teacher's notes: {{input.details}}\n\nThe approved curriculum answer for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nThe teacher's notes describe a learning difficulty, without names. Under Suggested strategies: 3 to 5 classroom strategies for this topic, each with how to try it. Under Check progress: how the teacher can see whether it helps. Under When to involve others: the school's support process, the head teacher, a specialist. Do not diagnose or label the student, and do not decide anything about them.\n\nFormat: start with the line 'DRAFT for teacher review', then use exactly these Markdown headings, in this order: ## Suggested strategies, ## Check progress, ## When to involve others. Use only the curriculum answer above for subject content, and put its source markers ([S1], [S2] …) after the statements they support; use no other markers. Do not name or identify any student.",
       "policy": {
         "timeout_s": 180,
-        "max_attempts": 2,
+        "max_attempts": 3,
         "backoff_s": 2
       },
       "next": "document"
