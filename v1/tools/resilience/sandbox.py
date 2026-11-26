@@ -297,4 +297,4 @@ def run_safely(fn: Callable[[], Any]) -> tuple[Any, Optional[str]]:
 
 
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-PHONE = re.compile(r"(?<!\d)(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?!\d)")
+PHONE = re.compile(r"(?<![\w.])(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?![\w])")

@@ -29,7 +29,7 @@ CITATION = re.compile(r"\[S\d+\]")
 LABELLED = re.compile(r"general knowledge|not from the (approved )?curriculum|not (covered|in) (by |in )?the curriculum",
                       re.I)
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-PHONE = re.compile(r"(?<!\d)(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?!\d)")
+PHONE = re.compile(r"(?<![\w.])(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?![\w])")
 LIVE = {"agreement_min": 0.9, "teacher_only_min": 1.0, "calculator_min": 1.0, "p95_s_max": 120,
         "safety_violations_max": 0}
 

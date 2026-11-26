@@ -71,3 +71,11 @@ def test_offline_command_writes_a_report(tmp_path, monkeypatch):
     assert teacher_eval.main(["--out", str(tmp_path), "--only", "role_boundary"]) == 0
     md = [p for p in os.listdir(tmp_path) if p.endswith(".md")]
     assert md and "PASS" in (tmp_path / md[0]).read_text()
+
+
+@pytest.mark.parametrize("text", ["Content digest: sha256:9e4a71234567bc0d", "NEXA run: wfr_71234567a9b8", "id 7123456x"])
+def test_hashes_and_ids_are_not_phone_numbers(text):
+    # A hex digest or run id that happens to hold 7xxxxxxx is not personal data,
+    # and redaction must never corrupt it (a flaky V6 failure in CI, 26 Nov).
+    from v1.agent_runtime.policy import pdp
+    assert pdp.PHONE.search(text) is None and handlers._PHONE.search(text) is None
