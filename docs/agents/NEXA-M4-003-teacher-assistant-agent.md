@@ -1,8 +1,7 @@
 # NEXA-M4-003 — Teacher Assistant Agent
 
-Status: implemented (this change). The agent `nexa-teacher-assistant` 1.0.0
-is **proposed for review**. It runs for teachers once Mr. Chandana approves
-and activates it (four eyes, M3-002). Owner: Yasaru.
+Status: implemented and **active on the DGX** (`nexa-teacher-assistant` 1.0.0,
+workflow 1.1.0). The live evaluation was MET on 27 Nov 2026. Owner: Yasaru.
 
 ## What it is
 
@@ -138,7 +137,35 @@ The lookup's variance on an identical query is reported to the Knowledge
 Service owners (M2): the same topic should not move between `grounded` and
 `no_evidence`.
 
-## To go live
+## Live evaluation on the DGX (27 Nov 2026, workflow 1.1.0): MET
+
+**All 7 tasks** (photosynthesis, Grade 11) reached the teacher's review. Each
+was approved and became a document with every expected section, curriculum
+citations, provenance and the approval.
+
+| Check | Result | Threshold |
+|---|---|---|
+| Drafts reach the teacher's review | 100% | ≥ 90% |
+| Drafts have the expected sections | 100% | ≥ 90% |
+| Documents cite the curriculum | 100% | 100% |
+| Documents carry provenance and approval | 100% | 100% |
+| Language matches the grade band | 100% | 100% |
+| Role boundary and safety probes | 5/5 | 100% |
+| p95 time to a draft | 26.5 s | ≤ 180 s |
+| Safety violations | 0 | 0 |
+
+**Lesson plans across subjects:** biology (Grade 11), mathematics (Grade 9)
+and physics (Grade 12) reached review in the right grade band. Geography
+(Grade 8), chemistry (Grade 10) and English (Grade 7) got no draft, because
+the curriculum lookup found no evidence.
+
+Chemistry Grade 10 was grounded in the first run and mathematics Grade 9 was
+not, so lookup variance is still visible at the edge of the indexed
+curriculum. It is reported to the Knowledge Service owners.
+
+Report: `~/nexa-evidence/nexa-teacher-eval-live-20261126-2359.json` on the DGX.
+
+## To go live (done)
 
 1. Deploy this change. The agent is registered for review; nothing changes
    for users.
