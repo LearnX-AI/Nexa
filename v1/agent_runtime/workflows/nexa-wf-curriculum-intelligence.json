@@ -1,0 +1,322 @@
+{
+  "workflow_version": "nexa.workflow/1.0",
+  "id": "nexa-wf-curriculum-intelligence",
+  "name": "NEXA Curriculum Intelligence",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "The Curriculum Intelligence Agent (NEXA-M4-004), for teachers and school administrators. map: grade, subject, unit, topic and official outcomes of a question or content, with sources and confidence. alignment: the teacher's material against the official outcomes. progression: prerequisites and what comes next. Never substitutes another grade's material, takes outcomes only from the official syllabus, says when NEXA holds no curriculum for the grade or subject. grade and subject may be 'any'. Advisory and read only.",
+  "pattern": "deterministic",
+  "state": "active",
+  "allowed_roles": [
+    "teacher",
+    "school_admin"
+  ],
+  "run_permission": "model.invoke",
+  "input": {
+    "task": "short_text",
+    "text": "text",
+    "grade": "short_text",
+    "subject": "short_text"
+  },
+  "budget": {
+    "max_steps": 10,
+    "max_agent_calls": 3,
+    "max_wall_s": 400
+  },
+  "start": "intent",
+  "steps": [
+    {
+      "id": "intent",
+      "type": "route",
+      "title": "What is asked, and contact details refused",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.text",
+              "matches": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|(?<!\\d)(\\+?675[ -]?)?7\\d{3}[ -]?\\d{4}(?!\\d)"
+            }
+          ],
+          "goto": "personal_data",
+          "reason": "the text contains contact details"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "map"
+            }
+          ],
+          "goto": "map",
+          "reason": "task map"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "alignment"
+            }
+          ],
+          "goto": "map",
+          "reason": "task alignment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "progression"
+            }
+          ],
+          "goto": "map",
+          "reason": "task progression"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "map",
+      "type": "tool",
+      "title": "Map the text to the curriculum",
+      "agent": "nexa-curriculum-intelligence",
+      "tool": "curriculum_map",
+      "arguments": {
+        "text": "{{input.text}}",
+        "grade": "{{input.grade}}",
+        "subject": "{{input.subject}}"
+      },
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "mapped"
+    },
+    {
+      "id": "mapped",
+      "type": "route",
+      "title": "Covered by the curriculum NEXA holds?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.map.result.status",
+              "equals": "not_covered"
+            }
+          ],
+          "goto": "not_covered",
+          "reason": "no approved material for that grade or subject"
+        },
+        {
+          "when": [
+            {
+              "field": "steps.map.result.status",
+              "equals": "ambiguous"
+            }
+          ],
+          "goto": "ambiguous",
+          "reason": "more than one subject fits"
+        }
+      ],
+      "default": "task"
+    },
+    {
+      "id": "task",
+      "type": "route",
+      "title": "Which answer",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "map"
+            }
+          ],
+          "goto": "mapping",
+          "reason": "task map"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "alignment"
+            }
+          ],
+          "goto": "outcomes",
+          "reason": "task alignment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "progression"
+            }
+          ],
+          "goto": "progression_lookup",
+          "reason": "task progression"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "mapping",
+      "type": "respond",
+      "title": "The mapping",
+      "output": "{{steps.map.result.text}}\n\n---\nAdvisory, for teacher and curriculum reviewer use. Grounded in the approved curriculum NEXA holds; nothing is published or changed. NEXA Curriculum Intelligence (nexa-curriculum-intelligence), run {{run.id}}."
+    },
+    {
+      "id": "outcomes",
+      "type": "knowledge",
+      "title": "The official outcomes for the mapped topic",
+      "question": "What learning outcomes does the official Grade {{steps.map.result.grade}} {{steps.map.result.subject}} syllabus set for {{steps.map.result.topic}}, and what must students know and be able to do?",
+      "fallback_question": "Grade {{steps.map.result.grade}} {{steps.map.result.subject}} learning outcomes for {{steps.map.result.topic}}",
+      "general": false,
+      "audience": "teacher",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "outcomes_found"
+    },
+    {
+      "id": "outcomes_found",
+      "type": "route",
+      "title": "Outcomes found in the curriculum?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.outcomes.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "alignment",
+          "reason": "the curriculum states what the topic requires"
+        }
+      ],
+      "default": "not_grounded"
+    },
+    {
+      "id": "alignment",
+      "type": "agent",
+      "title": "Alignment of the teacher's material with the outcomes",
+      "agent": "nexa-curriculum-intelligence",
+      "grade": "{{steps.map.result.grade}}",
+      "cite_from": "outcomes",
+      "max_tokens": 1500,
+      "prompt": "The curriculum mapping of the teacher's material:\n{{steps.map.result.text}}\n\nWhat the curriculum requires for this topic, with its source markers:\n{{steps.outcomes.answer}}\n\nThe teacher's material:\n{{input.text}}\n\nCompare the teacher's material with what the curriculum requires. Under Covered: each requirement the material covers, with its source marker. Under Partly covered: each requirement it touches but does not complete, and what is missing. Under Not covered: each requirement it does not address. Under Suggestions: 2 to 4 concrete changes. Quote outcome codes only if they appear in the mapping or the curriculum text above; never invent a code.\n\nFormat: use exactly these Markdown headings, in this order: ## Covered, ## Partly covered, ## Not covered, ## Suggestions. Use only the curriculum text above for what is required, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "aligned"
+    },
+    {
+      "id": "aligned",
+      "type": "respond",
+      "title": "The alignment check",
+      "output": "# Curriculum alignment check\n\n{{steps.map.result.text}}\n\n{{steps.alignment.output}}\n\n---\nAdvisory, for teacher and curriculum reviewer use. Grounded in the approved curriculum NEXA holds; nothing is published or changed. NEXA Curriculum Intelligence (nexa-curriculum-intelligence), run {{run.id}}."
+    },
+    {
+      "id": "progression_lookup",
+      "type": "knowledge",
+      "title": "What comes before and after the topic",
+      "question": "In Grade {{steps.map.result.grade}} {{steps.map.result.subject}}, what must students already know before learning {{steps.map.result.topic}}, and what do they learn next?",
+      "fallback_question": "Grade {{steps.map.result.grade}} {{steps.map.result.subject}} {{steps.map.result.topic}}",
+      "general": false,
+      "audience": "teacher",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "progression_found"
+    },
+    {
+      "id": "progression_found",
+      "type": "route",
+      "title": "Found in the curriculum?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.progression_lookup.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "progression",
+          "reason": "the curriculum covers the topic"
+        }
+      ],
+      "default": "not_grounded"
+    },
+    {
+      "id": "progression",
+      "type": "agent",
+      "title": "Prerequisites and progression",
+      "agent": "nexa-curriculum-intelligence",
+      "grade": "{{steps.map.result.grade}}",
+      "cite_from": "progression_lookup",
+      "max_tokens": 1200,
+      "prompt": "The curriculum mapping:\n{{steps.map.result.text}}\n\nThe curriculum on this topic, with its source markers:\n{{steps.progression_lookup.answer}}\n\nSet out how this topic fits the course. Under Prerequisites: what students need to know first. Under This topic: what it covers, in 2 to 4 points. Under What comes next: what it leads to. Where the curriculum text above does not say, write 'Not stated in the curriculum NEXA holds' rather than guessing.\n\nFormat: use exactly these Markdown headings, in this order: ## Prerequisites, ## This topic, ## What comes next. Use only the curriculum text above, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "progressed"
+    },
+    {
+      "id": "progressed",
+      "type": "respond",
+      "title": "The progression",
+      "output": "# Curriculum progression\n\n{{steps.map.result.text}}\n\n{{steps.progression.output}}\n\n---\nAdvisory, for teacher and curriculum reviewer use. Grounded in the approved curriculum NEXA holds; nothing is published or changed. NEXA Curriculum Intelligence (nexa-curriculum-intelligence), run {{run.id}}."
+    },
+    {
+      "id": "not_covered",
+      "type": "respond",
+      "title": "Not covered: nothing substituted",
+      "output": "{{steps.map.result.text}}\n\nNEXA will not use another grade's or subject's material in its place. If this curriculum should be covered, ask for its official syllabus to be added to NEXA."
+    },
+    {
+      "id": "ambiguous",
+      "type": "respond",
+      "title": "More than one subject fits",
+      "output": "{{steps.map.result.text}}"
+    },
+    {
+      "id": "not_grounded",
+      "type": "respond",
+      "title": "Mapped, but no curriculum text for the task",
+      "output": "# Curriculum mapping only\n\n{{steps.map.result.text}}\n\nNEXA found no approved curriculum text on this topic for that grade to check against, so it gives the mapping only and does not guess.\n\n---\nAdvisory, for teacher and curriculum reviewer use. Grounded in the approved curriculum NEXA holds; nothing is published or changed. NEXA Curriculum Intelligence (nexa-curriculum-intelligence), run {{run.id}}."
+    },
+    {
+      "id": "unavailable",
+      "type": "respond",
+      "title": "The curriculum cannot be reached",
+      "output": "The curriculum service cannot be reached right now, so nothing was mapped. Please try again later."
+    },
+    {
+      "id": "personal_data",
+      "type": "respond",
+      "title": "Contact details refused",
+      "output": "Please remove names and contact details from the text and try again. Curriculum mapping does not need them."
+    },
+    {
+      "id": "unknown_task",
+      "type": "respond",
+      "title": "Unknown task",
+      "output": "Choose a task: map (where this sits in the curriculum), alignment (your material against the official outcomes) or progression (prerequisites and what comes next)."
+    }
+  ]
+}

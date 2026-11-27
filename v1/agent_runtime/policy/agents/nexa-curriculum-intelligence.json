@@ -1,0 +1,29 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-curriculum-intelligence",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Curriculum Intelligence (NEXA-M4-004) for teachers and school administrators: learner and teacher-only curriculum through curriculum_map and knowledge_answer. Read only; no learner records, no memory, no delegation, no writes. Students cannot run it.",
+  "read": {
+    "knowledge_classes": [
+      "learner",
+      "teacher_only"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "curriculum_map": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
+    "knowledge_answer": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}

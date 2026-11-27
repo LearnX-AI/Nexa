@@ -58,6 +58,10 @@
     "curriculum.learner"
   ],
   "allowed_agents": {
+    "nexa-curriculum-intelligence": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
     "nexa-curriculum-tutor": [
       "curriculum.learner"
     ],
