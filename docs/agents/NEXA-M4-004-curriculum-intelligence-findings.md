@@ -83,10 +83,59 @@ cd /home/admin/Nexa/Nexa
 | Incorrect premise | All 5 refused (no evidence). The first version counted that as a pass; a refusal no longer passes, because these topics are covered and the premise should be corrected. |
 | Sources | 0 fabricated citations; 23 cited, all active versions with a checksum, 9 official |
 
-Open questions, checked by rerunning as an administrator and with grade and subject given:
+### Cause 1: POMNSOE cannot see its own courses
 
-1. Is the Physics "no evidence" an access-scope effect (school-scoped content not visible to this teacher) or a retrieval or evidence-threshold effect?
-2. Do grade and subject, which `curriculum_map` would supply, fix the cross-grade and cross-subject citations?
+The EduNeX content (466 items, the same courses as the S3 folder) was synced
+under a test school, `edunex-core-test`. School-scoped content is visible
+only to users of that school, so POMNSOE users see only the national
+sources: the official syllabi and guides, and the M2 corpus's Grade 12
+lesson notes. This applies to the Student Tutor and the Teacher Assistant
+too. The M2-008 live benchmark runs as platform admin, which sees everything,
+so its figures overstate what POMNSOE learners get.
+
+Checked on the DGX: the lesson notes for Quantities & Measurement, Waves,
+Classical Mendelian Genetics and Amino Acids are all `scope=school`,
+`school=edunex-core-test`.
+
+### Demo as a POMNSOE teacher and with the EduNeX content visible (27 Nov 2026, `88ef0a1`)
+
+| | POMNSOE teacher today | Teacher at `edunex-core-test` (content visible) |
+|---|---|---|
+| Covered | 4/12 | 10/12 |
+| Covered, grade and subject given | 6/12 | **12/12** |
+| Physics | 0/4 | 4/4 |
+| Grounded answers without grade or subject: right course / another grade / another subject | 4 / 3 / 1 | 10 / 2 / 0 |
+| Not covered (Grades 7–10, other subjects) | 6/6 | 5/6: **a Grade 7 English question was answered from Grade 11 English material** (silent substitution) |
+| Cannot be answered | 5/5 | 5/5 |
+| Incorrect premise | 0/5 (refused) | 0/5 (refused) |
+| Fabricated citations | 0 | 0 |
+| Cited sources that are official syllabi or guides | 19 of 37 | **2 of 79** |
+| p95 per answer | 7.9 s | 8.6 s |
+
+Reports: `~/nexa-evidence/m4-004/demo-pomnsoe/` and `~/nexa-evidence/m4-004/demo-edunex/`.
+
+### Cause 2: false premises are refused, not corrected
+
+For "Why is the mitochondrion the site of photosynthesis?" and "Why does a
+strong acid have a pH greater than 7?":
+
+- retrieval finds strong evidence (similarity 0.78, 5 passages, the right material);
+- the answer model then decides that "the passages do not answer the question", and NEXA refuses;
+- the neutral questions ("Where does photosynthesis take place?", "What is the pH of a strong acid?") are grounded correctly.
+
+Refusing is safe, because the false claim is never confirmed. But a learner
+should be told the correct fact. The fix belongs in the grounded-answer step:
+
+- where the evidence is strong and the passages contradict an assumption in the question, NEXA corrects the assumption with citations;
+- it ships through the M2-008 gate, with premise items added, so that unanswerable questions are not answered with confident "corrections".
+
+### What the evidence supports
+
+1. **Re-scope the EduNeX courses to POMNSOE** (a re-sync with a POMNSOE token) after CDD signs off the content. It makes them visible to POMNSOE learners, so it is a publication decision, not a code change. Expected effect: covered questions from 4/12 to 10/12.
+2. **`curriculum_map`: grade and subject mapping** (10/12 to 12/12). It must never substitute another grade silently: a grade NEXA does not hold gets "not covered", or the answer states which grade the material is from.
+3. **Official-syllabus weighting** for outcome mapping and alignment (rule R3), because LMS content crowds out the syllabus (2 of 79 citations).
+4. **Premise correction** in the grounded-answer step, behind the M2-008 gate.
+5. **Measure as POMNSOE users:** M2-008 is also run as a POMNSOE learner, and the demo pack becomes part of the M4-004 evaluation.
 
 ## Next
 
