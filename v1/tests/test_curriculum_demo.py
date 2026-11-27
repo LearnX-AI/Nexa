@@ -6,6 +6,8 @@ SOURCES = [
      "source_type": "lms_content"},
     {"version_id": "v-phys11", "title": "Measurement Notes", "subject": "Physics", "grade_levels": [11],
      "source_type": "lms_content"},
+    {"version_id": "v-bio11", "title": "Genetics Lesson Note", "subject": "Biology", "grade_levels": [11],
+     "source_type": "lms_content"},
 ]
 
 
@@ -38,9 +40,13 @@ def test_covered_question_grounded_on_the_right_course_passes():
     assert r["sources"][0]["subject"] == "Biology" and r["sources"][0]["active"]
 
 
-def test_covered_question_citing_another_subject_is_reported():
-    r = cd.judge(CASE, _answer(version="v-phys11"), cd.source_table(SOURCES))
-    assert not r["passed"] and "another subject or grade" in r["issues"][0]
+def test_covered_question_citing_another_subject_or_grade_is_reported_separately():
+    srcs = cd.source_table(SOURCES)
+    r = cd.judge(CASE, _answer(version="v-phys11"), srcs)
+    assert not r["passed"] and r["mapping"] == "wrong_subject" and "another subject" in r["issues"][0]
+    r = cd.judge(CASE, _answer(version="v-bio11"), srcs)
+    assert not r["passed"] and r["mapping"] == "other_grade" and "another grade" in r["issues"][0]
+    assert cd.judge(CASE, _answer(), srcs)["mapping"] == "right"
 
 
 def test_covered_question_not_grounded_is_reported():
@@ -60,6 +66,8 @@ def test_false_premise_must_be_corrected():
     assert cd.judge(TRAP, _answer(text="Photosynthesis happens in the chloroplast, not the mitochondrion [S1]."),
                     srcs)["passed"]
     assert not cd.judge(TRAP, _answer(text="Because mitochondria make sugar [S1]."), srcs)["passed"]
+    r = cd.judge(TRAP, _answer(status="no_evidence", text=None), srcs)
+    assert not r["passed"] and "instead of correcting" in r["issues"][0]
 
 
 def test_source_version_and_checksum_and_fabrication_are_checked():
@@ -70,20 +78,29 @@ def test_source_version_and_checksum_and_fabrication_are_checked():
 
 
 def test_run_and_report_with_a_fake_service():
-    def post(q):
+    seen = []
+
+    def post(q, filters=None):
+        seen.append(filters)
         if "DNA" in q:
             return _answer()
         if "mitochondrion" in q:
             return _answer(text="It is the chloroplast [S1].")
         return _answer(status="no_evidence", text=None)
     rep = cd.run(post, SOURCES)
-    assert rep["cases"] == len(cd.CASES)
+    asked_twice = [c for c in cd.CASES if c[1] in ("covered", "incorrect")]
+    assert rep["cases"] == len(cd.CASES) + len(asked_twice)
+    assert {"subjects": ["Biology"], "grades": [12]} in seen and seen.count(None) == len(cd.CASES)
+    assert "c03f" in {r["id"] for r in rep["results"]}
+    assert "covered (grade and subject given)" in rep["categories"]
     assert rep["fabricated_citations"] == 0 and rep["substitutions"] == 0
-    assert rep["sources_cited"] == 3 and rep["sources_active"] == 3  # c02, c03, w02
+    assert rep["sources_cited"] == 6 and rep["sources_active"] == 6  # c02, c03, w02, each twice
+    assert rep["mapping"]["wrong_subject"] == 0 and rep["mapping"]["other_grade"] == 1  # c02 is Grade 11
+    assert cd.run(post, SOURCES, filtered=False)["cases"] == len(cd.CASES)
     md = cd.markdown(rep, "2026-11-27 16:30", "a teacher at pomnsoe",
                      pilot=[{"n": 1, "course": "BIO11", "file": "/x/01.docx", "words": 10, "content_hits": 3,
                              "probes": 3, "etag": "0123456789abcdef", "last_modified": "2026-11-26T00:00:00Z"}])
     assert "Sign-off sheet: academic correctness" in md and "source integrity" in md
-    assert "| c03 |" in md and "S3 pilot" in md
-    errs = cd.run(lambda q: (_ for _ in ()).throw(RuntimeError("down")), SOURCES, cases=[CASE])
+    assert "| c03 |" in md and "| c03f |" in md and "S3 pilot" in md
+    errs = cd.run(lambda q, f=None: (_ for _ in ()).throw(RuntimeError("down")), SOURCES, cases=[CASE])
     assert errs["passed"] == 0 and errs["results"][0]["status"].startswith("error")

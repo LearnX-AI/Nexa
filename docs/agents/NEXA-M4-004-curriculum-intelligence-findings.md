@@ -51,8 +51,15 @@ at the pilot school:
 | Covered | 12: two per course | A grounded answer citing the right subject and grade, with the key terms |
 | Not covered | 6: English G7, Social Science G8, Mathematics G9, Science G10, Business G11, History G12 | No curriculum answer; an answer from another grade or subject is reported as a silent substitution |
 | No answer | 5 | Refusal |
-| Incorrect premise | 5 | The answer corrects the premise |
+| Incorrect premise | 5 | The answer corrects the premise from the curriculum; a refusal does not pass |
 | Source and version | every citation | An active source version with a content checksum |
+
+Covered and incorrect-premise questions are asked twice:
+
+- as typed;
+- with their grade and subject as retrieval filters (ids ending in `f`), which is what an agent that knows the learner's grade and subject would get.
+
+Grounded answers are classed by their sources: right course, another grade of the same subject, or another subject.
 
 The report includes:
 
@@ -65,6 +72,21 @@ cd /home/admin/Nexa/Nexa
 (set -a; . <(sudo cat /etc/nexa/identity.env); set +a; \
  /home/admin/Nexa/venv310/bin/python -m v1.tools.curriculum_demo --out ~/nexa-evidence/m4-004/demo)
 ```
+
+## First demo run (DGX, 27 Nov 2026, as a teacher at POMNSOE)
+
+| | Result |
+|---|---|
+| Covered | 3/12. Biology and Chemistry: 8 grounded, but 5 of them cite another grade (Grade 12 for Grade 11 questions) or another subject (DNA structure from the Physics student guide; reaction rates from Biology notes). Physics: all 4 got no evidence, although the matching Grade 11–12 Physics lesson notes are indexed. |
+| Not covered (Grades 7–10, other subjects) | 6/6 refused, with no silent substitution |
+| Cannot be answered | 5/5 refused |
+| Incorrect premise | All 5 refused (no evidence). The first version counted that as a pass; a refusal no longer passes, because these topics are covered and the premise should be corrected. |
+| Sources | 0 fabricated citations; 23 cited, all active versions with a checksum, 9 official |
+
+Open questions, checked by rerunning as an administrator and with grade and subject given:
+
+1. Is the Physics "no evidence" an access-scope effect (school-scoped content not visible to this teacher) or a retrieval or evidence-threshold effect?
+2. Do grade and subject, which `curriculum_map` would supply, fix the cross-grade and cross-subject citations?
 
 ## Next
 

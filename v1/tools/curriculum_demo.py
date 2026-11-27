@@ -124,24 +124,30 @@ def judge(case: tuple, body: dict[str, Any], srcs: dict[str, dict[str, Any]]) ->
     issues: list[str] = []
     if fabricated:
         issues.append(f"{fabricated} fabricated citation marker(s)")
+    mapping = None
+    if cat in ("covered", "incorrect") and curriculum:
+        subj = [x for x in cited_src if _norm_subject(x["subject"]) not in ("", _norm_subject(subject))]
+        other = [x for x in cited_src if x not in subj and x["grades"] and grade not in x["grades"]]
+        mapping = "wrong_subject" if subj else ("other_grade" if other else "right")
+        if subj:
+            issues.append("cites another subject: " + "; ".join(
+                f"{x['title']} ({x['subject']} {x['grades']})" for x in subj))
+        if other:
+            issues.append("cites another grade of the same subject: " + "; ".join(
+                f"{x['title']} ({x['subject']} {x['grades']})" for x in other))
     if cat == "covered":
         if not curriculum:
             issues.append(f"not grounded ({status})")
-        else:
-            wrong = [x for x in cited_src
-                     if _norm_subject(x["subject"]) not in ("", _norm_subject(subject))
-                     or (x["grades"] and grade not in x["grades"])]
-            if wrong:
-                issues.append("cites another subject or grade: " + "; ".join(
-                    f"{x['title']} ({x['subject']} {x['grades']})" for x in wrong))
-            if terms and len(have) < max(1, len(terms) // 2):
-                issues.append(f"key terms {len(have)}/{len(terms)}")
+        elif terms and len(have) < max(1, len(terms) // 2):
+            issues.append(f"key terms {len(have)}/{len(terms)}")
     elif cat in ("not_covered", "no_answer"):
         if curriculum:
             issues.append("answered from the curriculum: silent substitution from " + "; ".join(
                 f"{x['title']} ({x['subject']} {x['grades']})" for x in cited_src))
     elif cat == "incorrect":
-        if curriculum and terms and not have:
+        if not curriculum:
+            issues.append(f"refused ({status}) instead of correcting the premise from the curriculum")
+        elif terms and not have:
             issues.append("the false premise may not be corrected (no correct term found)")
     if curriculum:
         if any(not x["active"] for x in cited_src):
@@ -151,28 +157,42 @@ def judge(case: tuple, body: dict[str, Any], srcs: dict[str, dict[str, Any]]) ->
     return {"id": cid, "category": cat, "subject": subject, "grade": grade, "question": question,
             "status": status, "source_kind": kind, "confidence": body.get("confidence"),
             "answer": answer, "sources": cited_src, "terms_found": have, "terms": terms,
-            "fabricated": fabricated, "passed": not issues, "issues": issues}
+            "fabricated": fabricated, "mapping": mapping, "passed": not issues, "issues": issues}
 
 
-def run(post: Callable[[str], dict[str, Any]], sources: list[dict[str, Any]],
-        cases: Optional[list[tuple]] = None, progress: Callable[[str], None] = lambda s: None) -> dict[str, Any]:
+def run(post: Callable[..., dict[str, Any]], sources: list[dict[str, Any]],
+        cases: Optional[list[tuple]] = None, progress: Callable[[str], None] = lambda s: None,
+        filtered: bool = True) -> dict[str, Any]:
+    """Each case is asked as a user would type it. With filtered=True, covered
+    and incorrect-premise cases are asked a second time with their grade and
+    subject as retrieval filters: what an agent that knows the learner's grade
+    and subject would get (ids ending in "f")."""
     srcs = source_table(sources)
     results, lat = [], []
+    plan = []
     for case in cases or CASES:
+        plan.append((case, None))
+        if filtered and case[1] in ("covered", "incorrect") and case[2] and case[3]:
+            plan.append((case, {"subjects": [case[2]], "grades": [case[3]]}))
+    for case, flt in plan:
         t0 = time.time()
         try:
-            body = post(case[4])
+            body = post(case[4], flt)
         except Exception as exc:  # noqa: BLE001 - recorded as a failed case
             body = {"status": f"error: {type(exc).__name__}", "citations": []}
         lat.append(time.time() - t0)
         r = judge(case, body, srcs)
+        if flt:
+            r["id"] += "f"
+            r["filters"] = flt
         r["seconds"] = round(lat[-1], 1)
         results.append(r)
-        progress(f"  {'ok  ' if r['passed'] else 'MISS'} {r['id']} {r['category']:<11} {str(r['status']):<15} "
+        progress(f"  {'ok  ' if r['passed'] else 'MISS'} {r['id']:<4} {r['category']:<11} {str(r['status']):<15} "
                  + ("; ".join(r["issues"]) if r["issues"] else ""))
     cats: dict[str, dict[str, int]] = {}
     for r in results:
-        c = cats.setdefault(r["category"], {"cases": 0, "passed": 0})
+        c = cats.setdefault(r["category"] + (" (grade and subject given)" if r.get("filters") else ""),
+                            {"cases": 0, "passed": 0})
         c["cases"] += 1
         c["passed"] += r["passed"]
     cited = [s for r in results for s in r["sources"]]
@@ -190,15 +210,19 @@ def run(post: Callable[[str], dict[str, Any]], sources: list[dict[str, Any]],
         "sources_with_checksum": sum(1 for s in cited if s["checksum"]),
         "official_sources_cited": sum(1 for s in cited if s["source_type"] in
                                       ("official_syllabus", "teacher_guide", "student_guide")),
+        "mapping": {k: sum(1 for r in results if not r.get("filters") and r.get("mapping") == k)
+                    for k in ("right", "other_grade", "wrong_subject")},
         "p95_seconds": sorted(lat)[min(len(lat) - 1, int(round(0.95 * (len(lat) - 1))))] if lat else 0.0,
         "inventory": inv,
     }
 
 
 LABEL = {"covered": "Covered (Grade 11-12 Biology, Chemistry, Physics)",
+         "covered (grade and subject given)": "Covered, with grade and subject given",
          "not_covered": "Not covered yet (Grades 7-10, other subjects)",
          "no_answer": "Cannot be answered from the curriculum",
-         "incorrect": "Incorrect premise"}
+         "incorrect": "Incorrect premise",
+         "incorrect (grade and subject given)": "Incorrect premise, with grade and subject given"}
 
 
 def _cell(s: str, n: int = 400) -> str:
@@ -218,6 +242,9 @@ def markdown(rep: dict[str, Any], when: str, who: str, pilot: Optional[list[dict
           f"- Silent substitutions (an answer from the curriculum where none should exist): {rep['substitutions']}",
           f"- Cited sources: {rep['sources_cited']}; active versions {rep['sources_active']}; with a content "
           f"checksum {rep['sources_with_checksum']}; official syllabus or guide {rep['official_sources_cited']}",
+          f"- Grounded answers without grade or subject: sources from the right course {rep['mapping']['right']}, "
+          f"another grade of the same subject {rep['mapping']['other_grade']}, another subject "
+          f"{rep['mapping']['wrong_subject']}",
           f"- p95 seconds per answer: {rep['p95_seconds']:.1f}", "",
           "## What NEXA holds", "", f"{rep['inventory']['total']} active sources.", "",
           "| Subject / grades / type | Sources |", "|---|---|"]
@@ -234,7 +261,8 @@ def markdown(rep: dict[str, Any], when: str, who: str, pilot: Optional[list[dict
           "Mark each answer: **C** correct, **P** partly correct, **I** incorrect, **R** correct refusal. "
           "For a refusal of a covered question, say whether the curriculum does cover it.", ""]
     for c in LABEL:
-        rows = [r for r in rep["results"] if r["category"] == c]
+        rows = [r for r in rep["results"]
+                if r["category"] + (" (grade and subject given)" if r.get("filters") else "") == c]
         if not rows:
             continue
         L += [f"### {LABEL[c]}", "",
@@ -267,6 +295,7 @@ def main(argv=None) -> int:
     ap.add_argument("--school", default="pomnsoe")
     ap.add_argument("--role", default="teacher", choices=["teacher", "student", "admin"])
     ap.add_argument("--out", default=os.path.expanduser("~/nexa-evidence/m4-004/demo"))
+    ap.add_argument("--no-filtered", action="store_true", help="skip the second pass with grade and subject")
     ap.add_argument("--pilot", default=os.path.expanduser("~/nexa-evidence/m4-004/pilot/pilot-check.json"))
     a = ap.parse_args(argv)
     import httpx
@@ -281,12 +310,16 @@ def main(argv=None) -> int:
         return 2
     sources = r.json()["sources"]
 
-    def post(q: str) -> dict[str, Any]:
-        resp = c.post("/v1/knowledge/answer", json={"question": q, "general": False})
+    def post(q: str, filters: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+        body: dict[str, Any] = {"question": q, "general": False}
+        if filters:
+            body["filters"] = filters
+        resp = c.post("/v1/knowledge/answer", json=body)
         resp.raise_for_status()
         return resp.json()
-    print(f"Curriculum demo on {a.url} as {a.role} at {a.school}: {len(CASES)} questions")
-    rep = run(post, sources, progress=print)
+    print(f"Curriculum demo on {a.url} as {a.role} at {a.school}: {len(CASES)} questions, "
+          f"covered and incorrect-premise ones also with grade and subject given")
+    rep = run(post, sources, progress=print, filtered=not a.no_filtered)
     pilot = None
     if os.path.exists(a.pilot):
         with open(a.pilot) as fh:
@@ -302,10 +335,13 @@ def main(argv=None) -> int:
         json.dump(rep, fh, indent=2, default=str)
     print()
     for k, v in rep["categories"].items():
-        print(f"  {LABEL.get(k, k):<52} {v['passed']}/{v['cases']}")
+        print(f"  {LABEL.get(k, k):<56} {v['passed']}/{v['cases']}")
     print(f"  fabricated citations {rep['fabricated_citations']}; silent substitutions {rep['substitutions']}; "
           f"cited sources {rep['sources_cited']} (active {rep['sources_active']}, checksum "
           f"{rep['sources_with_checksum']}, official {rep['official_sources_cited']}); p95 {rep['p95_seconds']:.1f} s")
+    m = rep["mapping"]
+    print(f"  without grade or subject, grounded answers cited: the right course {m['right']}, another grade "
+          f"{m['other_grade']}, another subject {m['wrong_subject']}")
     print(f"\nreport and sign-off sheet: {md}\n                           {js}")
     return 0
 
