@@ -218,3 +218,151 @@ async def teaching_document(args: dict[str, Any], call: Call) -> dict[str, Any]:
     doc = "\n".join(lines) + "\n"
     return {"document": doc, "digest": digest, "kind": args["kind"], "chars": len(doc),
             "text": f"{kind}, {len(doc)} characters, {digest[:19]}"}
+
+
+# ---------------------------------------------------------------- curriculum mapping (NEXA-M4-004)
+
+# The Tool Gateway does not import the Knowledge Service; these mirror its
+# grade guard (v1/knowledge/curriculum.py) and outcome-code pattern.
+_GRADE_NAMED = re.compile(r"\b(?:grade|gr\.?|year|yr\.?)\s*(1[0-2]|[1-9])(?!\d)", re.I)
+_OUTCOME = re.compile(r"\b(1[0-2]|[7-9])\.\d{1,2}\.\d{1,2}(?:\.\d{1,2})?[a-z]?\b")
+OFFICIAL = ("official_syllabus",)
+MAP_TOP_K = 8
+
+
+def _grades_of(md: dict[str, Any]) -> list[int]:
+    g = md.get("grade_levels")
+    if isinstance(g, str):
+        g = [x for x in re.split(r"[,\s\[\]]+", g) if x]
+    out = []
+    for x in g or []:
+        try:
+            out.append(int(x))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _codes(md: dict[str, Any], text: str) -> list[str]:
+    raw = md.get("outcome_codes") or ""
+    codes = [c for c in (raw.split(",") if isinstance(raw, str) else raw) if c]
+    for m in _OUTCOME.finditer(text or ""):
+        if m.group(0) not in codes:
+            codes.append(m.group(0))
+    return codes
+
+
+async def _query(call: Call, text: str, filters: dict[str, Any], top_k: int = MAP_TOP_K) -> list[dict[str, Any]]:
+    body: dict[str, Any] = {"query": text[:2000], "top_k": top_k}
+    if filters:
+        body["filters"] = filters
+    status, data = await call.connection.request("POST", "/v1/knowledge/query", json_body=body)
+    if status != 200:
+        raise HandlerError(502 if status >= 500 else status,
+                           f"knowledge service answered {status}: {str(data.get('detail', ''))[:200]}")
+    return [r for r in (data.get("results") or []) if isinstance(r, dict)]
+
+
+def _src(r: dict[str, Any]) -> dict[str, Any]:
+    md, p = r.get("metadata") or {}, r.get("provenance") or {}
+    return {"title": p.get("title") or md.get("title"), "source_type": md.get("source_type"),
+            "subject": md.get("subject"), "grades": _grades_of(md), "version_id": p.get("version_id"),
+            "citation": r.get("citation") or p.get("citation"), "score": round(float(r.get("score") or 0), 3)}
+
+
+def _place(md: dict[str, Any]) -> dict[str, Optional[str]]:
+    unit = " ".join(x for x in (md.get("module_code"), md.get("module_title")) if x) or md.get("thema") or None
+    topic = md.get("topic_title") or None
+    if not topic:
+        sp = [s.strip() for s in str(md.get("section_path") or "").split(">") if s.strip()]
+        topic = sp[-1] if sp else (md.get("title") if md.get("source_type") == "lms_content" else None)
+    return {"unit": unit, "topic": topic}
+
+
+def _vote(values: list[Any]) -> tuple[Any, float]:
+    vs = [v for v in values if v not in (None, "")]
+    if not vs:
+        return None, 0.0
+    best = max(set(vs), key=lambda v: (vs.count(v), -vs.index(v)))
+    return best, vs.count(best) / len(vs)
+
+
+@handler("curriculum_map")
+async def curriculum_map(args: dict[str, Any], call: Call) -> dict[str, Any]:
+    """Where a question or a piece of teaching content sits in the curriculum:
+    grade, subject, unit, topic and official learning outcomes, with the
+    sources and a confidence. Never maps to another grade than the one asked
+    for or named, and takes outcomes only from the official syllabus."""
+    text = args["text"]
+    g = str(args.get("grade") or "").strip()
+    asked_grade = int(g) if g.isdigit() else None
+    named = [int(x) for x in _GRADE_NAMED.findall(text)]
+    grade = asked_grade or (named[0] if named else None)
+    subject = str(args.get("subject") or "").strip()
+    subject = None if subject.lower() in ("", "any") else subject
+    filters: dict[str, Any] = {}
+    if grade:
+        filters["grades"] = [grade]
+    if subject:
+        filters["subjects"] = [subject]
+    hits = await _query(call, text, filters)
+    where = (f"Grade {grade} " if grade else "") + (subject or "")
+    if not hits:
+        msg = (f"NEXA holds no approved {where.strip() or 'curriculum'} material that matches this. "
+               "It is not mapped to another grade or subject.")
+        return {"status": "not_covered", "grade": grade, "subject": subject, "unit": None, "topic": None,
+                "outcomes": [], "confidence": "none", "agreement": 0.0, "sources": [], "note": msg, "text": msg}
+    top = hits[:5]
+    mds = [h.get("metadata") or {} for h in top]
+    subj, s_agree = (subject, 1.0) if subject else _vote([m.get("subject") for m in mds])
+    if grade is None:
+        g_vals = [(_grades_of(m) or [None])[0] for m in mds if m.get("subject") == subj]
+        grade, g_agree = _vote(g_vals)
+    else:
+        g_agree = 1.0
+    if not subject and s_agree < 0.6:
+        cands = sorted({m.get("subject") for m in mds if m.get("subject")})
+        msg = ("This could belong to more than one subject (" + ", ".join(cands) + "). Say which subject "
+               "and grade it is for.")
+        return {"status": "ambiguous", "grade": grade, "subject": None, "candidates": cands, "unit": None,
+                "topic": None, "outcomes": [], "confidence": "low", "agreement": round(s_agree, 2),
+                "sources": [_src(h) for h in top], "note": msg, "text": msg}
+    same = [h for h in hits if (h.get("metadata") or {}).get("subject") == subj
+            and (grade is None or grade in _grades_of(h.get("metadata") or {}))] or top
+    places = [_place(h.get("metadata") or {}) for h in same[:5]]
+    unit, _ = _vote([p["unit"] for p in places])
+    topic, _ = _vote([p["topic"] for p in places])
+    # Outcomes come only from the official syllabus (authority rule R3).
+    off_filters = {"source_types": list(OFFICIAL), "subjects": [subj]} | ({"grades": [grade]} if grade else {})
+    official = await _query(call, text, off_filters, top_k=5)
+    outcomes: list[dict[str, Any]] = []
+    for h in official:
+        md = h.get("metadata") or {}
+        for code in _codes(md, h.get("text") or ""):
+            if grade and not code.startswith(f"{grade}."):
+                continue
+            if code not in [o["code"] for o in outcomes]:
+                outcomes.append({"code": code, "source": _src(h)["title"], "citation": _src(h)["citation"]})
+    outcomes = outcomes[:6]
+    agreement = round(min(s_agree, g_agree), 2)
+    confidence = "high" if outcomes and agreement >= 0.8 else "low"
+    note = None
+    if not outcomes:
+        note = ("No official syllabus outcome was found for this; the mapping rests on lesson material and "
+                "needs a curriculum reviewer's check.")
+    elif agreement < 0.8:
+        note = "The sources found do not all agree on the subject or grade; check the mapping."
+    lines = [f"Curriculum mapping ({confidence} confidence)",
+             f"- Grade: {grade if grade is not None else 'not determined'}",
+             f"- Subject: {subj}",
+             f"- Unit: {unit or 'not determined'}",
+             f"- Topic: {topic or 'not determined'}",
+             "- Official learning outcomes: " + (", ".join(o["code"] for o in outcomes) if outcomes else "none found")]
+    lines.append("- Sources: " + "; ".join(f"{s['title']} ({s['source_type']})" for s in
+                                           (_src(h) for h in same[:3])))
+    if note:
+        lines.append(f"- Note: {note}")
+    return {"status": "mapped", "grade": grade, "subject": subj, "unit": unit, "topic": topic,
+            "outcomes": outcomes, "confidence": confidence, "agreement": agreement,
+            "sources": [_src(h) for h in same[:5]], "official_sources": [_src(h) for h in official[:3]],
+            "note": note, "text": "\n".join(lines)}

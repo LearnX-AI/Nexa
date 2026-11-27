@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import zlib
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -142,9 +143,22 @@ class Knowledge:
     fail: Optional[str] = None
     answer: Any = "From the curriculum: chloroplasts capture light [S1]."   # or question -> text
     calls: list[str] = field(default_factory=list)
+    # /v1/knowledge/query (the curriculum_map tool, NEXA-M4-004): a list of
+    # results or a callable request body -> results; default_results() if None.
+    results: Any = None
+    queries: list[dict] = field(default_factory=list)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content or b"{}")
+        if request.url.path.endswith("/v1/knowledge/query"):
+            self.queries.append(body)
+            if self.fail == "unavailable":
+                raise httpx.ConnectError("knowledge service down (injected)")
+            if self.fail == "error":
+                return httpx.Response(500, json={"detail": "internal error (injected)"})
+            res = self.results(body) if callable(self.results) else (
+                self.results if self.results is not None else default_results(body))
+            return httpx.Response(200, json={"results": res})
         q = body.get("question", "")
         self.calls.append(q)
         if self.fail == "unavailable":
@@ -161,6 +175,61 @@ class Knowledge:
             "citations": [{"marker": "S1", "used": True, "provenance": {
                 "chunk_id": "eval-chunk-1", "title": "Biology Grade 11 Student Guide", "page_label": "12"}}]
             if grounded else []})
+
+
+def result(title: str, subject: str, grade: int, source_type: str, text: str, score: float = 0.8, **md) -> dict:
+    """One /v1/knowledge/query result as the Knowledge Service returns it."""
+    meta = {"title": title, "subject": subject, "grade_levels": [grade], "source_type": source_type, **md}
+    return {"text": text, "score": score, "metadata": meta, "citation": f"{title}, p. 3",
+            "provenance": {"title": title, "version_id": f"v-{zlib.crc32(title.encode()):08x}", "chunk_id": "c1",
+                           "citation": f"{title}, p. 3"}}
+
+
+# A small curriculum: Grade 11-12 Biology, Chemistry and Physics, as the DGX holds.
+CURRICULUM = [
+    result("Biology Syllabus Grade 11", "Biology", 11, "official_syllabus",
+           "11.1.1 Explain Mendel's laws of inheritance using monohybrid crosses.", 0.82,
+           module_code="11.1", module_title="Genetics", topic_title="Classical Mendelian Genetics",
+           outcome_codes="11.1.1"),
+    result("Classical Mendelian Genetics Lesson Note", "Biology", 11, "lms_content",
+           "Mendel crossed pea plants; dominant and recessive alleles.", 0.86, topic_title="Classical Mendelian Genetics"),
+    result("Biology Syllabus Grade 12", "Biology", 12, "official_syllabus",
+           "12.2.1 Describe the structure of DNA and complementary base pairing.", 0.8,
+           module_code="12.2", module_title="Genetics and Molecular Biology", topic_title="DNA Structure",
+           outcome_codes="12.2.1"),
+    result("DNA Structure Lesson Note", "Biology", 12, "lms_content", "DNA is a double helix.", 0.84,
+           topic_title="DNA Structure"),
+    result("Chemistry Syllabus Grade 11", "Chemistry", 11, "official_syllabus",
+           "11.3.2 Distinguish strong and weak acids by their degree of ionisation.", 0.8,
+           module_code="11.3", module_title="Acids, Bases and Salts", topic_title="Strong and Weak Acids",
+           outcome_codes="11.3.2"),
+    result("Physics Syllabus Grade 12", "Physics", 12, "official_syllabus",
+           "12.11.1 Describe transverse and longitudinal waves.", 0.8,
+           module_code="12.11", module_title="Waves", topic_title="Wave Types", outcome_codes="12.11.1"),
+]
+_TOPIC_WORDS = {"Classical Mendelian Genetics": ("mendel", "pea", "inherit", "allele", "monohybrid"),
+                "DNA Structure": ("dna", "double helix", "base pair"),
+                "Strong and Weak Acids": ("acid", "ionis", "ph"),
+                "Wave Types": ("wave", "transverse", "longitudinal")}
+
+
+def default_results(body: dict) -> list[dict]:
+    """Keyword retrieval over CURRICULUM with the request's filters."""
+    q = (body.get("query") or "").lower()
+    f = body.get("filters") or {}
+    out = []
+    for r in CURRICULUM:
+        md = r["metadata"]
+        if f.get("grades") and not set(f["grades"]) & set(md["grade_levels"]):
+            continue
+        if f.get("subjects") and md["subject"] not in f["subjects"]:
+            continue
+        if f.get("source_types") and md["source_type"] not in f["source_types"]:
+            continue
+        words = _TOPIC_WORDS.get(md.get("topic_title") or "", ())
+        if any(w in q for w in words):
+            out.append(r)
+    return sorted(out, key=lambda r: -r["score"])[: int(body.get("top_k") or 8)]
 
 
 # The safety invariants found by the last World to close (the runner reads it).
