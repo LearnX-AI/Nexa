@@ -362,6 +362,17 @@ class Registry:
                 self._exec(f"INSERT INTO lms_items ({cols}) VALUES ({','.join('?' * len(f))})", tuple(f.values()))
         return self.get_lms_item(item_key)  # type: ignore[return-value]
 
+    def list_lms_items(self, site_id: Optional[str] = None, state: Optional[str] = None) -> list[dict[str, Any]]:
+        where, args = [], []
+        if site_id:
+            where.append("site_id=?")
+            args.append(site_id)
+        if state:
+            where.append("state=?")
+            args.append(state)
+        sql = "SELECT * FROM lms_items" + (" WHERE " + " AND ".join(where) if where else "")
+        return self._all(sql + " ORDER BY item_key", tuple(args))
+
     def lms_items_of(self, system: str, site_id: str, course_id: Optional[str] = None) -> list[dict[str, Any]]:
         if course_id is None:
             return self._all("SELECT * FROM lms_items WHERE system=? AND site_id=? ORDER BY item_key",

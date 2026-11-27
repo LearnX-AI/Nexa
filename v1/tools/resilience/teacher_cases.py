@@ -156,7 +156,7 @@ def asks_again_when_not_grounded():
         r = _start(w, "quiz")
         kinds = w.kinds(r["run_id"])
         ok = r["status"] == "waiting_approval" and kn.calls == [
-            "What are the key ideas, terms and learning outcomes for Photosynthesis in Grade 11?", "Photosynthesis"] \
+            "What are the key ideas, terms and learning outcomes for Photosynthesis in Grade 11?", "Photosynthesis in Grade 11"] \
             and "knowledge.retry" in kinds
         return ok, f"{r['status']}; asked {kn.calls}"
 

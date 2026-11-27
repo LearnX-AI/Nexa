@@ -165,6 +165,13 @@ curriculum. It is reported to the Knowledge Service owners.
 
 Report: `~/nexa-evidence/nexa-teacher-eval-live-20261126-2359.json` on the DGX.
 
+## Workflow 1.2.0 (NEXA-M4-004)
+
+The fallback lookup keeps the grade ("{topic} in Grade {grade}"). With the
+Knowledge Service's grade guard (M4-004), a lookup that names a grade
+searches only that grade's material, so a draft for a grade NEXA does not
+hold is never built from another grade's material.
+
 ## To go live (done)
 
 1. Deploy this change. The agent is registered for review; nothing changes
