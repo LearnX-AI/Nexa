@@ -200,3 +200,16 @@ def outcome_codes(text: str) -> list[str]:
         if c not in seen:
             seen.append(c)
     return seen
+
+
+GRADE_NAMED_RE = re.compile(r"\b(?:grade|gr\.?|year|yr\.?)\s*(1[0-2]|[1-9])(?!\d)", re.I)
+
+
+def grades_named(text: str) -> list[int]:
+    """The school grades a question names ("Grade 7", "Gr. 11", "Year 12"),
+    in order of first mention (NEXA-M4-004)."""
+    seen: list[int] = []
+    for g in GRADE_NAMED_RE.findall(text or ""):
+        if int(g) not in seen:
+            seen.append(int(g))
+    return seen

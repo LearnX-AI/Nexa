@@ -35,7 +35,7 @@ from v1.identity.rbac import can
 from v1.observability import TraceMiddleware, audit_event, log_event, metrics, metrics_endpoint, new_trace_id
 from v1.shared.config import preflight
 
-from . import __version__, config, embeddings, general, grounding, outline, spelling
+from . import __version__, config, curriculum, embeddings, general, grounding, outline, spelling
 from .access import retrieval_filter
 from .auth import require_principal
 from .ingestion import PIPELINE_VERSION
@@ -55,6 +55,7 @@ from .schemas import (
     IndexBuildRequest,
     JobRetryRequest,
     LmsItemRequest,
+    QueryFilters,
     QueryRequest,
     QueryResponse,
     QueryResult,
@@ -362,10 +363,21 @@ async def _answer(req: AnswerRequest, request: Request, principal: Principal):
             built = await outline.build(INDEX, retrieval_filter(principal), asked)
         except Exception as exc:  # noqa: BLE001 - fall back to ordinary retrieval
             log_event(event="outline_failed", service="nexa-knowledge", trace_id=trace_id, error=type(exc).__name__)
+    guard_notes: list[str] = []
     if built:
         rr, question, outline_notes = built
     else:
-        rr = await _retrieve(asked, req.top_k or min(config.DEFAULT_TOP_K, 6), req.filters, principal, trace_id,
+        filters = req.filters
+        named = curriculum.grades_named(asked) if config.GRADE_GUARD else []
+        if named and not (filters and filters.grades):
+            # The question names a grade: answer only from that grade's material,
+            # never silently from another grade's (NEXA-M4-004).
+            filters = (filters.model_copy(update={"grades": named}) if filters
+                       else QueryFilters(grades=named))
+            guard_notes.append("searched only Grade " + ", ".join(str(g) for g in named)
+                               + " material, because the question names "
+                               + ("that grade" if len(named) == 1 else "those grades"))
+        rr = await _retrieve(asked, req.top_k or min(config.DEFAULT_TOP_K, 6), filters, principal, trace_id,
                              context=req.context.model_dump(exclude_none=True) if req.context else None)
         question, outline_notes = asked, []
     audience = req.audience or ("teacher" if set(principal.roles) & _STAFF_ROLES else "student")
@@ -373,6 +385,11 @@ async def _answer(req: AnswerRequest, request: Request, principal: Principal):
         audience = "student"
     out = await grounding.answer(question, rr, audience, trace_id,
                                  allow_general=general.enabled_for(principal.roles, req.general))
+    if guard_notes:
+        out.notes.extend(guard_notes)
+        if out.status not in ("grounded", "grounded_weak") and out.source_kind != "general_knowledge":
+            out.notes.append("NEXA holds no approved Grade " + ", ".join(str(g) for g in
+                             curriculum.grades_named(asked)) + " material that answers this")
     if outline_notes and out.status in ("grounded", "grounded_weak"):
         out.notes.extend(outline_notes)
         out.answer = (out.answer or "").rstrip() + "\n\n" + " ".join(outline_notes)
@@ -536,6 +553,17 @@ async def lms_list_events(state: Optional[str] = None, limit: int = 100,
     if site:
         evs = [e for e in evs if e["item_key"].split(":")[1] == site]
     return {"events": [{k: v for k, v in e.items() if k != "payload"} for e in evs]}
+
+
+@app.get("/v1/knowledge/lms/items")
+async def lms_list_items(site_id: Optional[str] = None, state: Optional[str] = None,
+                         principal: Principal = Depends(require_principal)):
+    """LMS items with their last applied event (NEXA-M4-004: re-scoping an
+    LMS site's content replays these events). A site-bound token sees its
+    own site only."""
+    site = _site_scope(principal)
+    rows = PIPE.registry.list_lms_items(site or site_id, state)
+    return {"items": rows}
 
 
 @app.get("/v1/knowledge/lms/events/{event_id}")

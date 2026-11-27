@@ -254,6 +254,16 @@ FALLBACK_GENERATION = (
     "The answer service is unavailable right now. These are the curriculum passages that match your question."
 )
 NOTE_WEAK = "The approved material only partly covers this question, so treat this answer with care."
+NOTE_PREMISE = ("The question assumes something the curriculum does not support; the answer corrects it from the "
+                "curriculum.")
+PREMISE_PROMPT = (
+    "You are NEXA, a tutor for Papua New Guinea secondary school students. The question below may rest on a "
+    "false assumption. Read the numbered sources. If the sources clearly contradict an assumption in the question, "
+    "reply starting with exactly PREMISE_CORRECTION: and then, using ONLY the sources, say which assumption is not "
+    "correct and give the correct fact. After every sentence that uses a source, cite it with its marker in square "
+    "brackets, for example [S1]. Use only the markers given; never invent a source. If the sources do not clearly "
+    "contradict the question, or do not cover it, reply with exactly: INSUFFICIENT_EVIDENCE"
+)
 GENERAL_LABEL = "General information (not from your curriculum materials):"
 NOTE_GENERAL_PART = ("Part of this answer is general information, not from your curriculum materials; "
                      "it is shown separately.")
@@ -411,6 +421,25 @@ async def _no_evidence(question: str, ev: Evidence, audience: str, trace_id: Opt
                           source_kind="none", notes=notes, **kw)
 
 
+async def _premise_correction(question: str, context: str, audience: str,
+                              trace_id: Optional[str]) -> Optional[tuple[str, Optional[str]]]:
+    """(correction text, model) when the passages contradict an assumption in
+    the question; None otherwise (including when generation fails)."""
+    msgs = [
+        {"role": "system", "content": PREMISE_PROMPT + " " + AUDIENCE.get(audience, AUDIENCE["student"])},
+        {"role": "user", "content": f"Sources:\n{context}\n\nQuestion: {question}"},
+    ]
+    try:
+        raw, model = await GENERATION.run(chat, msgs, trace_id)
+    except Exception:  # noqa: BLE001 - the refusal stands
+        return None
+    m = re.match(r"\s*\**\s*PREMISE[_ ]CORRECTION\s*\**\s*:\s*", raw or "", re.I)
+    if not m or "INSUFFICIENT_EVIDENCE" in raw.upper().replace(" ", "_"):
+        return None
+    text = raw[m.end():].strip()
+    return (text, model) if text else None
+
+
 async def answer(question: str, result: RetrievalResult, audience: str = "student",
                  trace_id: Optional[str] = None, allow_general: bool = False) -> GroundedAnswer:
     ev = assess(result)
@@ -428,13 +457,27 @@ async def answer(question: str, result: RetrievalResult, audience: str = "studen
         cites = _citations(used, result, Integrity(), {})
         return GroundedAnswer(status="generation_unavailable", answer=FALLBACK_GENERATION, confidence="none",
                               evidence=ev, citations=cites)
-    if "INSUFFICIENT_EVIDENCE" in raw.upper().replace(" ", "_"):
+    premise = False
+    if "INSUFFICIENT_EVIDENCE" in raw.upper().replace(" ", "_") and ev.level == "strong" and config.PREMISE_CORRECTION:
+        # Strong evidence the model would not use: the question may rest on a false
+        # assumption the passages contradict (NEXA-M4-004). Correct it from the
+        # passages, or refuse as before.
+        fixed = await _premise_correction(question, context, audience, trace_id)
+        if fixed is not None:
+            raw, model, premise = fixed[0], fixed[1], True
+            ev.reasons.append("the passages contradict an assumption in the question")
+    if not premise and "INSUFFICIENT_EVIDENCE" in raw.upper().replace(" ", "_"):
         ev.reasons.append("the model found that the passages do not answer the question")
         return await _no_evidence(question, ev, audience, trace_id, allow_general,
                                   "the curriculum passages found do not answer the question", model=model,
                                   citations=_citations(used, result, Integrity(), {}))
     text, integ, support = validate(raw, used)
     cites = _citations(used, result, integ, support)
+    if premise and not integ.valid_markers:
+        ev.reasons.append("the correction cited no passage and was withheld")
+        return await _no_evidence(question, ev, audience, trace_id, allow_general,
+                                  "the curriculum passages found do not answer the question", model=model,
+                                  citations=_citations(used, result, Integrity(), {}))
     if not integ.valid_markers:
         return GroundedAnswer(status="ungrounded", answer=FALLBACK_UNGROUNDED, confidence="none", evidence=ev,
                               integrity=integ, citations=cites, model=model,
@@ -442,6 +485,8 @@ async def answer(question: str, result: RetrievalResult, audience: str = "studen
     # Partial: the evidence grade says so, or the answer itself says the sources only partly cover it.
     partial = ev.level == "weak" or integ.hedged
     notes = []
+    if premise:
+        notes.append(NOTE_PREMISE)
     if partial:
         notes.append(NOTE_WEAK)
         if integ.hedged and ev.level != "weak":

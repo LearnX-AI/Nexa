@@ -182,6 +182,10 @@ SPELL_MIN_FREQ = int(os.environ.get("NEXA_SPELL_MIN_FREQ", "2"))
 # Answer "what are the topics in Grade 11 Biology?" from the stored syllabus
 # structure (outline.py) instead of a few searched passages.
 CURRICULUM_OUTLINE = os.environ.get("NEXA_CURRICULUM_OUTLINE", "true").lower() == "true"
+# NEXA-M4-004: a question that names a grade is answered only from that grade's material, and a
+# question whose assumption the passages contradict is corrected rather than refused.
+GRADE_GUARD = os.environ.get("NEXA_GRADE_GUARD", "true").lower() == "true"
+PREMISE_CORRECTION = os.environ.get("NEXA_PREMISE_CORRECTION", "true").lower() == "true"
 
 # General-knowledge answers when the curriculum has no evidence (general.py):
 # off (strict refusal), llm (the general model) or web (web search, then the

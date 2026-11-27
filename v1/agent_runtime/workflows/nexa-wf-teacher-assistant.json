@@ -2,7 +2,7 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-teacher-assistant",
   "name": "NEXA Teacher Assistant",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "The Teacher Assistant Agent (NEXA-M4-003), for teachers. Drafts lesson plans, differentiated activities, quizzes with answer keys, rubrics, resource suggestions, curriculum alignment checks and student-support suggestions, grounded in the approved curriculum (teacher material included). Every draft waits for the teacher's review; approved drafts become a document with sources and provenance. Never marks, ranks or disciplines students; refuses contact details.",
   "pattern": "deterministic",
@@ -147,7 +147,7 @@
         "on_error": "unavailable"
       },
       "next": "evidence",
-      "fallback_question": "{{input.topic}}"
+      "fallback_question": "{{input.topic}} in Grade {{input.grade}}"
     },
     {
       "id": "evidence",
