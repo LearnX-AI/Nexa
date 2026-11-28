@@ -1,0 +1,23 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-formative-feedback",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Student-facing formative feedback (NEXA-M4-005): learner material only, through knowledge_answer. No marks, no memory, no delegation, no writes. Serves minors: output redacted.",
+  "read": {
+    "knowledge_classes": [
+      "learner"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "knowledge_answer": [
+      "curriculum.learner"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}

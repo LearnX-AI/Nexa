@@ -2,7 +2,7 @@
   "tool_version": "nexa.tool/1.0",
   "id": "teaching_document",
   "name": "Teaching document",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "Turns a teacher-facing draft (a lesson plan, quiz, rubric, resource list, alignment check or support plan) into a document with its curriculum sources and a provenance record: which run, agent and policy made it, and a content digest. The workflow adds the teacher's approval. Stores nothing.",
   "state": "active",
@@ -31,7 +31,12 @@
           "rubric",
           "resources",
           "alignment",
-          "student_support"
+          "student_support",
+          "answer_guide",
+          "feedback",
+          "questions",
+          "assessment",
+          "align"
         ]
       },
       "grade": {
@@ -85,6 +90,9 @@
     "render"
   ],
   "allowed_agents": {
+    "nexa-assessment-feedback": [
+      "render"
+    ],
     "nexa-teacher-assistant": [
       "render"
     ]

@@ -253,7 +253,9 @@ def read_only_and_least_privilege():
         tool = gateway.TOOLS["curriculum_map"] if hasattr(gateway, "TOOLS") else None
         agents = set(tool.allowed_agents) if tool else {AGENT}
         ok = (not p.write and not p.delegate and not p.accept_delegation and set(p.invoke) ==
-              {"curriculum_map", "knowledge_answer"} and agents == {AGENT}
+              {"curriculum_map", "knowledge_answer"}
+              # curriculum_map is shared only with the Assessment & Feedback Agent (NEXA-M4-005)
+              and agents == {AGENT, "nexa-assessment-feedback"}
               and (tool is None or tool.side_effects == "read"))
         return ok, f"invoke {sorted(p.invoke)}; curriculum_map for {sorted(agents)}"
 

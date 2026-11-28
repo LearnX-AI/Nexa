@@ -1,0 +1,32 @@
+{
+  "policy_version": "nexa.agent-policy/1.0",
+  "agent": "nexa-assessment-feedback",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "rationale": "Assessment & Feedback (NEXA-M4-005): learner and teacher-only curriculum (never restricted assessment keys) through curriculum_map and knowledge_answer, documents through teaching_document. No learner records, no memory, no delegation, no writes.",
+  "read": {
+    "knowledge_classes": [
+      "learner",
+      "teacher_only"
+    ]
+  },
+  "write": [],
+  "invoke": {
+    "curriculum_map": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
+    "knowledge_answer": [
+      "curriculum.learner",
+      "curriculum.teacher"
+    ],
+    "teaching_document": [
+      "render"
+    ]
+  },
+  "delegate": [],
+  "accept_delegation": false,
+  "tenancy": "user_school",
+  "sensitive": {
+    "redact_personal_data": true
+  }
+}
