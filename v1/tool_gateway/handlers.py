@@ -8,6 +8,7 @@ MCP tools need no handler: the gateway calls the bound MCP tool.
 from __future__ import annotations
 
 import ast
+import collections
 import math
 import operator
 import re
@@ -270,21 +271,78 @@ def _src(r: dict[str, Any]) -> dict[str, Any]:
             "citation": r.get("citation") or p.get("citation"), "score": round(float(r.get("score") or 0), 3)}
 
 
-def _place(md: dict[str, Any]) -> dict[str, Optional[str]]:
-    unit = " ".join(x for x in (md.get("module_code"), md.get("module_title")) if x) or md.get("thema") or None
-    topic = md.get("topic_title") or None
-    if not topic:
-        sp = [s.strip() for s in str(md.get("section_path") or "").split(">") if s.strip()]
-        topic = sp[-1] if sp else (md.get("title") if md.get("source_type") == "lms_content" else None)
-    return {"unit": unit, "topic": topic}
+_GENERIC_HEADING = re.compile(
+    r"^(check yourself|activity|activities|summary|review|exercises?|questions?|introduction|key (terms|ideas|points)"
+    r"|learning (outcomes?|objectives?)|answers?|glossary|notes?|contents|references|assessment|lesson \d+|page \d+)\b",
+    re.I)
+_TITLE_NOISE = re.compile(r"[_\s-]*(lesson[_ ]?notes?|lecture[_ ]?notes?|teacher[_ ]?notes?|student[_ ]?notes?|ppt|"
+                          r"presentation|slides?|notes?)\s*$", re.I)
+_STOP = set("""about above after again against also among another based because been before being below between
+both cannot could does doing down during each from further have having here into itself just like many more most
+much must only other over same should some such than that their them then there these they this those through under
+until very what when where which while will with within without would your what's explain describe state list
+identify discuss students learners able know understand learn learning outcome outcomes grade unit topic""".split())
+# Source types that speak for the curriculum carry more weight in a vote than lesson material.
+_WEIGHT = {"official_syllabus": 1.6, "teacher_guide": 1.4, "student_guide": 1.4}
 
 
-def _vote(values: list[Any]) -> tuple[Any, float]:
-    vs = [v for v in values if v not in (None, "")]
-    if not vs:
-        return None, 0.0
-    best = max(set(vs), key=lambda v: (vs.count(v), -vs.index(v)))
-    return best, vs.count(best) / len(vs)
+def _clean_title(t: Optional[str]) -> Optional[str]:
+    if not t:
+        return None
+    t = re.sub(r"\.(docx?|pptx?|pdf|html?)$", "", t, flags=re.I)
+    t = re.sub(r"^s\d+_cm\d+_", "", t)
+    t = re.sub(r"^\d+(\.\d+)*[_\s]+", "", t)
+    for _ in range(2):
+        t = _TITLE_NOISE.sub("", t)
+    t = re.sub(r"[_]+", " ", t).strip(" -_")
+    return t or None
+
+
+def _topic(md: dict[str, Any]) -> Optional[str]:
+    """The topic a passage belongs to: its curriculum position, else its
+    lesson's title, else a section heading that is not a generic one."""
+    if md.get("topic_title"):
+        return md["topic_title"]
+    if md.get("source_type") in ("lms_content", "lesson_notes", "teacher_material"):
+        t = _clean_title(md.get("title"))
+        if t and not _GENERIC_HEADING.match(t):
+            return t
+    for sp in reversed([x.strip() for x in str(md.get("section_path") or "").split(">") if x.strip()]):
+        h = re.sub(r"^\d+[.)]\s*", "", sp)
+        if h and not _GENERIC_HEADING.match(h) and len(h) <= 80:
+            return h
+    return None
+
+
+def _unit(md: dict[str, Any]) -> Optional[str]:
+    return " ".join(x for x in (md.get("module_code"), md.get("module_title")) if x) or md.get("thema") or None
+
+
+def _stems(text: str) -> set:
+    return {w[:5] for w in re.findall(r"[a-z]{4,}", (text or "").lower()) if w not in _STOP}
+
+
+def _weighted(hits: list[dict[str, Any]], key) -> list[tuple[Any, float]]:
+    """(value, share of the vote) best first: each passage votes with its score,
+    discounted by rank and weighted by authority."""
+    w: dict[Any, float] = collections.defaultdict(float)
+    for i, h in enumerate(hits):
+        md = h.get("metadata") or {}
+        v = key(md)
+        if v in (None, ""):
+            continue
+        w[v] += max(float(h.get("score") or 0), 0.01) / (1 + 0.35 * i) * _WEIGHT.get(md.get("source_type"), 1.0)
+    total = sum(w.values()) or 1.0
+    return sorted(((v, x / total) for v, x in w.items()), key=lambda kv: -kv[1])
+
+
+def _statement(text: str, code: str) -> str:
+    i = (text or "").find(code)
+    if i < 0:
+        return ""
+    rest = text[i + len(code):].lstrip(" :.-–\t)")
+    end = min([p for p in (rest.find("\n"), rest.find(". ")) if p >= 0] or [len(rest)])
+    return re.sub(r"\s+", " ", rest[:end]).strip()[:240]
 
 
 @handler("curriculum_map")
@@ -292,7 +350,8 @@ async def curriculum_map(args: dict[str, Any], call: Call) -> dict[str, Any]:
     """Where a question or a piece of teaching content sits in the curriculum:
     grade, subject, unit, topic and official learning outcomes, with the
     sources and a confidence. Never maps to another grade than the one asked
-    for or named, and takes outcomes only from the official syllabus."""
+    for or named; takes outcomes only from the official syllabus, only of the
+    mapped grade, and only those whose statement matches the text."""
     text = args["text"]
     g = str(args.get("grade") or "").strip()
     asked_grade = int(g) if g.isdigit() else None
@@ -311,58 +370,82 @@ async def curriculum_map(args: dict[str, Any], call: Call) -> dict[str, Any]:
         msg = (f"NEXA holds no approved {where.strip() or 'curriculum'} material that matches this. "
                "It is not mapped to another grade or subject.")
         return {"status": "not_covered", "grade": grade, "subject": subject, "unit": None, "topic": None,
-                "outcomes": [], "confidence": "none", "agreement": 0.0, "sources": [], "note": msg, "text": msg}
-    top = hits[:5]
-    mds = [h.get("metadata") or {} for h in top]
-    subj, s_agree = (subject, 1.0) if subject else _vote([m.get("subject") for m in mds])
+                "outcomes": [], "also_grades": [], "confidence": "none", "agreement": 0.0, "sources": [],
+                "note": msg, "text": msg}
+    top = hits[:6]
+    if subject:
+        subj, s_agree = subject, 1.0
+    else:
+        votes = _weighted(top, lambda md: md.get("subject"))
+        subj, s_agree = votes[0] if votes else (None, 0.0)
+        if s_agree < 0.55:
+            cands = [v for v, _ in votes[:3]]
+            msg = ("This could belong to more than one subject (" + ", ".join(cands) + "). Say which subject "
+                   "and grade it is for.")
+            return {"status": "ambiguous", "grade": grade, "subject": None, "candidates": cands, "unit": None,
+                    "topic": None, "outcomes": [], "also_grades": [], "confidence": "low",
+                    "agreement": round(s_agree, 2), "sources": [_src(h) for h in top], "note": msg, "text": msg}
+    in_subj = [h for h in hits if (h.get("metadata") or {}).get("subject") == subj] or top
+    also: list[int] = []
     if grade is None:
-        g_vals = [(_grades_of(m) or [None])[0] for m in mds if m.get("subject") == subj]
-        grade, g_agree = _vote(g_vals)
+        gv = _weighted(in_subj[:6], lambda md: (_grades_of(md) or [None])[0])
+        grade, g_agree = gv[0] if gv else (None, 0.0)
+        also = sorted(v for v, share in gv[1:] if share >= 0.25)
     else:
         g_agree = 1.0
-    if not subject and s_agree < 0.6:
-        cands = sorted({m.get("subject") for m in mds if m.get("subject")})
-        msg = ("This could belong to more than one subject (" + ", ".join(cands) + "). Say which subject "
-               "and grade it is for.")
-        return {"status": "ambiguous", "grade": grade, "subject": None, "candidates": cands, "unit": None,
-                "topic": None, "outcomes": [], "confidence": "low", "agreement": round(s_agree, 2),
-                "sources": [_src(h) for h in top], "note": msg, "text": msg}
-    same = [h for h in hits if (h.get("metadata") or {}).get("subject") == subj
-            and (grade is None or grade in _grades_of(h.get("metadata") or {}))] or top
-    places = [_place(h.get("metadata") or {}) for h in same[:5]]
-    unit, _ = _vote([p["unit"] for p in places])
-    topic, _ = _vote([p["topic"] for p in places])
-    # Outcomes come only from the official syllabus (authority rule R3).
+    same = [h for h in in_subj if grade is None or grade in _grades_of(h.get("metadata") or {})] or in_subj
+    topic = (_weighted(same[:5], _topic) or [(None, 0)])[0][0]
+    unit = (_weighted(same[:5], _unit) or [(None, 0)])[0][0]
+    # Outcomes come only from the official syllabus (authority rule R3), of the
+    # mapped grade, and only those whose own statement shares words with the
+    # text or its topic: a syllabus passage lists many outcomes.
     off_filters = {"source_types": list(OFFICIAL), "subjects": [subj]} | ({"grades": [grade]} if grade else {})
-    official = await _query(call, text, off_filters, top_k=5)
-    outcomes: list[dict[str, Any]] = []
+    official = await _query(call, text + (f" {topic}" if topic else ""), off_filters, top_k=5)
+    want = _stems(text) | _stems(topic or "")
+    found: dict[str, dict[str, Any]] = {}
+    listed: list[str] = []
     for h in official:
-        md = h.get("metadata") or {}
-        for code in _codes(md, h.get("text") or ""):
+        body = h.get("text") or ""
+        for code in _codes(h.get("metadata") or {}, body):
             if grade and not code.startswith(f"{grade}."):
                 continue
-            if code not in [o["code"] for o in outcomes]:
-                outcomes.append({"code": code, "source": _src(h)["title"], "citation": _src(h)["citation"]})
-    outcomes = outcomes[:6]
+            if code not in listed:
+                listed.append(code)
+            st = _statement(body, code)
+            overlap = len(_stems(st) & want)
+            if st and overlap and (code not in found or overlap > found[code]["overlap"]):
+                found[code] = {"code": code, "statement": st, "overlap": overlap, "source": _src(h)["title"],
+                               "citation": _src(h)["citation"]}
+    outcomes = sorted(found.values(), key=lambda o: -o["overlap"])[:4]
+    for o in outcomes:
+        o.pop("overlap", None)
     agreement = round(min(s_agree, g_agree), 2)
-    confidence = "high" if outcomes and agreement >= 0.8 else "low"
-    note = None
+    notes = []
+    if also:
+        notes.append("This topic is also taught in Grade " + ", ".join(str(x) for x in also) + "; give the grade "
+                     "to map it to one.")
     if not outcomes:
-        note = ("No official syllabus outcome was found for this; the mapping rests on lesson material and "
-                "needs a curriculum reviewer's check.")
-    elif agreement < 0.8:
-        note = "The sources found do not all agree on the subject or grade; check the mapping."
+        notes.append(("The official syllabus passages found list " + ", ".join(listed[:6]) + ", but none of these "
+                      "outcome statements matches this text; a curriculum reviewer should choose the outcome.")
+                     if listed else
+                     "No official syllabus outcome was found for this; the mapping rests on lesson material and "
+                     "needs a curriculum reviewer's check.")
+    if agreement < 0.6:
+        notes.append("The sources found do not all agree on the subject or grade; check the mapping.")
+    confidence = "high" if outcomes and agreement >= 0.6 and not also else "low"
     lines = [f"Curriculum mapping ({confidence} confidence)",
              f"- Grade: {grade if grade is not None else 'not determined'}",
              f"- Subject: {subj}",
              f"- Unit: {unit or 'not determined'}",
              f"- Topic: {topic or 'not determined'}",
              "- Official learning outcomes: " + (", ".join(o["code"] for o in outcomes) if outcomes else "none found")]
+    if also:
+        lines.append("- Also covered in: " + ", ".join(f"Grade {x}" for x in also))
+    lines += [f"  - {o['code']}: {o['statement']} ({o['source']})" for o in outcomes]
     lines.append("- Sources: " + "; ".join(f"{s['title']} ({s['source_type']})" for s in
                                            (_src(h) for h in same[:3])))
-    if note:
-        lines.append(f"- Note: {note}")
+    lines += [f"- Note: {n}" for n in notes]
     return {"status": "mapped", "grade": grade, "subject": subj, "unit": unit, "topic": topic,
-            "outcomes": outcomes, "confidence": confidence, "agreement": agreement,
+            "outcomes": outcomes, "also_grades": also, "confidence": confidence, "agreement": agreement,
             "sources": [_src(h) for h in same[:5]], "official_sources": [_src(h) for h in official[:3]],
-            "note": note, "text": "\n".join(lines)}
+            "note": " ".join(notes) or None, "text": "\n".join(lines)}

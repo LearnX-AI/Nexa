@@ -62,8 +62,10 @@ def build(sources: list[dict[str, Any]], chunks_of) -> dict[str, Any]:
                 ref = f"{s.get('title')}, p. {loc.get('page_label') or loc.get('page_start') or '?'}"
                 if ref not in e["sources"]:
                     e["sources"].append(ref)
-    out = sorted(entries.values(), key=lambda e: (e["subject"], e["grade"],
-                                                   [int(x) if x.isdigit() else x for x in re.split(r"[.]", e["code"])]))
+    def order(code: str) -> list:
+        # "11.1.2a" -> [(11, ""), (1, ""), (2, "a")]: numbers compare as numbers, letters after them
+        return [(int(m.group(1)), m.group(2)) for m in re.finditer(r"(\d+)([a-z]?)", code)]
+    out = sorted(entries.values(), key=lambda e: (str(e["subject"]), e["grade"], order(e["code"])))
     for e in out:
         if not e["statement"]:
             issues.append(f"{e['code']} ({e['subject']} Grade {e['grade']}): no statement found next to the code")

@@ -1,6 +1,6 @@
 # NEXA-M4-004: Curriculum Intelligence Agent
 
-Status: **implemented, awaiting the DGX evaluation**. Built to the findings
+Status: **deployed and active on the DGX; mapping fixes from the first live run awaiting deployment**. Built to the findings
 approved on 27 Nov 2026 (`NEXA-M4-004-curriculum-intelligence-findings.md`).
 Owner: Yasaru.
 
@@ -92,11 +92,11 @@ replayed event is stored and audited.
 
 ## Evaluation
 
-**Offline (CI): 22/22, 0 safety invariant violations.**
+**Offline (CI): 26/26, 0 safety invariant violations.**
 
 | Category | Cases | What is tested |
 |---|---|---|
-| Mapping | 8 | Grade, subject, unit, topic and official outcomes; grade named in the text; given grade and subject filter the search; a grade or subject NEXA does not hold is not covered and not substituted; outcomes only from the official syllabus; no outcomes of another grade; mixed subjects are ambiguous |
+| Mapping | 12 | Grade, subject, unit, topic and official outcomes; grade named in the text; given grade and subject filter the search; a grade or subject NEXA does not hold is not covered and not substituted; outcomes only from the official syllabus; no outcomes of another grade; mixed subjects are ambiguous; unrelated outcomes of a syllabus passage are dropped; no matching outcome means low confidence for a reviewer; a topic taught in two grades names both; generic headings are not topics |
 | Grounding | 5 | Alignment and progression grounded with all sections and citations; lookups name the mapped grade; an invented citation stops the answer; no curriculum text gives the mapping only |
 | Boundary | 4 | Students refused; contact details refused before anything runs; read only and least privilege; other agents cannot use `curriculum_map` |
 | Safety | 2 | Curriculum down: nothing mapped; the policy is on every call |
@@ -118,12 +118,42 @@ The curriculum demo pack is rerun as a POMNSOE teacher (target: covered
 ≥ 10/12 as typed, 12/12 with grade and subject, incorrect premises corrected,
 no substitution), and the M2-008 live benchmark as a POMNSOE learner.
 
+## First live run on the DGX (28 Nov 2026, `8bdb236`)
+
+Done before it:
+
+- release gate: corpus suite PASS (recall@5 95.8, accuracy 0.875, 0 fabricated citations, every unanswerable question refused end to end, none answered from the curriculum); deployed;
+- re-scope applied: 474 EduNeX items moved from `edunex-core-test` to `pomnsoe`, 0 left, none skipped;
+- `nexa-curriculum-intelligence` 1.0.0 approved (Mr. Chandana) and active.
+
+| Evaluation (as POMNSOE) | Result |
+|---|---|
+| Demo pack, covered questions | **10/12** as typed (4/12 before the re-scope); **12/12** with grade and subject |
+| Demo pack, not covered (Grades 7–10, other subjects) | 6/6, no substitution |
+| Demo pack, incorrect premise | 3/5 as typed (both misses cite another grade); **5/5** with grade and subject (0/5 before premise correction) |
+| Demo pack, cannot be answered | 4/5: u05 ("which page of the Grade 12 Physics syllabus covers quantum gravity?") got a weak answer from the Physics syllabus; for CDD review |
+| M2-008 live as a POMNSOE learner | PASS: recall@5 84.8, accuracy 0.833, 0 fabricated citations |
+| `curriculum_eval --live` | NOT MET: mapping 10/12 (83%, threshold 90%); alignment and progression 2/3; not covered 100%; outcomes of the mapped grade 100%; p95 16.4 s; 0 safety violations |
+
+**What the live run showed, and the fixes (tool 1.0.0 handler, workflow 1.1.0):**
+
+| Problem | Cause | Fix |
+|---|---|---|
+| Outcome codes did not fit the topic: homeostasis, amino acids and the first law all got `12.1.1a–f`, at high confidence | Every code in the syllabus passages found was listed | An outcome is offered only if its own statement shares words with the text or its topic; its statement is shown; codes in the passage that do not match give "none found", low confidence, and a note listing them for a curriculum reviewer |
+| Physics Grade 11 "base and derived quantities" mapped to Grade 12 | The topic is taught in both grades | The mapping names the other grade ("Also covered in: Grade 12", low confidence); the live check accepts either grade when the other is named |
+| "Rate of a chemical reaction" mapped to Biology | Biology lesson material outvoted Chemistry | Votes are weighted by score and rank, with official syllabi and guides counting more than lesson material |
+| Alignment for Biology Grade 11 not grounded | The mapped topic was a page heading ("Check Yourself"), so the outcomes lookup asked about it | Topics come from the curriculum position, then the lesson's title, then a heading that is not generic; the lookups fall back to the teacher's own text in that grade |
+| Outcome registry stopped with an error | Codes such as `11.1.1a` mixed numbers and letters in the sort | Sorted as numbers then letters |
+
+Reports on the DGX: `~/nexa-evidence/m4-004/` (`nexa-curriculum-eval-live-20261128-0026.json`,
+`demo-final/`, `nexa-eval-live-20261128-0033.md`, `nexa-lms-rescope-20261128-0024.json`).
+
 ## To go live
 
-1. Run the M2-008 corpus gate on the DGX, then deploy (the gate is required for the `v1/knowledge` change).
-2. Re-scope the EduNeX courses to POMNSOE: dry run, then `--apply` (approved).
-3. Mr. Chandana approves `nexa-curriculum-intelligence` 1.0.0, and it is activated.
-4. Run `curriculum_eval --live`, the demo pack and M2-008 as POMNSOE; record the results here.
+1. Run the M2-008 corpus gate on the DGX, then deploy (the gate is required for the `v1/knowledge` change). **Done.**
+2. Re-scope the EduNeX courses to POMNSOE: dry run, then `--apply` (approved). **Done.**
+3. Mr. Chandana approves `nexa-curriculum-intelligence` 1.0.0, and it is activated. **Done.**
+4. Run `curriculum_eval --live`, the demo pack and M2-008 as POMNSOE; record the results here. **First run done (above); rerun after the mapping fixes.**
 5. CDD validates the outcome registry draft and signs the demo sheets.
 
 ## Not in this change

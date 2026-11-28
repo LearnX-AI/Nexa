@@ -79,8 +79,10 @@ def parse_mapping(out: str) -> dict:
         m = re.search(rf"^- {name}: (.+)$", out or "", re.M)
         return m.group(1).strip() if m else None
     codes = field("Official learning outcomes") or ""
+    also = re.findall(r"Grade (\d+)", field("Also covered in") or "")
     return {"grade": field("Grade"), "subject": field("Subject"), "unit": field("Unit"), "topic": field("Topic"),
             "outcomes": [] if codes in ("", "none found") else [c.strip() for c in codes.split(",")],
+            "also_grades": also,
             "confidence": (re.search(r"\((high|low) confidence\)", out or "") or [None, None])[1]}
 
 
@@ -129,12 +131,15 @@ def live(url: str, school: str, out_dir: str) -> int:
     for cid, cat, subject, grade, question, _ in [d for d in DEMO if d[1] == "covered"]:
         r = run("map", question)
         m = parse_mapping(r.get("output") or "")
-        ok = m["grade"] == str(grade) and (m["subject"] or "").lower() == subject.lower()
+        # A topic taught in two grades may be mapped to either, provided the
+        # other is named ("Also covered in"): the question gave no grade.
+        ok = str(grade) in [m["grade"]] + m["also_grades"] and (m["subject"] or "").lower() == subject.lower()
         maps.append(ok)
         bad = [o for o in m["outcomes"] if not o.startswith(f"{m['grade']}.")]
         grades_ok.append(not bad)
-        print(f"  {'ok  ' if ok else 'MISS'} {cid} expected {subject} G{grade}: got {m['subject']} G{m['grade']}, "
-              f"outcomes {m['outcomes'] or '-'}, {m['confidence']} confidence, topic {m['topic']}"
+        print(f"  {'ok  ' if ok else 'MISS'} {cid} expected {subject} G{grade}: got {m['subject']} G{m['grade']}"
+              + (f" (also G{', G'.join(m['also_grades'])})" if m["also_grades"] else "")
+              + f", outcomes {m['outcomes'] or '-'}, {m['confidence']} confidence, topic {m['topic']}"
               + (f"  OUTCOMES OF ANOTHER GRADE {bad}" if bad else ""))
     print("\n2. Not covered (Grades 7-10, other subjects): no substitution")
     nc = []
