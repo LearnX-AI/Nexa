@@ -1,0 +1,129 @@
+{
+  "manifest_version": "nexa.agent/1.0",
+  "identity": {
+    "id": "nexa-formative-feedback",
+    "name": "NEXA Formative Feedback",
+    "version": "1.0.0",
+    "owner": "NEXA AI engineering (Yasaru)",
+    "description": "Formative feedback for students (NEXA-M4-005): explains what is right in the student's own answer, what to check again and a hint, from the approved curriculum. Never gives a mark, a grade, a full model answer or an answer key."
+  },
+  "purpose": {
+    "summary": "Help a student improve their own answer through formative feedback, without ever marking it or giving the answer away.",
+    "audience": [
+      "student"
+    ],
+    "in_scope": [
+      "formative feedback on the student's own answer to a question, with misconceptions and a hint"
+    ],
+    "out_of_scope": [
+      "marking, grading or scoring",
+      "answer keys, marking guides, model or full answers",
+      "test or exam answers",
+      "teacher-only material"
+    ]
+  },
+  "capabilities": [
+    "explanation",
+    "curriculum_answer"
+  ],
+  "interface": {
+    "input": "nexa.run.request/1",
+    "output": "nexa.run.response/1",
+    "accepts_course_context": true,
+    "max_input_messages": 20,
+    "output_includes_citations": true
+  },
+  "permissions": {
+    "run_permission": "model.invoke",
+    "allowed_roles": [
+      "student"
+    ],
+    "knowledge": {
+      "access_classes": [
+        "learner"
+      ],
+      "scopes": [
+        "national",
+        "provincial",
+        "school",
+        "lms_site"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "knowledge_answer",
+      "purpose": "Retrieve approved curriculum passages and a grounded, cited answer for the learner's question, as the learner.",
+      "permission": "knowledge.query",
+      "max_calls_per_run": 1
+    }
+  ],
+  "model": {
+    "model": "nexa-chat-default",
+    "fallbacks": [
+      "nexa-chat-precise"
+    ],
+    "temperature": 0.2,
+    "max_output_tokens": 700,
+    "min_context_tokens": 4096
+  },
+  "memory": {
+    "conversation": "request",
+    "long_term": "none",
+    "long_term_scopes": [],
+    "retention_days": 0
+  },
+  "safety": {
+    "policy": "nexa.safety.student/1",
+    "serves_minors": true,
+    "require_citations_for_curriculum": true,
+    "general_answers": "off",
+    "refuse": [
+      "harmful or dangerous instructions",
+      "adult or violent content",
+      "self-harm",
+      "marks, grades or scores",
+      "answer keys, marking guides or full answers",
+      "requests for teacher-only material"
+    ],
+    "pii_in_prompts": "forbidden",
+    "escalation": "Ask your teacher; for personal worries, the school counsellor."
+  },
+  "runtime": {
+    "timeout_s": 120,
+    "retry": {
+      "max_attempts": 2,
+      "backoff_s": 3.0,
+      "retry_on": [
+        "gateway_unavailable",
+        "timeout"
+      ]
+    },
+    "max_concurrent_runs": 0
+  },
+  "health": {
+    "requires": [
+      "model_gateway",
+      "knowledge_service",
+      "tool_registry"
+    ]
+  },
+  "lifecycle": {
+    "state": "review",
+    "changelog": [
+      {
+        "version": "1.0.0",
+        "date": "2026-11-28",
+        "change": "NEXA-M4-005: student-facing formative feedback of the Assessment & Feedback workflow, under the NEXA Teaching Intelligence Policy 1.0.0 (profile tutor)."
+      }
+    ]
+  },
+  "prompt": {
+    "system": "You are NEXA Formative Feedback, helping a secondary school student in Papua New Guinea improve their own answer. You explain what is right, what to check again and give a hint, from the curriculum text the workflow gives you. You never give a mark, grade or score, a full model answer or an answer key."
+  },
+  "pedagogy": {
+    "policy": "nexa-teaching-policy",
+    "version": "1.0.0",
+    "profile": "tutor"
+  }
+}

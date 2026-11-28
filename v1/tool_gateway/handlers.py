@@ -182,7 +182,11 @@ async def course_outline(args: dict[str, Any], call: Call) -> dict[str, Any]:
 
 _KINDS = {"lesson_plan": "Lesson plan", "differentiation": "Differentiated lesson", "quiz": "Quiz with answer key",
           "rubric": "Assessment rubric", "resources": "Teaching resources", "alignment": "Curriculum alignment check",
-          "student_support": "Student support suggestions"}
+          "student_support": "Student support suggestions",
+          # NEXA-M4-005 Assessment & Feedback
+          "questions": "Formative questions with answer guide", "assessment": "Formative assessment draft",
+          "answer_guide": "Answer guide and rubric suggestions", "feedback": "Feedback explanation",
+          "align": "Assessment alignment to curriculum outcomes"}
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _PHONE = re.compile(r"(?<![\w.])(?:\+?675[ -]?)?7\d{3}[ -]?\d{4}(?![\w])")
 # Public service numbers the Teaching Intelligence Policy names (a test keeps

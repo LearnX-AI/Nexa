@@ -29,7 +29,7 @@ Use `any` for a grade or subject that is not known; the mapping then finds it.
 | Agent | `v1/agent_runtime/agents/proposed/nexa-curriculum-intelligence.json` (1.0.0, review) |
 | Agent policy | `v1/agent_runtime/policy/agents/nexa-curriculum-intelligence.json`: learner and teacher-only curriculum through `curriculum_map` and `knowledge_answer`; no writes, no memory, no delegation, no learner records |
 | Workflow | `v1/agent_runtime/workflows/nexa-wf-curriculum-intelligence.json` (1.0.0, teachers and school admins) |
-| New tool | `curriculum_map` (Tool Gateway, `v1/tool_gateway/tools/curriculum_map.json`, handler in `handlers.py`), for this agent only |
+| New tool | `curriculum_map` (Tool Gateway, `v1/tool_gateway/tools/curriculum_map.json`, handler in `handlers.py`), for this agent and the Assessment & Feedback Agent (M4-005) only |
 | Knowledge Service | Grade guard and premise correction (`v1/knowledge/main.py`, `grounding.py`; flags `NEXA_GRADE_GUARD`, `NEXA_PREMISE_CORRECTION`); `GET /v1/knowledge/lms/items` |
 | Re-scope tool | `v1/tools/lms_rescope.py`: moves the EduNeX courses from the test school to POMNSOE (approved; dry run by default) |
 | Outcome registry | `v1/tools/outcome_registry.py`: draft of every outcome code in the official syllabi, as a review sheet for CDD |
@@ -86,7 +86,7 @@ replayed event is stored and audited.
 | No silent substitution | Grade given or named is a hard filter in both the tool and the Knowledge Service; `not_covered` is a fixed reply with no model call |
 | Official outcomes only (R3) | Outcome codes come from a separate official-syllabus query, filtered to the mapped grade |
 | Grounding | Alignment and progression cite only the curriculum answer's passages (`cite_from` guard); an invented citation fails the run with no output; no curriculum text means mapping only |
-| Least privilege | Read only; the tool is allowed for this agent only; students cannot run the workflow (403); contact details in the text are refused before any call |
+| Least privilege | Read only; the tool is allowed for this agent and the Assessment & Feedback Agent only; students cannot run the workflow (403); contact details in the text are refused before any call |
 | No publication | Nothing is written; the re-scope is a separate, approved, audited operation |
 | Policy | The Teaching Intelligence Policy is on every model call (profile `planning`) |
 

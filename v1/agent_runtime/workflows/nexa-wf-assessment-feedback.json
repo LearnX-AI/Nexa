@@ -1,0 +1,575 @@
+{
+  "workflow_version": "nexa.workflow/1.0",
+  "id": "nexa-wf-assessment-feedback",
+  "name": "NEXA Assessment & Feedback",
+  "version": "1.0.0",
+  "owner": "NEXA AI engineering (Yasaru)",
+  "description": "The Assessment & Feedback Agent (NEXA-M4-005). Teachers: formative questions, assessment drafts, answer guides and rubric suggestions, feedback explanations and outcome alignment, at a chosen difficulty and grade, tagged with official outcomes, each reviewed by the teacher before use. Students: formative feedback on their own answer only (nexa-formative-feedback). Never makes official assessment decisions; never gives students answer keys.",
+  "pattern": "deterministic",
+  "state": "active",
+  "allowed_roles": [
+    "teacher",
+    "school_admin",
+    "student"
+  ],
+  "run_permission": "model.invoke",
+  "input": {
+    "task": "short_text",
+    "topic": "short_text",
+    "grade": "short_text",
+    "difficulty": "short_text",
+    "details": "text"
+  },
+  "budget": {
+    "max_steps": 12,
+    "max_agent_calls": 3,
+    "max_wall_s": 400
+  },
+  "start": "intent",
+  "steps": [
+    {
+      "id": "intent",
+      "type": "route",
+      "title": "What is asked, and what the agent must not do",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.details",
+              "matches": "\\b(final|official|end[- ]of[- ](term|year)|report[- ]card|exam(ination)?) (mark|grade|result|score)s?\\b|\\b(grade|mark|score) (this|these|his|her|their|my students'?|the students'?|the class'?s?) (essay|work|paper|script|answers?|test|exam)s?\\b|\\b(which|what|who) students? (should )?(pass|fail|be held back|repeat)|\\bpass or fail\\b|\\brank (my|the|these) students\\b|\\bcertif(y|ication)\\b|\\b(promot(e|ion)|suspend|expel|punish|discipline)\\b"
+            }
+          ],
+          "goto": "high_stakes",
+          "reason": "a final or official assessment decision"
+        },
+        {
+          "when": [
+            {
+              "field": "input.topic",
+              "matches": "\\b(final|official|end[- ]of[- ](term|year)|report[- ]card|exam(ination)?) (mark|grade|result|score)s?\\b|\\b(grade|mark|score) (this|these|his|her|their|my students'?|the students'?|the class'?s?) (essay|work|paper|script|answers?|test|exam)s?\\b|\\b(which|what|who) students? (should )?(pass|fail|be held back|repeat)|\\bpass or fail\\b|\\brank (my|the|these) students\\b|\\bcertif(y|ication)\\b|\\b(promot(e|ion)|suspend|expel|punish|discipline)\\b"
+            }
+          ],
+          "goto": "high_stakes",
+          "reason": "a final or official assessment decision"
+        },
+        {
+          "when": [
+            {
+              "field": "input.details",
+              "matches": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|(?<!\\d)(\\+?675[ -]?)?7\\d{3}[ -]?\\d{4}(?!\\d)"
+            }
+          ],
+          "goto": "personal_data",
+          "reason": "contact details in the text"
+        },
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "student"
+              ]
+            },
+            {
+              "field": "input.details",
+              "matches": "\\b(answer key|answer sheet|marking (guide|scheme|key)|memo(randum)?|model answers?|solutions? to the (test|exam|assessment|quiz))\\b|\\b(answers|solutions) (to|for) (the|this|our|my|tomorrow'?s|next) (test|exam|assessment|quiz)\\b"
+            }
+          ],
+          "goto": "key_refused",
+          "reason": "a student asks for an answer key"
+        },
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "student"
+              ]
+            },
+            {
+              "field": "input.topic",
+              "matches": "\\b(answer key|answer sheet|marking (guide|scheme|key)|memo(randum)?|model answers?|solutions? to the (test|exam|assessment|quiz))\\b|\\b(answers|solutions) (to|for) (the|this|our|my|tomorrow'?s|next) (test|exam|assessment|quiz)\\b"
+            }
+          ],
+          "goto": "key_refused",
+          "reason": "a student asks for an answer key"
+        },
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "student"
+              ]
+            },
+            {
+              "field": "input.task",
+              "equals": "feedback"
+            }
+          ],
+          "goto": "student_lookup",
+          "reason": "formative feedback on the student's own answer"
+        },
+        {
+          "when": [
+            {
+              "field": "caller.roles",
+              "any_of": [
+                "student"
+              ]
+            }
+          ],
+          "goto": "teacher_task",
+          "reason": "drafting assessment is for teachers"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "questions"
+            }
+          ],
+          "goto": "map",
+          "reason": "task questions"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "assessment"
+            }
+          ],
+          "goto": "map",
+          "reason": "task assessment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "answer_guide"
+            }
+          ],
+          "goto": "map",
+          "reason": "task answer_guide"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "feedback"
+            }
+          ],
+          "goto": "map",
+          "reason": "task feedback"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "align"
+            }
+          ],
+          "goto": "map",
+          "reason": "task align"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "map",
+      "type": "tool",
+      "title": "The topic's grade, subject and official outcomes",
+      "agent": "nexa-assessment-feedback",
+      "tool": "curriculum_map",
+      "arguments": {
+        "text": "{{input.topic}}",
+        "grade": "{{input.grade}}",
+        "subject": "any"
+      },
+      "policy": {
+        "timeout_s": 60,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "mapped"
+    },
+    {
+      "id": "mapped",
+      "type": "route",
+      "title": "Covered by the curriculum NEXA holds?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.map.result.status",
+              "equals": "not_covered"
+            }
+          ],
+          "goto": "not_covered",
+          "reason": "no approved material for that grade"
+        }
+      ],
+      "default": "lookup"
+    },
+    {
+      "id": "lookup",
+      "type": "knowledge",
+      "title": "The curriculum for the topic and grade (teacher material included)",
+      "question": "What must Grade {{input.grade}} students know and be able to do about {{input.topic}}? Give the key facts, terms, worked examples and common misconceptions.",
+      "fallback_question": "{{input.topic}} in Grade {{input.grade}}",
+      "general": false,
+      "audience": "teacher",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "evidence"
+    },
+    {
+      "id": "evidence",
+      "type": "route",
+      "title": "Grounded in the curriculum?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.lookup.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "task",
+          "reason": "the curriculum covers the topic"
+        }
+      ],
+      "default": "not_grounded"
+    },
+    {
+      "id": "task",
+      "type": "route",
+      "title": "Which draft",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "questions"
+            }
+          ],
+          "goto": "questions",
+          "reason": "questions"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "assessment"
+            }
+          ],
+          "goto": "assessment",
+          "reason": "assessment"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "answer_guide"
+            }
+          ],
+          "goto": "answer_guide",
+          "reason": "answer_guide"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "feedback"
+            }
+          ],
+          "goto": "feedback",
+          "reason": "feedback"
+        },
+        {
+          "when": [
+            {
+              "field": "input.task",
+              "equals": "align"
+            }
+          ],
+          "goto": "align",
+          "reason": "align"
+        }
+      ],
+      "default": "unknown_task"
+    },
+    {
+      "id": "questions",
+      "type": "agent",
+      "title": "Draft: formative questions",
+      "agent": "nexa-assessment-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 2000,
+      "prompt": "Task: formative questions (the number the notes ask for, otherwise 6), each labelled with its difficulty, and an answer guide for the teacher.\nTopic: {{input.topic}}\nGrade: {{input.grade}}\nDifficulty: {{input.difficulty}} (foundation = recall and simple application; standard = application and explanation; extension = analysis, evaluation and unfamiliar contexts; mixed = a spread, each item labelled)\nThe teacher's notes: {{input.details}}\n\nThe curriculum mapping of this topic (grade, subject, unit and official outcome codes):\n{{steps.map.result.text}}\n\nThe approved curriculum text for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nTag every item with one official outcome code from the mapping above, written as (Outcome: CODE); if no code in the mapping fits an item, write (Outcome: for teacher review). Never invent a code. Use only the curriculum text above for subject content, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers. Everything here is formative: suggest marks only as a guide for the teacher, never give a final mark, grade or pass/fail decision, and do not name or identify any student.\n\nFormat: start with the line 'DRAFT for teacher review: formative support, not an official assessment decision', then use exactly these Markdown headings, in this order: ## Questions, ## Answer guide.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "assessment",
+      "type": "agent",
+      "title": "Draft: assessment",
+      "agent": "nexa-assessment-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 2000,
+      "prompt": "Task: a short formative assessment (the length the notes ask for, otherwise about 20 minutes): instructions, numbered items in sections from easier to harder, a suggested mark for each item as a guide, an answer guide, and how to use the results to plan the next lesson.\nTopic: {{input.topic}}\nGrade: {{input.grade}}\nDifficulty: {{input.difficulty}} (foundation = recall and simple application; standard = application and explanation; extension = analysis, evaluation and unfamiliar contexts; mixed = a spread, each item labelled)\nThe teacher's notes: {{input.details}}\n\nThe curriculum mapping of this topic (grade, subject, unit and official outcome codes):\n{{steps.map.result.text}}\n\nThe approved curriculum text for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nTag every item with one official outcome code from the mapping above, written as (Outcome: CODE); if no code in the mapping fits an item, write (Outcome: for teacher review). Never invent a code. Use only the curriculum text above for subject content, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers. Everything here is formative: suggest marks only as a guide for the teacher, never give a final mark, grade or pass/fail decision, and do not name or identify any student.\n\nFormat: start with the line 'DRAFT for teacher review: formative support, not an official assessment decision', then use exactly these Markdown headings, in this order: ## Instructions, ## Items, ## Answer guide, ## Using the results.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "answer_guide",
+      "type": "agent",
+      "title": "Draft: answer guide and rubric suggestions",
+      "agent": "nexa-assessment-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 2000,
+      "prompt": "Task: an answer guide for the teacher's own questions given in the notes, with what a complete answer contains and common errors, and rubric suggestions (criteria and four levels from Beginning to Advanced) for any open question.\nTopic: {{input.topic}}\nGrade: {{input.grade}}\nDifficulty: {{input.difficulty}} (foundation = recall and simple application; standard = application and explanation; extension = analysis, evaluation and unfamiliar contexts; mixed = a spread, each item labelled)\nThe teacher's notes: {{input.details}}\n\nThe curriculum mapping of this topic (grade, subject, unit and official outcome codes):\n{{steps.map.result.text}}\n\nThe approved curriculum text for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nTag every item with one official outcome code from the mapping above, written as (Outcome: CODE); if no code in the mapping fits an item, write (Outcome: for teacher review). Never invent a code. Use only the curriculum text above for subject content, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers. Everything here is formative: suggest marks only as a guide for the teacher, never give a final mark, grade or pass/fail decision, and do not name or identify any student.\n\nFormat: start with the line 'DRAFT for teacher review: formative support, not an official assessment decision', then use exactly these Markdown headings, in this order: ## Answer guide, ## Rubric suggestions.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "feedback",
+      "type": "agent",
+      "title": "Draft: feedback explanation",
+      "agent": "nexa-assessment-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 2000,
+      "prompt": "Task: feedback the teacher can give on the student answer in the notes (the question and the answer): what is correct, what is missing or a misconception and why, and the feedback to give the student in kind, clear words. No mark or grade.\nTopic: {{input.topic}}\nGrade: {{input.grade}}\nDifficulty: {{input.difficulty}} (foundation = recall and simple application; standard = application and explanation; extension = analysis, evaluation and unfamiliar contexts; mixed = a spread, each item labelled)\nThe teacher's notes: {{input.details}}\n\nThe curriculum mapping of this topic (grade, subject, unit and official outcome codes):\n{{steps.map.result.text}}\n\nThe approved curriculum text for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nTag every item with one official outcome code from the mapping above, written as (Outcome: CODE); if no code in the mapping fits an item, write (Outcome: for teacher review). Never invent a code. Use only the curriculum text above for subject content, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers. Everything here is formative: suggest marks only as a guide for the teacher, never give a final mark, grade or pass/fail decision, and do not name or identify any student.\n\nFormat: start with the line 'DRAFT for teacher review: formative support, not an official assessment decision', then use exactly these Markdown headings, in this order: ## What is correct, ## What to improve, ## Feedback to give the student.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "align",
+      "type": "agent",
+      "title": "Draft: alignment of assessment items",
+      "agent": "nexa-assessment-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "lookup",
+      "max_tokens": 2000,
+      "prompt": "Task: the alignment of each assessment item in the notes to the official outcomes: a table with each item, its outcome code (or 'not aligned'), and the level of thinking it asks for; then the outcomes the items do not assess, and suggestions.\nTopic: {{input.topic}}\nGrade: {{input.grade}}\nDifficulty: {{input.difficulty}} (foundation = recall and simple application; standard = application and explanation; extension = analysis, evaluation and unfamiliar contexts; mixed = a spread, each item labelled)\nThe teacher's notes: {{input.details}}\n\nThe curriculum mapping of this topic (grade, subject, unit and official outcome codes):\n{{steps.map.result.text}}\n\nThe approved curriculum text for this topic, with its source markers:\n{{steps.lookup.answer}}\n\nTag every item with one official outcome code from the mapping above, written as (Outcome: CODE); if no code in the mapping fits an item, write (Outcome: for teacher review). Never invent a code. Use only the curriculum text above for subject content, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers. Everything here is formative: suggest marks only as a guide for the teacher, never give a final mark, grade or pass/fail decision, and do not name or identify any student.\n\nFormat: start with the line 'DRAFT for teacher review: formative support, not an official assessment decision', then use exactly these Markdown headings, in this order: ## Item alignment, ## Outcomes not assessed, ## Suggestions.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "document"
+    },
+    {
+      "id": "document",
+      "type": "tool",
+      "title": "The draft as a document with sources and provenance",
+      "agent": "nexa-assessment-feedback",
+      "tool": "teaching_document",
+      "arguments": {
+        "title": "{{input.topic}}",
+        "kind": "{{input.task}}",
+        "grade": "{{input.grade}}",
+        "body": "{{steps.questions.output}}{{steps.assessment.output}}{{steps.answer_guide.output}}{{steps.feedback.output}}{{steps.align.output}}\n\n## Curriculum mapping\n\n{{steps.map.result.text}}",
+        "sources": "{{steps.lookup.answer}}",
+        "run_id": "{{run.id}}",
+        "agent": "NEXA Assessment & Feedback (nexa-assessment-feedback)",
+        "policy": "the NEXA Teaching Intelligence Policy (assessment)"
+      },
+      "policy": {
+        "timeout_s": 10,
+        "max_attempts": 1
+      },
+      "next": "review"
+    },
+    {
+      "id": "review",
+      "type": "checkpoint",
+      "title": "The teacher reviews the draft",
+      "approver_roles": [
+        "teacher",
+        "school_admin"
+      ],
+      "four_eyes": false,
+      "expires_after_s": 604800,
+      "show": "Draft {{input.task}} on {{input.topic}} (Grade {{input.grade}}, {{input.difficulty}}). Read and check it. Approve to receive it; reject to discard it.\n\n{{steps.document.result.document}}",
+      "on_approve": "deliver",
+      "on_reject": "discarded"
+    },
+    {
+      "id": "deliver",
+      "type": "respond",
+      "title": "Return the document",
+      "output": "{{steps.document.result.document}}\n## Approval\n\n- Reviewed and approved by: {{review.by}}.\n- Reviewer's note: {{review.comment}}\n- Formative support: marks, grades and any official assessment decision remain the teacher's and the school's.\n"
+    },
+    {
+      "id": "discarded",
+      "type": "respond",
+      "title": "Rejected: nothing kept",
+      "output": "The draft was rejected and discarded. Nothing was saved."
+    },
+    {
+      "id": "student_lookup",
+      "type": "knowledge",
+      "title": "The curriculum on the topic, for a student",
+      "question": "{{input.topic}} in Grade {{input.grade}}",
+      "general": false,
+      "audience": "student",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 2,
+        "backoff_s": 2,
+        "on_error": "unavailable"
+      },
+      "next": "student_evidence"
+    },
+    {
+      "id": "student_evidence",
+      "type": "route",
+      "title": "Grounded in the curriculum?",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.student_lookup.status",
+              "in": [
+                "grounded",
+                "grounded_weak"
+              ]
+            }
+          ],
+          "goto": "student_feedback",
+          "reason": "the curriculum covers the topic"
+        }
+      ],
+      "default": "student_not_grounded"
+    },
+    {
+      "id": "student_feedback",
+      "type": "agent",
+      "title": "Formative feedback to the student",
+      "agent": "nexa-formative-feedback",
+      "grade": "{{input.grade}}",
+      "cite_from": "student_lookup",
+      "max_tokens": 900,
+      "prompt": "A Grade {{input.grade}} student asks for feedback on their own answer.\nTopic: {{input.topic}}\nThe question and the student's answer: {{input.details}}\n\nThe approved curriculum text, with its source markers:\n{{steps.student_lookup.answer}}\n\nGive formative feedback to the student: what they got right, what to check again and why (name a misconception if there is one), and one hint that helps them improve the answer themselves. Do not give a mark, grade or score. Do not write out the full correct answer, a model answer or an answer key: guide them to it. Use only the curriculum text above, and put its source markers ([S1], [S2] \u2026) after the statements they support; use no other markers.\n\nFormat: use exactly these Markdown headings, in this order: ## What you got right, ## What to check again, ## A hint.",
+      "policy": {
+        "timeout_s": 180,
+        "max_attempts": 3,
+        "backoff_s": 2
+      },
+      "next": "leak_check"
+    },
+    {
+      "id": "leak_check",
+      "type": "route",
+      "title": "No answer key or full answer in student feedback",
+      "rules": [
+        {
+          "when": [
+            {
+              "field": "steps.student_feedback.output",
+              "matches": "(?i)\\b(answer key|marking (guide|scheme)|memorandum|model answer)\\b|\\bthe (correct|right|full) answer is\\b|\\b(full|complete) (solution|worked answer)\\b"
+            }
+          ],
+          "goto": "withheld",
+          "reason": "the feedback reads like an answer key or a full answer"
+        }
+      ],
+      "default": "student_deliver"
+    },
+    {
+      "id": "student_deliver",
+      "type": "respond",
+      "title": "Formative feedback",
+      "output": "{{steps.student_feedback.output}}\n\n---\nFormative feedback from NEXA: this is not a mark or an official assessment decision. Your teacher decides on marks and grades."
+    },
+    {
+      "id": "withheld",
+      "type": "respond",
+      "title": "Withheld: read like an answer key",
+      "output": "I can't give full answers or answer keys, but I can help you improve your own answer. Tell me which part you are unsure about, or try the question again and ask me to check it."
+    },
+    {
+      "id": "key_refused",
+      "type": "respond",
+      "title": "Answer keys are not given to students",
+      "output": "I can't share answer keys, marking guides or test answers. I can explain the topic, give you practice questions with hints, or give feedback on your own answer."
+    },
+    {
+      "id": "teacher_task",
+      "type": "respond",
+      "title": "Drafting assessment is for teachers",
+      "output": "Creating assessments, answer guides and alignments is for teachers. I can give you formative feedback on your own answer: choose the task feedback and include the question and your answer."
+    },
+    {
+      "id": "student_not_grounded",
+      "type": "respond",
+      "title": "Not in the curriculum",
+      "output": "I couldn't find this topic in the approved curriculum for your grade, so I can't check your answer against it. Ask your teacher, or check the topic name and grade."
+    },
+    {
+      "id": "high_stakes",
+      "type": "respond",
+      "title": "Official assessment decisions are not made by NEXA",
+      "output": "NEXA does not make final or official assessment decisions: marks, grades, pass or fail, ranking, promotion or discipline belong to the teacher and the school's assessment process. I can help with formative questions, answer guides, rubric suggestions and feedback explanations."
+    },
+    {
+      "id": "personal_data",
+      "type": "respond",
+      "title": "Contact details refused",
+      "output": "Please remove names and contact details and try again. Assessment support does not need them."
+    },
+    {
+      "id": "not_covered",
+      "type": "respond",
+      "title": "Not covered: nothing substituted",
+      "output": "{{steps.map.result.text}}\n\nNEXA will not draft assessment for this grade from another grade's or subject's material."
+    },
+    {
+      "id": "not_grounded",
+      "type": "respond",
+      "title": "Not in the curriculum: no draft",
+      "output": "I couldn't find this topic in the approved curriculum for that grade, so I won't draft assessment that may not match it."
+    },
+    {
+      "id": "unavailable",
+      "type": "respond",
+      "title": "The curriculum cannot be reached",
+      "output": "The curriculum service cannot be reached right now, so no assessment was drafted. Please try again later."
+    },
+    {
+      "id": "unknown_task",
+      "type": "respond",
+      "title": "Unknown task",
+      "output": "Choose a task: questions, assessment, answer_guide, feedback or align. Students can choose feedback, with the question and their answer."
+    }
+  ]
+}

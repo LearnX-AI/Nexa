@@ -147,6 +147,12 @@ jobs:
         # boundary and safety, in an isolated NEXA; fails on any case.
         run: python -m v1.tools.curriculum_eval --out resilience-report
 
+      - name: Assessment & Feedback evaluation (NEXA-M4-005)
+        # Quality, curriculum alignment, role boundaries (students formative
+        # only, no answer keys), consistency and safety (no official
+        # assessment decisions), in an isolated NEXA; fails on any case.
+        run: python -m v1.tools.assessment_eval --out resilience-report
+
       - name: Workflows (NEXA-M3-003)
         # Every workflow must satisfy nexa.workflow/1.0: an acyclic step graph,
         # bounded delegation and budget, known agents and roles. The published
