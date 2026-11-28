@@ -37,8 +37,9 @@ def test_parse_mapping():
     out = ("Curriculum mapping (high confidence)\n- Grade: 11\n- Subject: Biology\n- Unit: 11.1 Genetics\n"
            "- Topic: Classical Mendelian Genetics\n- Official learning outcomes: 11.1.1, 11.1.2\n- Sources: x")
     m = ce.parse_mapping(out)
-    assert m == {"grade": "11", "subject": "Biology", "unit": "11.1 Genetics",
+    assert m == {"grade": "11", "subject": "Biology", "unit": "11.1 Genetics", "also_grades": [],
                  "topic": "Classical Mendelian Genetics", "outcomes": ["11.1.1", "11.1.2"], "confidence": "high"}
+    assert ce.parse_mapping(out + "\n- Also covered in: Grade 12")["also_grades"] == ["12"]
     assert ce.parse_mapping(out.replace("11.1.1, 11.1.2", "none found"))["outcomes"] == []
 
 
@@ -103,18 +104,19 @@ def test_outcome_registry_draft_from_official_syllabi_only():
     ]
     chunks = {
         "v1": [{"text": "Unit 11.1 Genetics\n11.1.1 Explain Mendel's laws of inheritance. More text.\n"
-                        "11.1.2 Use Punnett squares to predict ratios\nLeads to 12.2.1 in Grade 12.",
+                        "11.1.2 Use Punnett squares to predict ratios\n11.1.1a Name dominant alleles\nLeads to 12.2.1 in Grade 12.",
                 "curriculum": {"module_code": "11.1", "module_title": "Genetics", "outcome_codes": ["11.1.1"]},
                 "locator": {"page_label": "14"}}],
         "v2": [{"text": "11.1.9 a lesson-note code", "curriculum": {}, "locator": {}}],
     }
     reg = orx.build(sources, lambda vid: chunks[vid])
     codes = {e["code"]: e for e in reg["outcomes"]}
-    assert set(codes) == {"11.1.1", "11.1.2"}  # not the lesson note's, not Grade 12's
+    assert set(codes) == {"11.1.1", "11.1.2", "11.1.1a"}  # not the lesson note's, not Grade 12's
+    assert [e["code"] for e in reg["outcomes"]] == ["11.1.1", "11.1.1a", "11.1.2"]
     assert codes["11.1.1"]["statement"] == "Explain Mendel's laws of inheritance"
     assert codes["11.1.2"]["statement"] == "Use Punnett squares to predict ratios"
     assert codes["11.1.1"]["unit"] == "11.1 Genetics" and codes["11.1.1"]["sources"] == ["Biology Syllabus Grade 11, p. 14"]
-    assert reg["counts"] == {"Biology Grade 11": 2} and reg["status"].startswith("draft")
+    assert reg["counts"] == {"Biology Grade 11": 3} and reg["status"].startswith("draft")
     assert any("12.2.1" in i for i in reg["issues"])
     md = orx.markdown(reg, "2026-11-27")
     assert "DRAFT for CDD validation" in md and "| 11.1.1 | Explain Mendel's laws of inheritance |" in md

@@ -123,6 +123,65 @@ def outcomes_of_another_grade_are_not_listed():
         return "11.1.1" in out and "12.2.1" not in out, out[:200]
 
 
+def unrelated_outcomes_of_the_passage_are_not_offered():
+    # A syllabus passage lists several outcomes; only the one whose statement
+    # matches the text is offered.
+    off = result("Biology Syllabus Grade 12", "Biology", 12, "official_syllabus",
+                 "12.1.1a Investigate the scientific method and design fair tests.\n"
+                 "12.6.2b Explain how negative feedback keeps body temperature stable in homeostasis.", 0.8,
+                 outcome_codes="12.1.1a,12.6.2b", topic_title="Homeostasis")
+    lesson = result("Homeostasis Lesson Note", "Biology", 12, "lms_content", "homeostasis feedback", 0.85)
+    with World(model(), Knowledge(results=lambda b: [off] if "official_syllabus" in
+                                  (b.get("filters") or {}).get("source_types", []) else [lesson, off]),
+               proposals=True) as w:
+        r = _start(w, "map", text="How does negative feedback maintain homeostasis?")
+        out = r.get("output") or ""
+        return ("Official learning outcomes: 12.6.2b" in out and "12.1.1a" not in out.split("- Sources")[0]
+                and "12.6.2b: Explain how negative feedback" in out), out[:300]
+
+
+def no_matching_outcome_is_low_confidence_for_a_reviewer():
+    off = result("Physics Syllabus Grade 12", "Physics", 12, "official_syllabus",
+                 "12.1.1a Investigate the scientific method and design fair tests.", 0.8, outcome_codes="12.1.1a",
+                 topic_title="Wave Types")
+    with World(model(), Knowledge(results=[off]), proposals=True) as w:
+        r = _start(w, "map", text="What is the difference between transverse and longitudinal waves?")
+        out = r.get("output") or ""
+        return ("Official learning outcomes: none found" in out and "(low confidence)" in out
+                and "list 12.1.1a, but none" in out and "a curriculum reviewer should choose" in out), out[:300]
+
+
+def topic_in_two_grades_names_both():
+    g11 = result("Quantities & Measurement Lesson Note", "Physics", 11, "lms_content", "base and derived quantities",
+                 0.86)
+    g12 = result("Quantities_and_Measurement_LessonNote", "Physics", 12, "lms_content",
+                 "base and derived quantities", 0.85)
+    off = result("Physics Syllabus Grade 11", "Physics", 11, "official_syllabus",
+                 "11.1.1 Distinguish base and derived quantities and their SI units.", 0.7,
+                 outcome_codes="11.1.1")
+    kn = Knowledge(results=lambda b: [off] if "official_syllabus" in (b.get("filters") or {}).get(
+        "source_types", []) else [g11, g12, g12, g11])
+    with World(model(), kn, proposals=True) as w:
+        r = _start(w, "map", text="What is the difference between base quantities and derived quantities?")
+        out = r.get("output") or ""
+        ok = ("Grade: 11" in out and "Also covered in: Grade 12" in out and "(low confidence)" in out
+              and "Topic: Quantities & Measurement" in out)
+        return ok, out[:300]
+
+
+def generic_headings_are_not_topics():
+    lesson = result("Classical Mendelian Genetics_Lesson_Note", "Biology", 11, "lms_content", "Mendel pea plants",
+                    0.9, section_path="Genetics > Check Yourself")
+    guide = result("Biology Student Guide Grade 11", "Biology", 11, "student_guide", "Mendel pea plants", 0.9,
+                   section_path="Unit 1 > Inheritance > Check Yourself")
+    with World(model(), Knowledge(results=[lesson]), proposals=True) as w:
+        a = _start(w, "map").get("output") or ""
+    with World(model(), Knowledge(results=[guide]), proposals=True) as w:
+        b = _start(w, "map").get("output") or ""
+    ok = "Topic: Classical Mendelian Genetics" in a and "Topic: Inheritance" in b and "Check Yourself" not in a + b
+    return ok, a[:120] + " | " + b[:120]
+
+
 def mixed_subjects_are_ambiguous():
     mix = [result("Biology Syllabus Grade 11", "Biology", 11, "official_syllabus", "energy", 0.8),
            result("Chemistry Syllabus Grade 11", "Chemistry", 11, "official_syllabus", "energy", 0.8),
@@ -267,7 +326,11 @@ CASES: list[Case] = (
      Case("mapping.subject_not_held", "mapping", subject_not_held_is_not_covered),
      Case("mapping.outcomes_only_official", "mapping", outcomes_only_from_the_official_syllabus),
      Case("mapping.no_other_grade_outcomes", "mapping", outcomes_of_another_grade_are_not_listed),
-     Case("mapping.ambiguous_subject", "mapping", mixed_subjects_are_ambiguous)]
+     Case("mapping.ambiguous_subject", "mapping", mixed_subjects_are_ambiguous),
+     Case("mapping.unrelated_outcomes_dropped", "mapping", unrelated_outcomes_of_the_passage_are_not_offered),
+     Case("mapping.no_matching_outcome_low", "mapping", no_matching_outcome_is_low_confidence_for_a_reviewer),
+     Case("mapping.topic_in_two_grades", "mapping", topic_in_two_grades_names_both),
+     Case("mapping.generic_heading_not_topic", "mapping", generic_headings_are_not_topics)]
     + [Case(f"grounding.{t}", "grounding", task_grounded(t)) for t in ("alignment", "progression")]
     + [Case("grounding.lookups_name_the_grade", "grounding", lookups_name_the_mapped_grade),
        Case("grounding.invented_citation_stops", "grounding", invented_citation_stops_the_answer),

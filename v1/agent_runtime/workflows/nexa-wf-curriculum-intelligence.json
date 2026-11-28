@@ -2,7 +2,7 @@
   "workflow_version": "nexa.workflow/1.0",
   "id": "nexa-wf-curriculum-intelligence",
   "name": "NEXA Curriculum Intelligence",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "NEXA AI engineering (Yasaru)",
   "description": "The Curriculum Intelligence Agent (NEXA-M4-004), for teachers and school administrators. map: grade, subject, unit, topic and official outcomes of a question or content, with sources and confidence. alignment: the teacher's material against the official outcomes. progression: prerequisites and what comes next. Never substitutes another grade's material, takes outcomes only from the official syllabus, says when NEXA holds no curriculum for the grade or subject. grade and subject may be 'any'. Advisory and read only.",
   "pattern": "deterministic",
@@ -169,7 +169,7 @@
       "type": "knowledge",
       "title": "The official outcomes for the mapped topic",
       "question": "What learning outcomes does the official Grade {{steps.map.result.grade}} {{steps.map.result.subject}} syllabus set for {{steps.map.result.topic}}, and what must students know and be able to do?",
-      "fallback_question": "Grade {{steps.map.result.grade}} {{steps.map.result.subject}} learning outcomes for {{steps.map.result.topic}}",
+      "fallback_question": "In Grade {{steps.map.result.grade}} {{steps.map.result.subject}}, which learning outcomes does this cover: {{input.text}}",
       "general": false,
       "audience": "teacher",
       "policy": {
@@ -228,7 +228,7 @@
       "type": "knowledge",
       "title": "What comes before and after the topic",
       "question": "In Grade {{steps.map.result.grade}} {{steps.map.result.subject}}, what must students already know before learning {{steps.map.result.topic}}, and what do they learn next?",
-      "fallback_question": "Grade {{steps.map.result.grade}} {{steps.map.result.subject}} {{steps.map.result.topic}}",
+      "fallback_question": "In Grade {{steps.map.result.grade}} {{steps.map.result.subject}}: {{input.text}}",
       "general": false,
       "audience": "teacher",
       "policy": {
