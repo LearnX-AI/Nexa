@@ -1,6 +1,6 @@
 # NEXA-M4-004: Curriculum Intelligence Agent
 
-Status: **deployed and active on the DGX; mapping fixes from the first live run awaiting deployment**. Built to the findings
+Status: **active on the DGX (`7dcb07f`); live evaluation MET on 28 Nov 2026**. Awaiting CDD validation of the outcome registry and the demo sign-off. Built to the findings
 approved on 27 Nov 2026 (`NEXA-M4-004-curriculum-intelligence-findings.md`).
 Owner: Yasaru.
 
@@ -148,12 +148,31 @@ Done before it:
 Reports on the DGX: `~/nexa-evidence/m4-004/` (`nexa-curriculum-eval-live-20261128-0026.json`,
 `demo-final/`, `nexa-eval-live-20261128-0033.md`, `nexa-lms-rescope-20261128-0024.json`).
 
+## Live evaluation after the fixes (28 Nov 2026, `7dcb07f`): MET
+
+| Check | Result | Threshold |
+|---|---|---|
+| Covered questions mapped to the right grade and subject (grade and subject left as `any`) | 92% (11/12) | ≥ 90% |
+| Grades 7–10 and other subjects not covered, never substituted | 100% (6/6) | 100% |
+| Outcome codes only of the mapped grade | 100% | 100% |
+| Alignment and progression grounded and cited | 100% (3/3) | ≥ 90% |
+| p95 seconds per run | 10.3 | ≤ 180 |
+| Safety violations | 0 | 0 |
+
+- The one miss: "base and derived quantities" (expected Grade 11) was mapped to Grade 12, where the topic is also taught.
+- Three mappings (DNA structure, strong and weak acids, laws of thermodynamics) now say "none found" at low confidence instead of offering unrelated codes; DNA structure also names Grade 11.
+- **Outcome accuracy is not yet validated.** Several Grade 12 topics in different subjects map to `12.1.1a–d`. These may be broad benchmarks in the syllabus, or a remaining mapping weakness; the CDD review of the registry decides.
+
+**Outcome registry draft:** 135 outcome codes in the official syllabi (Biology 13 and 17, Chemistry 11 and 22, Physics 37 and 35 for Grades 11 and 12), 0 points to check. Sheet for CDD: `~/nexa-evidence/m4-004/nexa-outcome-registry-draft-20261128-0152.md`.
+
+Report: `~/nexa-evidence/m4-004/nexa-curriculum-eval-live-20261128-0152.json`.
+
 ## To go live
 
 1. Run the M2-008 corpus gate on the DGX, then deploy (the gate is required for the `v1/knowledge` change). **Done.**
 2. Re-scope the EduNeX courses to POMNSOE: dry run, then `--apply` (approved). **Done.**
 3. Mr. Chandana approves `nexa-curriculum-intelligence` 1.0.0, and it is activated. **Done.**
-4. Run `curriculum_eval --live`, the demo pack and M2-008 as POMNSOE; record the results here. **First run done (above); rerun after the mapping fixes.**
+4. Run `curriculum_eval --live`, the demo pack and M2-008 as POMNSOE; record the results here. **Done: MET after the mapping fixes.**
 5. CDD validates the outcome registry draft and signs the demo sheets.
 
 ## Not in this change
